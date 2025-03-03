@@ -1,38 +1,51 @@
-import dotenv from "dotenv";
+const mongoose = require('mongoose');
+const dotenv = require("dotenv");
 dotenv.config();
-import express from "express";
-import cors from "cors";
-import connectDB from "./config/db.js";
 
+const express = require("express");
+const cors = require("cors");
+const connectDB = require("./config/db.js");
+
+// Inicializar la App
 const app = express();
 
-// Conectar a MongoDB
+// 🔌 Conectar a MongoDB una sola vez
 connectDB();
 
-// Middleware
+// ✅ Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Importar rutas
-import muestrasRoutes from "./routes/muestras.js";
-import tablasParametricasRoutes from "./routes/tablasParametricas.js"; // ✅ Nueva API
+// Importar todas las rutas de los módulos
 
-app.use("/muestras", muestrasRoutes);
-app.use("/tablas-parametricas", tablasParametricasRoutes);  // ✅ Ruta de la nueva API
+// Dominio Tipos de Agua
+const tipoAguaRoutes = require("./app/modules/tipos-agua/routes/tipoAguaRoutes.js");
 
-// Middleware para manejar errores
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ mensaje: "Algo salió mal en el servidor", error: err.message });
-});
+// Dominio Ingreso Resultados
+const resultadoRoutes = require("./app/modules/ingreso-resultados/routes/resultadoRoutes.js");
 
-// Ruta de prueba
+// Dominio Cambio de Estado
+const cambiosEstadoRoutes = require("./app/modules/cambios-estado/routes/muestraRoutes.js");
+
+
+// 🔥 Definimos las rutas
+app.use("/api/tipos-agua", tipoAguaRoutes);
+app.use("/api/ingreso-resultados", resultadoRoutes);
+app.use("/api/cambios-estado", cambiosEstadoRoutes);
+
+// Ruta de Prueba
 app.get("/", (req, res) => {
-    res.send("API funcionando correctamente");
+  res.send("🔥 API funcionando correctamente con todos los módulos");
 });
 
-// Inicializar servidor
+// Middleware para manejo de errores global
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ mensaje: "Algo salió mal en el servidor", error: err.message });
+});
+
+// Puerto para ejecutar la API
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-    console.log(` Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
 });
