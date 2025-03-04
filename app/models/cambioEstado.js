@@ -4,7 +4,7 @@ const estadosValidos = ["Recibida", "En análisis", "Pendiente de resultados", "
 
 const cambioEstadoSchema = new mongoose.Schema(
   {
-    idMuestra: { type: String, required: true, unique: true }, // 🔑 ID único de la muestra
+    idMuestra: { type: String, required: true, unique: true }, 
 
     estado: {
       type: String,

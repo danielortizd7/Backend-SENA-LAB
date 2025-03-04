@@ -9,7 +9,7 @@ static async registrar(datos) {
         await nuevoTipo.save();
         return nuevoTipo;
     } catch (error) {
-        console.error("❌ Error en registrarTipoAgua:", error);
+        console.error("Error en registrarTipoAgua:", error);
         throw new Error(`Error al registrar el tipo de agua: ${error.message}`);
     }
 }

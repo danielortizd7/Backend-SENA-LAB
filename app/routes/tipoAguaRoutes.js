@@ -5,7 +5,7 @@ const {
   crearTipoAgua,
   actualizarTipoAgua,
   eliminarTipoAgua
-} = require("../controllers/tipoAguaController"); // ✅ Verifica que el path es correcto
+} = require("../controllers/tipoAguaController"); 
 
 // Definir rutas
 router.get("/", obtenerTiposAgua);

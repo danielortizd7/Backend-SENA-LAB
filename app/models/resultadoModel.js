@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const resultadoSchema = new mongoose.Schema(
   {
     idMuestra: { type: String, required: true, unique: true },
-    datosMuestra: {  // ✅ Guarda información de la muestra
+    datosMuestra: {  
       documento: String,
       fechaHora: Date,
       tipoMuestreo: String,
@@ -16,7 +16,7 @@ const resultadoSchema = new mongoose.Schema(
     fosfatos: { type: Number, required: true },
     cedulaLaboratorista: { type: String, required: true },
     nombreLaboratorista: { type: String, required: true },
-    fechaAnalisis: { type: Date, default: Date.now },  // ✅ Fecha de análisis automática
+    fechaAnalisis: { type: Date, default: Date.now }, 
   },
   { timestamps: true }
 );

@@ -12,14 +12,14 @@ const cambiarEstadoMuestra = async (cedula, idMuestra, estado) => {
   try {
     // Verificar que el estado sea válido
     if (!estadosValidos.includes(estado)) {
-      throw new Error("⚠️ Estado inválido. Los estados permitidos son: " + estadosValidos.join(", "));
+      throw new Error("Estado inválido. Los estados permitidos son: " + estadosValidos.join(", "));
     }
 
     // Buscar la muestra
     const muestra = await CambioEstado.findOne({ idMuestra: String(idMuestra) });
 
     if (!muestra) {
-      throw new Error("❌ Muestra no encontrada.");
+      throw new Error("Muestra no encontrada.");
     }
 
     // Actualizar estado
@@ -31,7 +31,7 @@ const cambiarEstadoMuestra = async (cedula, idMuestra, estado) => {
 
     return muestra;
   } catch (error) {
-    console.error("❌ Error al cambiar el estado:", error.message);
+    console.error("Error al cambiar el estado:", error.message);
     throw new Error(error.message);
   }
 };

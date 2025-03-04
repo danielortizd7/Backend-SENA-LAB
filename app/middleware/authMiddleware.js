@@ -7,8 +7,12 @@ const laboratoristasPermitidos = {
 const authMiddleware = (req, res, next) => {
   const { cedulaLaboratorista } = req.body;
 
-  if (!cedulaLaboratorista || !laboratoristasPermitidos[cedulaLaboratorista]) {
-    return res.status(403).json({ error: "❌ Acceso denegado: Usuario no autorizado" });
+  if (!cedulaLaboratorista) {
+    return res.status(400).json({ error: "Acceso denegado: Cédula requerida" });
+  }
+
+  if (!laboratoristasPermitidos[cedulaLaboratorista]) {
+    return res.status(403).json({ error: "Acceso denegado: Usuario no autorizado" });
   }
 
   req.nombreLaboratorista = laboratoristasPermitidos[cedulaLaboratorista]; // Asignar el nombre

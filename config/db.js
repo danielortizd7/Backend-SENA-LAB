@@ -1,17 +1,29 @@
-const mongoose = require('mongoose');
-const dotenv = require('dotenv');
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
 
-dotenv.config();
+dotenv.config(); 
+
+let connectionAttempts = 0;
 
 const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.MONGO_URI); // ❌ SIN opciones
-        console.log("🔌 URI:", process.env.MONGO_URI);
-        console.log("✅ Conectado a MongoDB Atlas");
-    } catch (err) {
-        console.error("❌ Error al conectar a MongoDB:", err);
-        process.exit(1);
+  try {
+    connectionAttempts++;
+    console.log(`Intento de conexión #${connectionAttempts}`);
+
+    // Si ya está conectado, no intenta de nuevo
+    if (mongoose.connection.readyState === 1) {
+      console.log("Ya conectado a MongoDB");
+      return;
     }
+
+    // Conectar a la base de datos
+    await mongoose.connect(process.env.MONGO_URI);
+
+    console.log("MongoDB conectado con éxito");
+  } catch (error) {
+    console.error("Error de conexión:", error.message);
+    process.exit(1); //Cerrar la aplicación si no se puede conectar
+  }
 };
 
 module.exports = connectDB;

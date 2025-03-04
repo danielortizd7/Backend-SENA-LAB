@@ -3,51 +3,51 @@ const TipoAgua = require("../models/tipoAgua");
 // Obtener todos los tipos de agua
 exports.obtenerTiposAgua = async (req, res) => {
   try {
-    // Si se envía ?predefinidos=true en la URL, solo devuelve los tipos predefinidos
     const filtro = req.query.predefinidos ? { tipoDeAgua: { $ne: "otra" } } : {};
 
-    // Buscar los tipos de agua en la base de datos, seleccionando solo los campos necesarios
     const tiposAgua = await TipoAgua.find(filtro, { _id: 1, tipoDeAgua: 1, tipoPersonalizado: 1, descripcion: 1 });
 
-    // Formatear la respuesta según el tipo de agua
+    if (!tiposAgua.length) {
+      return res.status(404).json({ error: "No se encontraron tipos de agua" });
+    }
+
     const respuestaFormateada = tiposAgua.map(tipo => ({
-      id: tipo._id, // ID personalizado
+      id: tipo._id,
       "Tipo de agua": tipo.tipoDeAgua === "otra" && tipo.tipoPersonalizado ? tipo.tipoPersonalizado : tipo.tipoDeAgua,
       Descripcion: tipo.descripcion
     }));
 
     res.status(200).json(respuestaFormateada);
   } catch (error) {
-    console.error("❌ Error al obtener los tipos de agua:", error);
+    console.error("Error al obtener los tipos de agua:", error);
     res.status(500).json({ error: "Error al obtener los tipos de agua", detalle: error.message });
   }
 };
 
-// Crear un nuevo tipo de agua
+//Crear un nuevo tipo de agua
 exports.crearTipoAgua = async (req, res) => {
   try {
     const { tipoDeAgua, tipoPersonalizado, descripcion } = req.body;
 
-    // Validaciones
     if (!tipoDeAgua || !descripcion) {
       return res.status(400).json({ error: "Todos los campos son obligatorios" });
     }
 
-    if (tipoDeAgua === "otra" && !tipoPersonalizado) {
+    if (tipoDeAgua === "otra" && (!tipoPersonalizado || tipoPersonalizado.trim() === "")) {
       return res.status(400).json({ error: "Si el tipo de agua es 'otra', debes especificar un tipo personalizado" });
     }
 
-    // Crear el nuevo tipo de agua
     const nuevoTipoAgua = new TipoAgua({
       tipoDeAgua,
       descripcion,
-      tipoPersonalizado: tipoDeAgua === "otra" ? tipoPersonalizado : null, // Solo guarda si es "otra"
+      tipoPersonalizado: tipoDeAgua === "otra" ? tipoPersonalizado.trim() : null,
     });
 
     await nuevoTipoAgua.save();
 
     res.status(201).json({ mensaje: "Tipo de agua registrado con éxito", data: nuevoTipoAgua });
   } catch (error) {
+    console.error("Error al registrar tipo de agua:", error);
     res.status(500).json({ error: "Error al registrar tipo de agua", detalle: error.message });
   }
 };
@@ -58,8 +58,11 @@ exports.actualizarTipoAgua = async (req, res) => {
     const { id } = req.params;
     const { tipoDeAgua, tipoPersonalizado, descripcion } = req.body;
 
-    // Validación: Si tipoDeAgua es "otra", tipoPersonalizado debe estar presente
-    if (tipoDeAgua === "otra" && !tipoPersonalizado) {
+    if (!tipoDeAgua || !descripcion) {
+      return res.status(400).json({ error: "Todos los campos son obligatorios" });
+    }
+
+    if (tipoDeAgua === "otra" && (!tipoPersonalizado || tipoPersonalizado.trim() === "")) {
       return res.status(400).json({ error: "Si el tipo de agua es 'otra', debes especificar un tipo personalizado" });
     }
 
@@ -68,7 +71,7 @@ exports.actualizarTipoAgua = async (req, res) => {
       {
         tipoDeAgua,
         descripcion,
-        tipoPersonalizado: tipoDeAgua === "otra" ? tipoPersonalizado : null,
+        tipoPersonalizado: tipoDeAgua === "otra" ? tipoPersonalizado.trim() : null,
       },
       { new: true }
     );
@@ -77,13 +80,14 @@ exports.actualizarTipoAgua = async (req, res) => {
       return res.status(404).json({ error: "Tipo de agua no encontrado" });
     }
 
-    res.status(200).json({ mensaje: "Tipo de agua actualizado", data: tipoActualizado });
+    res.status(200).json({ mensaje: "Tipo de agua actualizado con éxito", data: tipoActualizado });
   } catch (error) {
+    console.error("Error al actualizar tipo de agua:", error);
     res.status(500).json({ error: "Error al actualizar tipo de agua", detalle: error.message });
   }
 };
 
-// Eliminar un tipo de agua
+//Eliminar un tipo de agua
 exports.eliminarTipoAgua = async (req, res) => {
   try {
     const { id } = req.params;
@@ -94,8 +98,9 @@ exports.eliminarTipoAgua = async (req, res) => {
       return res.status(404).json({ error: "Tipo de agua no encontrado" });
     }
 
-    res.status(200).json({ mensaje: "Tipo de agua eliminado" });
+    res.status(200).json({ mensaje: "Tipo de agua eliminado con éxito" });
   } catch (error) {
+    console.error("❌ Error al eliminar tipo de agua:", error);
     res.status(500).json({ error: "Error al eliminar tipo de agua", detalle: error.message });
   }
 };
