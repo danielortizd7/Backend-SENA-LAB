@@ -1,28 +1,32 @@
 const mongoose = require("mongoose");
-const dotenv = require("dotenv");
-
-dotenv.config(); 
+require("dotenv").config();
 
 let connectionAttempts = 0;
 
 const connectDB = async () => {
   try {
     connectionAttempts++;
-    console.log(`Intento de conexión #${connectionAttempts}`);
+    console.log(`🔌 Intento de conexión #${connectionAttempts}`);
 
-    // Si ya está conectado, no intenta de nuevo
     if (mongoose.connection.readyState === 1) {
-      console.log("Ya conectado a MongoDB");
+      console.log("✅ Ya conectado a MongoDB");
       return;
     }
 
-    // Conectar a la base de datos
-    await mongoose.connect(process.env.MONGO_URI);
+    const uri = process.env.MONGO_URI;
+    if (!uri) {
+      console.error("❌ ERROR: No se encontró la variable MONGO_URI");
+      process.exit(1);
+    }
 
-    console.log("MongoDB conectado con éxito");
+    await mongoose.connect(uri, {
+    
+    });
+
+    console.log("🚀 Conexión exitosa a MongoDB");
   } catch (error) {
-    console.error("Error de conexión:", error.message);
-    process.exit(1); //Cerrar la aplicación si no se puede conectar
+    console.error("❌ Error de conexión:", error.message);
+    process.exit(1);
   }
 };
 

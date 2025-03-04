@@ -1,24 +1,22 @@
-const mongoose = require("mongoose");
 const express = require("express");
 const router = express.Router();
 const resultadoController = require("../controllers/resultadoController");
-const Resultado = require("../models/resultadoModel");
+const mongoose = require("mongoose");
 
-// Conectar a la base de datos externa (de tu compañero)
-const MONGO_URI = "mongodb+srv://Daniel_Backend:danielortiz@muestraregistro.mmezl.mongodb.net/MuestraRegistro?retryWrites=true&w=majority";
-const conexionExterna = mongoose.createConnection(MONGO_URI);
+// 🔌 Conexión a la base de datos externa con .useDb()
+const dbExterna = mongoose.connection.useDb("MuestraRegistro");
 
-// Definir el modelo de Muestra en la conexión externa
 const muestraSchema = new mongoose.Schema({
-    documento: String,
-    fechaHora: Date,
-    tipoMuestreo: String,
-    analisisSeleccionados: Array,
-    id_muestra: String,
+  documento: String,
+  fechaHora: Date,
+  tipoMuestreo: String,
+  analisisSeleccionados: Array,
+  id_muestra: String,
 });
-const Muestra = conexionExterna.model("Muestra", muestraSchema, "muestras");
 
-// Middleware para manejar errores en rutas asíncronas
+const Muestra = dbExterna.model("Muestra", muestraSchema, "muestras");
+
+// Middleware para manejar errores en rutas asíncronas 🔥
 const asyncHandler = (fn) => {
   return (req, res, next) => {
     Promise.resolve(fn(req, res, next)).catch(next);
@@ -35,4 +33,3 @@ router.post("/registrar", asyncHandler(resultadoController.registrarResultado));
 router.get("/laboratorista/:cedula", asyncHandler(resultadoController.obtenerLaboratoristaPorCedula));
 
 module.exports = router;
-

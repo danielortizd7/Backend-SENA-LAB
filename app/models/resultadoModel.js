@@ -3,22 +3,12 @@ const mongoose = require("mongoose");
 const resultadoSchema = new mongoose.Schema(
   {
     idMuestra: { type: String, required: true, unique: true },
-    datosMuestra: {  
-      documento: String,
-      fechaHora: Date,
-      tipoMuestreo: String,
-      analisisSeleccionados: Array,
-    },
     pH: { type: Number, required: true },
     turbidez: { type: Number, required: true },
     oxigenoDisuelto: { type: Number, required: true },
-    nitratos: { type: Number, required: true },
-    fosfatos: { type: Number, required: true },
-    cedulaLaboratorista: { type: String, required: true },
-    nombreLaboratorista: { type: String, required: true },
-    fechaAnalisis: { type: Date, default: Date.now }, 
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
 
-module.exports = mongoose.model("IngresoResultados", resultadoSchema);
+module.exports = mongoose.model("Resultado", resultadoSchema, "resultados");
+
