@@ -15,26 +15,27 @@ app.use(express.json());
 //Importamos rutas
 const tipoAguaRoutes = require("./app/routes/tipoAguaRoutes.js");
 const resultadoRoutes = require("./app/routes/resultadoRoutes.js");
-const cambiosEstadoRoutes = require("./app/routes/muestraRoutes.js");
+const cambiosEstadoRoutes = require("./app/routes/cambioEstadoRoutes.js");
 
 // Usamos las rutas
 app.use("/api/tipos-agua", tipoAguaRoutes);
 app.use("/api/ingreso-resultados", resultadoRoutes);
-app.use("/api/cambios-estado", cambiosEstadoRoutes);
+app.use("/api/cambio-estado", cambiosEstadoRoutes);
 
-// Ruta de prueba 🔥
+
+// Ruta de prueba 
 app.get("/", (req, res) => {
   res.send("API funcionando correctamente con todos los módulos");
 });
 
 // Middleware de errores
 app.use((err, req, res, next) => {
-  console.error("🔥 ERROR DETECTADO:", err.stack);
+  console.error("ERROR DETECTADO:", err.stack);
   res.status(500).json({ mensaje: "Algo salió mal en el servidor", error: err.message });
 });
 
 // Puerto
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });

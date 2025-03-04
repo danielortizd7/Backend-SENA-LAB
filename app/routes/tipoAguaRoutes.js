@@ -8,7 +8,7 @@ const {
 } = require("../controllers/tipoAguaController"); 
 
 // Definir rutas
-router.get("/", obtenerTiposAgua);
+router.get("/listar", obtenerTiposAgua);
 router.post("/crear", crearTipoAgua);
 router.put("/actualizar/:id", actualizarTipoAgua);
 router.delete("/eliminar/:id", eliminarTipoAgua);

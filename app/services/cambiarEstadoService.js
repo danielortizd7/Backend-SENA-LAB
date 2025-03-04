@@ -1,4 +1,5 @@
-const CambioEstado = require("../models/cambioEstado"); // Modelo correcto
+const CambioEstado = require("../models/cambioEstado");
+const Resultado = require("../models/resultadoModel"); // Aquí importas la colección de resultados
 
 const estadosValidos = [
   "Recibida",
@@ -10,28 +11,38 @@ const estadosValidos = [
 
 const cambiarEstadoMuestra = async (cedula, idMuestra, estado) => {
   try {
-    // Verificar que el estado sea válido
     if (!estadosValidos.includes(estado)) {
-      throw new Error("Estado inválido. Los estados permitidos son: " + estadosValidos.join(", "));
+      throw new Error("Estado inválido.");
     }
 
-    // Buscar la muestra
-    const muestra = await CambioEstado.findOne({ idMuestra: String(idMuestra) });
+    let muestra = await CambioEstado.findOne({ idMuestra });
 
     if (!muestra) {
-      throw new Error("Muestra no encontrada.");
+      // Si no existe la muestra, se crea con el primer cambio
+      muestra = new CambioEstado({ idMuestra, historial: [] });
     }
 
-    // Actualizar estado
-    muestra.estado = estado;
-    muestra.fechaCambio = new Date();
-    muestra.cedulaLaboratorista = cedula;
+    const nuevoCambio = {
+      estado,
+      cedulaLaboratorista: cedula,
+    };
+
+    //Guardar en el historial el cambio
+    muestra.historial.push(nuevoCambio);
+
+    //Aquí va lo que me preguntaste
+    if (estado === "Finalizada") {
+      const resultado = await Resultado.findOne({ idMuestra }); // Busca el resultado con el ID de la muestra
+      if (resultado) {
+        muestra.resultado = resultado; // Puedes guardar todo el objeto o solo su ID
+      }
+    }
 
     await muestra.save();
 
     return muestra;
   } catch (error) {
-    console.error("Error al cambiar el estado:", error.message);
+    console.error("Error al cambiar estado:", error.message);
     throw new Error(error.message);
   }
 };
