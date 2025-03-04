@@ -2,9 +2,9 @@ const TipoAgua = require("../models/tipoAgua");
 
 let tiposAguaInicializados = false; //Variable global para que solo se ejecute una vez
 
-// Función para inicializar los tipos de agua una sola vez
+// inicializar los tipos de agua una sola vez
 async function inicializarTiposAgua() {
-  if (tiposAguaInicializados) return; // Ya están cargados, no lo hagas otra vez
+  if (tiposAguaInicializados) return;
   console.log("Inicializando tipos de agua...");
   const tiposPredefinidos = [
     { tipoDeAgua: "potable", descripcion: "Agua apta para el consumo humano" },
@@ -19,7 +19,7 @@ async function inicializarTiposAgua() {
       console.log(`Tipo de agua ${tipo.tipoDeAgua} creado`);
     }
   }
-  tiposAguaInicializados = true; // Garantizamos que solo se ejecuta una vez
+  tiposAguaInicializados = true; //solo se ejecuta una vez
 }
 
 // Obtener todos los tipos de agua

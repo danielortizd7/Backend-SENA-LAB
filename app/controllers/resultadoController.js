@@ -1,7 +1,7 @@
 const Resultado = require("../models/resultadoModel");
 const mongoose = require("mongoose");
 
-//Conexión a la base de datos externa
+//Conexión a la coleccion base de datos
 const dbExterna = mongoose.connection.useDb("test");
 
 //Modelo Muestra

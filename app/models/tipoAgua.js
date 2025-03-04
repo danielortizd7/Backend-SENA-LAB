@@ -11,7 +11,7 @@ const tipoAguaSchema = new mongoose.Schema(
     },
     tipoPersonalizado: { type: String, trim: true, default: null },
     descripcion: { type: String, required: true, trim: true },
-    esPredefinido: { type: Boolean, default: false }, //Aquí bloqueamos los predefinidos
+    esPredefinido: { type: Boolean, default: false }, //bloqueo  predefinidos
   },
   { timestamps: true, versionKey: false }
 );

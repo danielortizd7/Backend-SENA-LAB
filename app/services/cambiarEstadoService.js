@@ -1,5 +1,5 @@
 const CambioEstado = require("../models/cambioEstado");
-const Resultado = require("../models/resultadoModel"); // Aquí importas la colección de resultados
+const Resultado = require("../models/resultadoModel"); //importas la colección de resultados
 
 const estadosValidos = [
   "Recibida",
@@ -30,11 +30,11 @@ const cambiarEstadoMuestra = async (cedula, idMuestra, estado) => {
     //Guardar en el historial el cambio
     muestra.historial.push(nuevoCambio);
 
-    //Aquí va lo que me preguntaste
+    
     if (estado === "Finalizada") {
-      const resultado = await Resultado.findOne({ idMuestra }); // Busca el resultado con el ID de la muestra
+      const resultado = await Resultado.findOne({ idMuestra }); // Buscar resultado con el ID de la muestra
       if (resultado) {
-        muestra.resultado = resultado; // Puedes guardar todo el objeto o solo su ID
+        muestra.resultado = resultado; //guardar todo el objeto o solo su ID
       }
     }
 

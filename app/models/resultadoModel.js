@@ -20,7 +20,7 @@ const resultadoSchema = new mongoose.Schema(
   }
 );
 
-//Aquí se ordenan los campos antes de guardar
+//orden campos antes de guardar
 resultadoSchema.set("toJSON", {
   transform: (doc, ret) => {
     return {
