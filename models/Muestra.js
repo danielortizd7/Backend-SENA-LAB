@@ -11,24 +11,45 @@ const opcionesAnalisis = [
     "Sulfatos", "Turbiedad","Yodo","Zinc", "OTRO"
 ];
 
+const opcionesMuestreo = ["simple", "compuesto", "residual", "OTRO"];
+const opcionesTipoMuestra = ["agua", "suelo"];
+
 const MuestraSchema = new mongoose.Schema({
     id_muestra: { type: String, unique: true },
-    documento: { type: String, required: true, match: /^\d{5,15}$/ },  //  Cambio de documento_cliente → documento
-    fechaHora: { type: Date, required: true },  //  Cambio de fecha_hora → fechaHora
-    tipoMuestreo: { type: String, required: true },  //  Cambio de tipo_muestreo → tipoMuestreo
-    analisisSeleccionados: {  //  Cambio de analisis_realizar → analisisSeleccionados
+    documento: { type: String, required: true, match: /^\d{5,15}$/ },
+    fechaHora: { type: Date, required: true },
+    tipoMuestra: { // Campo de selección
+        type: String,
+        required: true,
+        enum: opcionesTipoMuestra, // Solo permite "agua" o "suelo"
+        message: "El tipo de muestra debe ser 'agua' o 'suelo'."
+    },
+    tipoMuestreo: {
+        type: [String],
+        required: true,
+        validate: {
+            validator: function(val) {
+                return val.every(v => {
+                    if (typeof v !== 'string') return false; // Asegúrate de que v sea un string
+                    return opcionesMuestreo.includes(v) || v.startsWith("OTRO:");
+                });
+            },
+            message: "El tipo de muestreo no es válido."
+        }
+    },
+    analisisSeleccionados: {
         type: [String], 
         required: true,
         validate: {
             validator: function(val) {
-                return val.every(a => opcionesAnalisis.includes(a) || a.startsWith("OTRO:"));
+                return Array.isArray(val) && val.every(a => opcionesAnalisis.includes(a) || a.startsWith("OTRO:"));
             },
             message: "Uno o más valores de análisis no son válidos."
         }
     }
 });
 
-//  Generar ID único automáticamente antes de guardar
+// Genera un ID único automáticamente antes de guardar
 MuestraSchema.pre('save', async function(next) {
     try {
         if (!this.id_muestra) {

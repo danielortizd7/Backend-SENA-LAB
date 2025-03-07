@@ -14,11 +14,11 @@ app.use(cors());
 app.use(express.json());
 
 // Importar rutas
-import muestrasRoutes from "./registroMuestra/routes/muestras.js";
-import tablasParametricasRoutes from "./tablasParametricas/routes/tablasParametricas.js"; // ✅ Nueva API
+import muestrasRoutes from "./routes/muestras.js";
+import tablasParametricasRoutes from "./routes/tablasParametricas.js"; //  Nueva API
 
 app.use("/muestras", muestrasRoutes);
-app.use("/tablas-parametricas", tablasParametricasRoutes);  // ✅ Ruta de la nueva API
+app.use("/tablas-parametricas", tablasParametricasRoutes);  //  Ruta de la nueva API
 
 // Middleware para manejar errores
 app.use((err, req, res, next) => {
