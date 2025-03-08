@@ -1,6 +1,6 @@
 const TipoAgua = require("../models/tipoAgua");
 
-let tiposAguaInicializados = false; //Variable global para que solo se ejecute una vez
+let tiposAguaInicializados = false; 
 
 // inicializar los tipos de agua una sola vez
 async function inicializarTiposAgua() {
@@ -19,7 +19,7 @@ async function inicializarTiposAgua() {
       console.log(`Tipo de agua ${tipo.tipoDeAgua} creado`);
     }
   }
-  tiposAguaInicializados = true; //solo se ejecuta una vez
+  tiposAguaInicializados = true; 
 }
 
 // Obtener todos los tipos de agua

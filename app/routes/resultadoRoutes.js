@@ -1,35 +1,23 @@
 const express = require("express");
 const router = express.Router();
 const resultadoController = require("../controllers/resultadoController");
-const mongoose = require("mongoose");
+const authMiddleware = require("../middleware/authMiddleware");
 
-//Conexión a la coleccion externa con .useDb()
-const dbExterna = mongoose.connection.useDb("MuestraRegistro");
+// Manejador de errores async
+const asyncHandler = (fn) => (req, res, next) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
 
-const muestraSchema = new mongoose.Schema({
-  documento: String,
-  fechaHora: Date,
-  tipoMuestreo: String,
-  analisisSeleccionados: Array,
-  id_muestra: String,
-});
-
-const Muestra = dbExterna.model("Muestra", muestraSchema, "muestras");
-
-// Middleware para manejar errores en rutas asíncronas
-const asyncHandler = (fn) => {
-  return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
-  };
-};
-
-// Obtener todos los resultados
+router.put(
+  "/editar/:idMuestra",
+  authMiddleware,
+  asyncHandler(resultadoController.editarResultado)
+);
+router.post(
+  "/verificar/:idMuestra",
+  authMiddleware,
+  asyncHandler(resultadoController.verificarResultado)
+);
 router.get("/resultados", asyncHandler(resultadoController.obtenerResultados));
 
-// Registrar un resultado
-router.post("/registrar", asyncHandler(resultadoController.registrarResultado));
-
-// Obtener nombre del laboratorista por cédula
-router.get("/laboratorista/:cedula", asyncHandler(resultadoController.obtenerLaboratoristaPorCedula));
 
 module.exports = router;

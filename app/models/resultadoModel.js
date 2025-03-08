@@ -11,35 +11,24 @@ const resultadoSchema = new mongoose.Schema(
     oxigenoDisuelto: { type: Number, required: false },
     nitratos: { type: Number, required: false },
     fosfatos: { type: Number, required: false },
+    observacion: { type: String, required: false }, // Observaciones
+    verificado: { type: Boolean, default: false }, // Marcar como verificado
     cedulaLaboratorista: { type: String, required: true },
     nombreLaboratorista: { type: String, required: true },
+
+    historialCambios: [
+      {
+        nombre: { type: String },
+        cedula: { type: String },
+        cambios: { type: Object }, // Guarda los cambios realizados
+        fecha: { type: Date, default: Date.now }, // Marca cuándo se hizo el cambio
+      },
+    ],
   },
   {
     timestamps: true,
-    versionKey: false, //Para que no salga "__v"
+    versionKey: false,
   }
 );
-
-//orden campos antes de guardar
-resultadoSchema.set("toJSON", {
-  transform: (doc, ret) => {
-    return {
-      idMuestra: ret.idMuestra,
-      documento: ret.documento,
-      fechaHora: ret.fechaHora,
-      tipoMuestreo: ret.tipoMuestreo,
-      pH: ret.pH,
-      turbidez: ret.turbidez,
-      oxigenoDisuelto: ret.oxigenoDisuelto,
-      nitratos: ret.nitratos,
-      fosfatos: ret.fosfatos,
-      cedulaLaboratorista: ret.cedulaLaboratorista,
-      nombreLaboratorista: ret.nombreLaboratorista,
-      _id: ret._id,
-      createdAt: ret.createdAt,
-      updatedAt: ret.updatedAt,
-    };
-  },
-});
 
 module.exports = mongoose.model("Resultado", resultadoSchema);
