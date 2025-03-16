@@ -1,4 +1,5 @@
 import Muestra from '../models/Muestra.js';
+import axios from 'axios';
 
 // 1️ Obtiene todas las muestras con filtros
 export const obtenerMuestras = async (req, res) => {
@@ -112,6 +113,25 @@ export const actualizarMuestra = async (req, res) => {
 // 5️ Eliminar una muestra
 export const eliminarMuestra = async (req, res) => {
     try {
+        const response = await axios.post('https://back-usuarios-f.onrender.com/api/usuarios/login', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        console.log(response);
+        return response.data;
+    } catch (error) {
+        if (error.response) {
+            // Error de respuesta del servidor
+            throw new Error(`Error del servidor de usuarios: ${error.response.data.mensaje || error.response.statusText}`);
+        } else if (error.request) {
+            // Error de conexión
+            throw new Error('No se pudo conectar con el servidor de usuarios');
+        } else {
+            throw new Error('Error al verificar el rol del usuario: ' + error.message);
+        }
+    }
+    /*try {
         const { id } = req.params;
         const muestraEliminada = await Muestra.findByIdAndDelete(id);
 
@@ -123,4 +143,6 @@ export const eliminarMuestra = async (req, res) => {
     } catch (error) {
         res.status(500).json({ mensaje: "Error al eliminar la muestra", error: error.message });
     }
-};
+*/
+
+}
