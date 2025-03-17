@@ -1,27 +1,44 @@
-import jwt from 'jsonwebtoken';
+import { verificarRolUsuario } from '../services/usuariosService.js';
 
 export const verificarToken = async (req, res, next) => {
     try {
-        const token = req.header('Authorization')?.replace('Bearer ', '');
+        const authHeader = req.header('Authorization');
         
-        if (!token) {
-            return res.status(401).json({ mensaje: "Acceso denegado. Token no proporcionado." });
+        if (!authHeader) {
+            return res.status(401).json({ 
+                mensaje: "Acceso denegado. Header de autorización no encontrado." 
+            });
         }
 
-        // Decodificar el token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const token = authHeader.replace('Bearer ', '');
         
-        // Guardar la información del usuario en el request
-        req.usuario = {
-            id: decoded.id,
-            rol: decoded.rol
-        };
-        
-        next();
+        if (!token) {
+            return res.status(401).json({ 
+                mensaje: "Acceso denegado. Token no proporcionado." 
+            });
+        }
+
+        try{
+
+            const usuario = await verificarRolUsuario(token);
+            req.usuario = {
+                id: usuario.id,
+                rol: usuario.rol
+            };
+            next();
+       
+        } catch (Error) {
+            console.error("Error al verificar token:", Error.message);
+            return res.status(401).json({ 
+                mensaje: "Token inválido o expirado",
+                detalles: Error.message 
+            });
+        }
     } catch (error) {
-        res.status(401).json({ 
-            mensaje: "Error en la autenticación", 
-            error: error.message 
+        console.error("Error en middleware de autenticación:", error);
+        res.status(500).json({ 
+            mensaje: "Error en la autenticación",
+            detalles: error.message 
         });
     }
 };

@@ -1,5 +1,5 @@
+import { verificarRolUsuario } from '../services/usuariosService.js';
 import Muestra from '../models/Muestra.js';
-import axios from 'axios';
 
 // 1️ Obtiene todas las muestras con filtros
 export const obtenerMuestras = async (req, res) => {
@@ -14,7 +14,7 @@ export const obtenerMuestras = async (req, res) => {
         }
 
         if (req.query.analisisSeleccionados) {
-            filtros.analisisSeleccionados = { $in: [req.query.analisisSeleccionados] };
+            filtros.analisisSeleccionados = { $in: req.query.analisisSeleccionados.split(",") };
         }
 
         if (req.query.fechaInicio && req.query.fechaFin) {
@@ -23,6 +23,33 @@ export const obtenerMuestras = async (req, res) => {
                 $lte: new Date(req.query.fechaFin) 
             };
         }
+        if (req.query.planMuestreo) filtros.planMuestreo = req.query.planMuestreo;
+        if (req.query.lugarMuestreo) filtros.lugarMuestreo = req.query.lugarMuestreo;
+        if (req.query.tempMin || req.query.tempMax || req.query.humMin || req.query.humMax){
+            filtros.condicionesAmbientales.temperatura = filtros.condicionesAmbientales || {};
+
+            if (req.query.tempMin || req.query.tempMax){
+                filtros["condicionesAmbientales.temperatura"] = {};
+                if (req.query.tempMin)
+                    filtros["condicionesAmbientales.temperatura"].$gte = parseFloat(req.query.tempMin);
+               
+                if (req.query.tempMax)
+                    filtros["condicionesAmbientales.temperatura"].$lte = parseFloat(req.query.tempMax);
+                
+            }
+
+            if (req.query.humMin || req.query.humMax) {
+                filtros["condicionesAmbientales.humedad"] = {};
+                if (req.query.humMin)
+                    filtros["condicionesAmbientales.humedad"].$gte = parseFloat(req.query.humMin);
+                
+                if (req.query.humMax)
+                    filtros["condicionesAmbientales.humedad"].$lte = parseFloat(req.query.humMax);
+                
+            }
+        }
+
+        if (req.query.preservacionMuestra) filtros.preservacionMuestra = req.query.preservacionMuestra;
 
         const muestras = await Muestra.find(filtros).sort({ fechaHora: -1 });
         res.status(200).json(muestras);
@@ -34,33 +61,66 @@ export const obtenerMuestras = async (req, res) => {
 // 2️ Registrar una nueva muestra
 export const registrarMuestra = async (req, res) => {
     try {
-        let { tipoMuestra, tipoMuestreo, analisisSeleccionados, ...restoDatos } = req.body;
+        let { tipoMuestra,
+             tipoMuestreo, 
+             analisisSeleccionados,
+             planMuestreo,
+             lugarMuestreo,
+             condicionesAmbientales,
+             preservacionMuestra,
+              ...restoDatos
+             } = req.body;
          // Validar que tipoMuestra sea "agua" o "suelo"
          if (!["agua", "suelo"].includes(tipoMuestra)) {
             return res.status(400).json({ mensaje: "El tipo de muestra debe ser 'agua' o 'suelo'." });
         }
-        // Si tipoMuestreo es una cadena, conviértela en un array de strings
+        // Si tipoMuestreo es una cadena, se convierte en un array de strings
         if (typeof tipoMuestreo === 'string') {
             tipoMuestreo = tipoMuestreo.split(',').map(item => item.trim());
         }
 
-        // Asegúrate de que todos los elementos de tipoMuestreo sean strings
+        //   todos los elementos de tipoMuestreo sean strings
         if (Array.isArray(tipoMuestreo)) {
             tipoMuestreo = tipoMuestreo.map(item => String(item)); // Convierte cada elemento a string
         }
 
-        // Validar que tipoMuestreo sea un array
+        // Valida que tipoMuestreo sea un array
         if (!Array.isArray(tipoMuestreo) || tipoMuestreo.length === 0) {
             return res.status(400).json({ mensaje: "tipoMuestreo debe ser un array con al menos un valor." });
         }
 
-        // Validar que analisisSeleccionados sea un array
+        // Valida que analisisSeleccionados sea un array
         if (!Array.isArray(analisisSeleccionados) || analisisSeleccionados.length === 0) {
             return res.status(400).json({ mensaje: "analisisSeleccionados debe ser un array con al menos un valor." });
         }
 
-        // Crear la nueva muestra con los datos transformados
-        const nuevaMuestra = new Muestra({tipoMuestra, tipoMuestreo, analisisSeleccionados, ...restoDatos });
+        if (!planMuestreo || typeof planMuestreo !== 'string' || planMuestreo.trim()==='') {
+            return res.status(400).json({ mensaje: "El plan de muestreo es requerido y debe ser una cadena no vacía." });
+        } 
+        if (!lugarMuestreo || typeof lugarMuestreo!== 'string' || lugarMuestreo.trim()==='') {
+            return res.status(400).json({ mensaje: "El lugar de muestreo es requerido y debe ser una cadena no vacía." });
+        }
+        if  (!condicionesAmbientales || typeof condicionesAmbientales !== 'object') {
+            return res.status(400).json({ mensaje: "Las condiciones ambientales deben ser un objeto." });
+        } 
+        if (!('temperatura' in condicionesAmbientales) || typeof condicionesAmbientales.temperatura !== 'number') {
+            return res.status(400).json({ mensaje: "Las condiciones ambientales deben tener una temperatura en número." });
+        }
+        if (!('humedad' in condicionesAmbientales) || typeof condicionesAmbientales.humedad !== 'number') {
+            return res.status(400).json({ mensaje: "Las condiciones ambientales deben tener una humedad en número." });
+        }
+        if (!preservacionMuestra || typeof preservacionMuestra!=='string' || preservacionMuestra.trim()==='') {
+            return res.status(400).json({ mensaje: "La preservación de la muestra es requerida y debe ser una cadena no vacía." });
+        }
+        // Crear la nueva muestra
+        const nuevaMuestra = new Muestra({tipoMuestra,
+             tipoMuestreo,
+              analisisSeleccionados,
+              planMuestreo,
+              lugarMuestreo,
+              condicionesAmbientales,
+              preservacionMuestra,
+               ...restoDatos });
         await nuevaMuestra.save();
         res.status(201).json({ mensaje: "Muestra registrada exitosamente", data: nuevaMuestra });
     } catch (err) {
@@ -90,11 +150,11 @@ export const actualizarMuestra = async (req, res) => {
         const { id } = req.params;
         const { tipoMuestreo, analisisSeleccionados, ...restoDatos } = req.body;
 
-        if (tipoMuestreo && (!Array.isArray(tipoMuestreo) || tipoMuestreo.length === 0)) {
+        if (tipoMuestreo !== undefined && (!Array.isArray(tipoMuestreo) || tipoMuestreo.length === 0)) {
             return res.status(400).json({ mensaje: "tipoMuestreo debe ser un array con al menos un valor." });
         }
 
-        if (analisisSeleccionados && (!Array.isArray(analisisSeleccionados) || analisisSeleccionados.length === 0)) {
+        if (analisisSeleccionados !== undefined && (!Array.isArray(analisisSeleccionados) || analisisSeleccionados.length === 0)) {
             return res.status(400).json({ mensaje: "analisisSeleccionados debe ser un array con al menos un valor." });
         }
 
@@ -113,25 +173,19 @@ export const actualizarMuestra = async (req, res) => {
 // 5️ Eliminar una muestra
 export const eliminarMuestra = async (req, res) => {
     try {
-        const response = await axios.post('https://back-usuarios-f.onrender.com/api/usuarios/login', {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        console.log(response);
-        return response.data;
-    } catch (error) {
-        if (error.response) {
-            // Error de respuesta del servidor
-            throw new Error(`Error del servidor de usuarios: ${error.response.data.mensaje || error.response.statusText}`);
-        } else if (error.request) {
-            // Error de conexión
-            throw new Error('No se pudo conectar con el servidor de usuarios');
-        } else {
-            throw new Error('Error al verificar el rol del usuario: ' + error.message);
+        const token = req.header('Authorization')?.replace('Bearer ', '');
+        if (!token) {
+            return res.status(401).json({ mensaje: "Acceso denegado. Token no proporcionado." });
         }
-    }
-    /*try {
+
+        // Obtener datos del usuario con el servicio
+        const usuario = await verificarRolUsuario(token);
+
+        // Verificar si el usuario tiene rol de administrador
+        if (usuario.rol !== "administrador") {
+            return res.status(403).json({ mensaje: "Acceso denegado. Se requieren permisos de administrador." });
+        }
+    
         const { id } = req.params;
         const muestraEliminada = await Muestra.findByIdAndDelete(id);
 
@@ -141,8 +195,9 @@ export const eliminarMuestra = async (req, res) => {
 
         res.json({ mensaje: "Muestra eliminada exitosamente" });
     } catch (error) {
+        console.log("Error en eliminar muestras", error.message);
         res.status(500).json({ mensaje: "Error al eliminar la muestra", error: error.message });
     }
-*/
 
-}
+
+};

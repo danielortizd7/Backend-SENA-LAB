@@ -18,6 +18,17 @@ const MuestraSchema = new mongoose.Schema({
     id_muestra: { type: String, unique: true },
     documento: { type: String, required: true, match: /^\d{5,15}$/ },
     fechaHora: { type: Date, required: true },
+    planMuestreo: { type: String, required: true},
+    lugarMuestreo: { type: String, required: true},
+    condicionesAmbientales: {
+        type: {
+            temperatura: {type: Number, required: true},
+            humedad: {type: Number, required: true}
+            
+        },
+        required: true
+    },
+    preservacionMuestra: {type: String, required: true},
     tipoMuestra: { // Campo de selección
         type: String,
         required: true,
