@@ -14,6 +14,6 @@ router.get('/', obtenerMuestras); // Obtener todas las muestras
 router.get('/:id', obtenerMuestraPorId); //  Nueva ruta para obtener una muestra por ID
 router.post('/registrar',verificarToken, verificarAdmin, registrarMuestra);
 router.put('/:id',verificarToken, verificarAdmin, actualizarMuestra);
-router.delete('/:id',verificarToken, verificarAdmin, eliminarMuestra);
+router.delete('/:idUsuario/:idMuestra', eliminarMuestra);
 
 export default router;

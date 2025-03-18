@@ -172,32 +172,24 @@ export const actualizarMuestra = async (req, res) => {
 
 // 5️ Eliminar una muestra
 export const eliminarMuestra = async (req, res) => {
-    try {
-        const token = req.header('Authorization')?.replace('Bearer ', '');
-        if (!token) {
-            return res.status(401).json({ mensaje: "Acceso denegado. Token no proporcionado." });
+    const { idUsuario, idMuestra } = req.params;
+    try { 
+        /*const muestraEliminada = await Muestra.findByIdAndDelete(idUsuario);*/
+        const usuario = await verificarRolUsuario(idUsuario);
+        if(usuario.rol.name == "administrador" || usuario.rol.name == "Administrador" || usuario.rol.name == "admin" || usuario.rol.name == "Admin"){
+            const muestraEliminada = await Muestra.findByIdAndDelete(idMuestra);
+            if(muestraEliminada){
+                res.json({mensaje:"Muestra eliminada"});
+            } else {
+                res.json({mensaje:"No se pudo eliminar la muestra"});
+            }
+        }else {
+            return res.status(401).json({ mensaje: "Acceso denegado. No tiene permisos para eliminar muestras." });
         }
-
-        // Obtener datos del usuario con el servicio
-        const usuario = await verificarRolUsuario(token);
-
-        // Verificar si el usuario tiene rol de administrador
-        if (usuario.rol !== "administrador") {
-            return res.status(403).json({ mensaje: "Acceso denegado. Se requieren permisos de administrador." });
-        }
-    
-        const { id } = req.params;
-        const muestraEliminada = await Muestra.findByIdAndDelete(id);
-
-        if (!muestraEliminada) {
-            return res.status(404).json({ mensaje: "Muestra no encontrada" });
-        }
-
-        res.json({ mensaje: "Muestra eliminada exitosamente" });
-    } catch (error) {
-        console.log("Error en eliminar muestras", error.message);
-        res.status(500).json({ mensaje: "Error al eliminar la muestra", error: error.message });
+            
+    }catch (error){
+        res.json({mensaje:"Error"})
     }
-
-
+    
+  
 };

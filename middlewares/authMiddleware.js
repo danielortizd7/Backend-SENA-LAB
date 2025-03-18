@@ -18,20 +18,24 @@ export const verificarToken = async (req, res, next) => {
             });
         }
 
-        try{
-
+        try {
             const usuario = await verificarRolUsuario(token);
+            if (!usuario || !usuario.rol) {
+                return res.status(401).json({ 
+                    mensaje: "Token inválido: información del usuario incompleta." 
+                });
+            }
+
             req.usuario = {
                 id: usuario.id,
                 rol: usuario.rol
             };
             next();
-       
-        } catch (Error) {
-            console.error("Error al verificar token:", Error.message);
+        } catch (error) {
+            console.error("Error al verificar token:", error.message);
             return res.status(401).json({ 
                 mensaje: "Token inválido o expirado",
-                detalles: Error.message 
+                detalles: error.message 
             });
         }
     } catch (error) {
@@ -46,7 +50,8 @@ export const verificarToken = async (req, res, next) => {
 export const verificarAdmin = async (req, res, next) => {
     if (!req.usuario || req.usuario.rol !== "administrador") {
         return res.status(403).json({ 
-            mensaje: "Acceso denegado. Se requieren permisos de administrador." 
+            mensaje: "Acceso denegado. Se requieren permisos de administrador.",
+            detalles: `Rol actual: ${req.usuario?.rol || "No definido"}` 
         });
     }
     next();
