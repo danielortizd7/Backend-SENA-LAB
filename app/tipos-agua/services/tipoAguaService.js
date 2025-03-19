@@ -1,4 +1,4 @@
-const { TipoAgua } = require('../../shared/models/modelMuestras.js');
+const { TipoAgua, Muestra } = require('../../shared/models/modelMuestras.js');
 
 class TipoAguaService {
     static async obtenerTiposAgua() {
@@ -20,6 +20,18 @@ class TipoAguaService {
 
     static async obtenerTipoAguaPorId(id) {
         return await TipoAgua.findById(id);
+    }
+
+    // Asignar tipo de agua a una muestra
+    static async asignarTipoAgua(idMuestra, idTipoAgua) {
+        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
+        if (!muestra) {
+            throw new Error("Muestra no encontrada");
+        }
+
+        muestra.tipo_agua = idTipoAgua;
+        await muestra.save();
+        return muestra;
     }
 }
 

@@ -46,9 +46,23 @@ const eliminarTipoAgua = async (req, res) => {
     }
 };
 
+// Asignar tipo de agua a una muestra
+const asignarTipoAgua = async (req, res) => {
+    try {
+        const { idMuestra } = req.params;
+        const { idTipoAgua } = req.body;
+        
+        const resultado = await TipoAguaService.asignarTipoAgua(idMuestra, idTipoAgua);
+        res.json({ mensaje: "Tipo de agua asignado con éxito", resultado });
+    } catch (error) {
+        res.status(400).json({ mensaje: "Error al asignar tipo de agua", error: error.message });
+    }
+};
+
 module.exports = {
     obtenerTiposAgua,
     crearTipoAgua,
     actualizarTipoAgua,
-    eliminarTipoAgua
+    eliminarTipoAgua,
+    asignarTipoAgua
 };
