@@ -6,8 +6,13 @@ const generarPDF = async (muestra, cedulaCliente, firmaCliente, cedulaLaboratori
     return new Promise((resolve, reject) => {
         try {
             const doc = new PDFDocument({ margin: 50 });
-            const nombreArchivo = `muestra_${muestra.id_muestra}.pdf`;
+            const nombreArchivo = `muestra_${muestra.id_muestra}.pdf`.replace(/[^a-zA-Z0-9-_\.]/g, '');
             const rutaArchivo = path.join(__dirname, "..", "..", "..", "public", "pdfs", nombreArchivo);
+
+            // Verificar y limpiar archivo existente
+            if (fs.existsSync(rutaArchivo)) {
+                fs.unlinkSync(rutaArchivo);
+            }
 
             // Crear directorio si no existe
             if (!fs.existsSync(path.dirname(rutaArchivo))) {
@@ -74,9 +79,14 @@ const generarPDF = async (muestra, cedulaCliente, firmaCliente, cedulaLaboratori
             doc.end();
 
             stream.on("finish", () => {
-                const webPath = `/pdfs/${nombreArchivo}`;
-                console.log("PDF generado exitosamente:", rutaArchivo);
-                resolve(webPath);
+                if (fs.existsSync(rutaArchivo)) {
+                    const webPath = `/pdfs/${nombreArchivo}`;
+                    console.log("PDF generado exitosamente en:", rutaArchivo);
+                    console.log("Ruta web del PDF:", webPath);
+                    resolve(webPath);
+                } else {
+                    reject(new Error("El archivo PDF no se generó correctamente"));
+                }
             });
 
             stream.on("error", (error) => {
