@@ -27,7 +27,7 @@ const firmaRoutes = require("./src/app/firma-digital/routes/firmaRoutes.js");
 app.use("/api/tipos-agua", tipoAguaRoutes);
 app.use("/api/ingreso-resultados", resultadoRoutes);
 app.use("/api/cambio-estado", cambiosEstadoRoutes);
-app.use("/pdfs", express.static("pdfs"));
+app.use(express.static('public')); 
 app.use("/api/firmas", firmaRoutes);
 
 // Ruta de prueba 

@@ -7,7 +7,7 @@ const generarPDF = async (muestra, cedulaCliente, firmaCliente, cedulaLaboratori
         try {
             const doc = new PDFDocument({ margin: 50 });
             const nombreArchivo = `muestra_${muestra.id_muestra}.pdf`;
-            const rutaArchivo = path.join(__dirname, "..", "pdfs", nombreArchivo);
+            const rutaArchivo = path.join(__dirname, "..", "..", "..", "public", "pdfs", nombreArchivo);
 
             // Crear directorio si no existe
             if (!fs.existsSync(path.dirname(rutaArchivo))) {
@@ -74,8 +74,9 @@ const generarPDF = async (muestra, cedulaCliente, firmaCliente, cedulaLaboratori
             doc.end();
 
             stream.on("finish", () => {
+                const webPath = `/pdfs/${nombreArchivo}`;
                 console.log("PDF generado exitosamente:", rutaArchivo);
-                resolve(rutaArchivo);
+                resolve(webPath);
             });
 
             stream.on("error", (error) => {
