@@ -58,12 +58,14 @@ const guardarFirma = async (req, res) => {
         // Asegurar que existe el objeto firmas
         const nuevasFirmas = { ...muestra.firmas || {} };
 
+        // Guardar firma del laboratorista
         if (!nuevasFirmas.firmaLaboratorista) {
             nuevasFirmas.cedulaLaboratorista = cedulaLaboratorista;
             nuevasFirmas.firmaLaboratorista = formatearBase64(firmaLaboratorista);
             console.log("Firma del laboratorista agregada.");
         }
 
+        // Guardar firma del cliente
         if (cedulaCliente && firmaCliente) {
             nuevasFirmas.cedulaCliente = cedulaCliente;
             nuevasFirmas.firmaCliente = formatearBase64(firmaCliente);
@@ -95,7 +97,7 @@ const guardarFirma = async (req, res) => {
         res.status(200).json({
             message: "Firmas guardadas correctamente",
             muestra: muestraActualizada,
-            rutaPDF,
+            rutaPDF
         });
 
     } catch (error) {

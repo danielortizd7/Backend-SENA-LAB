@@ -5,28 +5,19 @@ const router = express.Router();
 
 const { guardarFirma, buscarMuestra, obtenerTodasLasFirmas } = require("../controllers/firmaController");
 const { generarReportePDF } = require("../controllers/pdfController");
-const authMiddleware = require("../../../shared/middleware/authMiddleware");
-
 
 router.get("/todas", obtenerTodasLasFirmas);
-
-
 router.get("/buscar/:idMuestra", buscarMuestra);
-
-
 router.post("/guardarFirma", guardarFirma);
+router.get("/generar-pdf/:idMuestra", generarReportePDF);
 
-
-router.get("/generar-pdf/:idMuestra", authMiddleware, generarReportePDF);
-
-
+// Modificar esta ruta para usar la carpeta public/pdfs
 router.get("/pdfs/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const fileName = `muestra_${id.trim().toUpperCase()}.pdf`; // Asegurar formato correcto
-        const filePath = path.join(__dirname, "..", "pdfs", fileName); // 📌 Ruta corregida
+        const fileName = `muestra_${id.trim().toUpperCase()}.pdf`;
+        const filePath = path.join(process.cwd(), "public", "pdfs", fileName);
 
-        
         if (!fs.existsSync(filePath)) {
             console.warn(`Archivo PDF no encontrado: ${filePath}`);
             return res.status(404).json({ mensaje: "PDF no encontrado" });
