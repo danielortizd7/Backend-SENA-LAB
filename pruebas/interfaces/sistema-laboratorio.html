@@ -533,7 +533,7 @@
             }
 
             try {
-                const response = await fetch('http://localhost:5000/api/registro-muestras/muestras', {
+                const response = await fetch('https://daniel-back-dom.onrender.com/api/registro-muestras/muestras', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -563,7 +563,7 @@
 
         async function cargarMuestras() {
             try {
-                const response = await fetch('http://localhost:5000/api/registro-muestras/muestras', {
+                const response = await fetch('https://daniel-back-dom.onrender.com/api/registro-muestras/muestras', {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
@@ -692,7 +692,7 @@
             }
 
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/muestras/${id}`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/muestras/${id}`, {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
@@ -742,7 +742,7 @@
             const observaciones = document.getElementById('observacionesFirma').value;
 
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/muestras/${muestraActual.id_muestra}/firma`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/muestras/${muestraActual.id_muestra}/firma`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -783,7 +783,7 @@
             }
 
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/muestras/${id}`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/muestras/${id}`, {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
@@ -854,7 +854,7 @@
             const observaciones = document.getElementById('observacionesEstado').value;
 
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/muestras/${muestraEstadoActual.id_muestra}`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/muestras/${muestraEstadoActual.id_muestra}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
@@ -903,7 +903,7 @@
             }
 
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/muestras/${id}`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/muestras/${id}`, {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
@@ -1011,7 +1011,7 @@
             const observaciones = document.getElementById('observacionesResultado').value;
 
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/muestras/${muestraResultadoActual.id_muestra}/resultados`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/muestras/${muestraResultadoActual.id_muestra}/resultados`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1042,7 +1042,7 @@
         // Funciones para tipos de agua
         async function cargarTiposAgua() {
             try {
-                const response = await fetch('http://localhost:5000/api/registro-muestras/tipos-agua', {
+                const response = await fetch('https://daniel-back-dom.onrender.com/api/registro-muestras/tipos-agua', {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
@@ -1101,7 +1101,7 @@
             const parametrosSeleccionados = Array.from(document.querySelectorAll('input[name="parametros"]:checked')).map(cb => cb.value);
 
             try {
-                const response = await fetch('http://localhost:5000/api/registro-muestras/tipos-agua', {
+                const response = await fetch('https://daniel-back-dom.onrender.com/api/registro-muestras/tipos-agua', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1131,7 +1131,7 @@
 
         async function editarTipoAgua(id) {
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/tipos-agua/${id}`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/tipos-agua/${id}`, {
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
@@ -1170,7 +1170,7 @@
             if (!confirm('¿Está seguro de eliminar este tipo de agua?')) return;
 
             try {
-                const response = await fetch(`http://localhost:5000/api/registro-muestras/tipos-agua/${id}`, {
+                const response = await fetch(`https://daniel-back-dom.onrender.com/api/registro-muestras/tipos-agua/${id}`, {
                     method: 'DELETE',
                     headers: {
                         'Authorization': `Bearer ${localStorage.getItem('authToken')}`
