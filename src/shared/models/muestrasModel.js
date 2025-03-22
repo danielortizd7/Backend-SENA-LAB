@@ -4,19 +4,34 @@ const estadosValidos = ["Recibida", "En análisis", "Pendiente de resultados", "
 
 const muestraSchema = new mongoose.Schema(
   {
-    documento: { type: String, required: true },
-    fechaHora: { type: Date, required: true },
-    tipoMuestreo: { type: String, required: true },
-    analisisSeleccionados: { type: Array, required: true },
+    documento: { 
+      type: String, 
+      required: true,
+      immutable: true // No se puede modificar una vez creado
+    },
+    fechaHora: { 
+      type: Date, 
+      required: true,
+      default: Date.now,
+      immutable: true // No se puede modificar una vez creado
+    },
+    tipoMuestreo: { 
+      type: String, 
+      required: true 
+    },
+    analisisSeleccionados: { 
+      type: Array, 
+      required: true 
+    },
     id_muestra: { 
       type: String, 
       required: true,
+      immutable: true,
       index: { 
         unique: true,
         collation: { locale: "es", strength: 2 }
       }
     },
-
     tipoDeAgua: {
       tipo: { 
         type: String,
@@ -25,44 +40,78 @@ const muestraSchema = new mongoose.Schema(
       tipoPersonalizado: String,
       descripcion: String
     },
-
     historial: [
       {
-        estado: { type: String, required: true, enum: estadosValidos },
-        cedulaLaboratorista: { type: String, required: true, trim: true },
-        fechaCambio: { type: Date, default: Date.now },
-      },
+        estado: { 
+          type: String, 
+          required: true, 
+          enum: estadosValidos 
+        },
+        cedulaadministrador: { 
+          type: String, 
+          required: true, 
+          trim: true 
+        },
+        nombreadministrador: { 
+          type: String, 
+          required: true 
+        },
+        fechaCambio: { 
+          type: Date, 
+          default: Date.now,
+          immutable: true 
+        },
+        observaciones: String
+      }
     ],
-
-    firmas: {
-      cedulaLaboratorista: { 
-        type: String,
-        default: null
-      },
-      firmaLaboratorista: { 
-        type: String,
-        default: null
-      },
-      cedulaCliente: { 
-        type: String,
-        default: null
-      },
-      firmaCliente: { 
-        type: String,
-        default: null
-      },
-      
-    },
-
-    resultado: {
+    creadoPor: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Resultado"
-    }
+      ref: 'Usuario',
+      required: true,
+      immutable: true
+    },
+    actualizadoPor: [{
+      usuario: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        required: true
+      },
+      nombre: {
+        type: String,
+        required: true
+      },
+      fecha: {
+        type: Date,
+        default: Date.now,
+        immutable: true
+      },
+      accion: {
+        type: String,
+        required: true,
+        enum: ['creación', 'actualización', 'cambio_estado']
+      }
+    }]
   },
-  { timestamps: true, versionKey: false }
+  { 
+    timestamps: true, 
+    versionKey: false 
+  }
 );
 
-const Muestra = mongoose.model("Muestra", muestraSchema, "muestras");
+// Middleware pre-save para asegurar que siempre haya un registro en actualizadoPor cuando se crea
+muestraSchema.pre('save', function(next) {
+  if (this.isNew && !this.actualizadoPor.length) {
+    this.actualizadoPor.push({
+      usuario: this.creadoPor,
+      fecha: this.fechaHora,
+      accion: 'creación'
+    });
+  }
+  next();
+});
+
+// Verificar si el modelo ya existe antes de crearlo
+const Muestra = mongoose.models.Muestra || mongoose.model("Muestra", muestraSchema, "muestras");
 
 module.exports = {
     Muestra,

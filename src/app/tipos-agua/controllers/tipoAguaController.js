@@ -1,22 +1,22 @@
+const { validationResult } = require('express-validator');
 const { Muestra } = require("../../../shared/models/muestrasModel");
+const ResponseHandler = require("../../../shared/utils/responseHandler");
+const { NotFoundError, ValidationError } = require("../../../shared/errors/AppError");
 
 // Asignar tipo de agua a una muestra
 exports.asignarTipoAgua = async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Datos inválidos', errors.array());
+    }
+
     const { idMuestra } = req.params;
     const { tipoDeAgua, tipoPersonalizado, descripcion } = req.body;
 
-    // Validaciones
-    if (!tipoDeAgua || !descripcion) {
-      return res.status(400).json({ 
-        error: "El tipo de agua y la descripción son obligatorios" 
-      });
-    }
-
+    // Validación específica para tipo personalizado
     if (tipoDeAgua === "otra" && !tipoPersonalizado) {
-      return res.status(400).json({ 
-        error: "Para tipo 'otra', debe proporcionar un tipo personalizado" 
-      });
+      throw new ValidationError("Para tipo 'otra', debe proporcionar un tipo personalizado");
     }
 
     // Preparar datos del tipo de agua
@@ -38,40 +38,35 @@ exports.asignarTipoAgua = async (req, res) => {
     );
 
     if (!muestra) {
-      return res.status(404).json({ error: "Muestra no encontrada" });
+      throw new NotFoundError("Muestra no encontrada");
     }
 
-    res.status(200).json({ 
-      mensaje: "Tipo de agua asignado correctamente", 
-      muestra 
-    });
+    return ResponseHandler.success(
+      res,
+      { muestra },
+      "Tipo de agua asignado correctamente"
+    );
 
   } catch (error) {
     console.error("Error al asignar tipo de agua:", error);
-    res.status(500).json({ 
-      error: "Error al asignar tipo de agua", 
-      detalle: error.message 
-    });
+    return ResponseHandler.error(res, error);
   }
 };
 
 // Actualizar tipo de agua de una muestra
 exports.actualizarTipoAgua = async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Datos inválidos', errors.array());
+    }
+
     const { idMuestra } = req.params;
     const { tipoDeAgua, tipoPersonalizado, descripcion } = req.body;
 
-    // Validaciones
-    if (!tipoDeAgua || !descripcion) {
-      return res.status(400).json({ 
-        error: "El tipo de agua y la descripción son obligatorios" 
-      });
-    }
-
+    // Validación específica para tipo personalizado
     if (tipoDeAgua === "otra" && !tipoPersonalizado) {
-      return res.status(400).json({ 
-        error: "Para tipo 'otra', debe proporcionar un tipo personalizado" 
-      });
+      throw new ValidationError("Para tipo 'otra', debe proporcionar un tipo personalizado");
     }
 
     // Preparar datos del tipo de agua
@@ -93,19 +88,17 @@ exports.actualizarTipoAgua = async (req, res) => {
     );
 
     if (!muestra) {
-      return res.status(404).json({ error: "Muestra no encontrada" });
+      throw new NotFoundError("Muestra no encontrada");
     }
 
-    res.status(200).json({ 
-      mensaje: "Tipo de agua actualizado correctamente", 
-      muestra 
-    });
+    return ResponseHandler.success(
+      res,
+      { muestra },
+      "Tipo de agua actualizado correctamente"
+    );
 
   } catch (error) {
     console.error("Error al actualizar tipo de agua:", error);
-    res.status(500).json({ 
-      error: "Error al actualizar tipo de agua", 
-      detalle: error.message 
-    });
+    return ResponseHandler.error(res, error);
   }
 };

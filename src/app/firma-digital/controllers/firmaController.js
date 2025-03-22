@@ -1,7 +1,10 @@
 const path = require("path");
 const fs = require("fs");
+const { validationResult } = require('express-validator');
 const { Muestra } = require("../../../shared/models/muestrasModel");
 const generarPDF = require("../../../shared/utils/generarPDF");
+const ResponseHandler = require("../../../shared/utils/responseHandler");
+const { NotFoundError, ValidationError } = require("../../../shared/errors/AppError");
 
 // Función para limpiar Base64 y asegurarse de que tenga el prefijo correcto
 const formatearBase64 = (firma) => {
@@ -14,6 +17,11 @@ const formatearBase64 = (firma) => {
 // Buscar muestra por ID
 const buscarMuestra = async (req, res) => {
     try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            throw new ValidationError('Datos inválidos', errors.array());
+        }
+
         console.log("Buscando muestra con ID:", req.params.idMuestra);
         const { idMuestra } = req.params;
 
@@ -21,36 +29,34 @@ const buscarMuestra = async (req, res) => {
             .collation({ locale: "es", strength: 2 });
 
         if (!muestra) {
-            console.warn(`No se encontró la muestra con ID: ${idMuestra}`);
-            return res.status(404).json({ error: "Muestra no encontrada" });
+            throw new NotFoundError(`No se encontró la muestra con ID: ${idMuestra}`);
         }
 
         console.log("Muestra encontrada:", muestra.id_muestra);
-        res.status(200).json(muestra);
+        return ResponseHandler.success(res, { muestra });
+
     } catch (error) {
         console.error("Error al buscar la muestra:", error);
-        res.status(500).json({ error: "Error al buscar la muestra" });
+        return ResponseHandler.error(res, error);
     }
 };
 
 // Guardar firmas en la base de datos
 const guardarFirma = async (req, res) => {
     try {
-        console.log("Recibiendo datos de firma:", req.body);
-
-        const { id_muestra, cedulaLaboratorista, firmaLaboratorista, cedulaCliente, firmaCliente } = req.body;
-
-        if (!id_muestra || !cedulaLaboratorista || !firmaLaboratorista) {
-            console.warn("Datos incompletos:", req.body);
-            return res.status(400).json({ error: "El ID de muestra, la cédula del laboratorista y su firma son obligatorios." });
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            throw new ValidationError('Datos inválidos', errors.array());
         }
+
+        console.log("Recibiendo datos de firma:", req.body);
+        const { id_muestra, cedulaLaboratorista, firmaLaboratorista, cedulaCliente, firmaCliente } = req.body;
 
         const muestra = await Muestra.findOne({ id_muestra: id_muestra.trim() })
             .collation({ locale: "es", strength: 2 });
 
         if (!muestra) {
-            console.warn(`Muestra no encontrada con ID: ${id_muestra}`);
-            return res.status(404).json({ error: "Muestra no encontrada" });
+            throw new NotFoundError(`Muestra no encontrada con ID: ${id_muestra}`);
         }
 
         console.log("Muestra encontrada:", muestra.id_muestra);
@@ -94,15 +100,18 @@ const guardarFirma = async (req, res) => {
             console.log("PDF generado:", rutaPDF);
         }
 
-        res.status(200).json({
-            message: "Firmas guardadas correctamente",
-            muestra: muestraActualizada,
-            rutaPDF
-        });
+        return ResponseHandler.success(
+            res,
+            { 
+                muestra: muestraActualizada,
+                rutaPDF 
+            },
+            "Firmas guardadas correctamente"
+        );
 
     } catch (error) {
         console.error("Error al guardar las firmas:", error);
-        res.status(500).json({ error: "Error interno del servidor" });
+        return ResponseHandler.error(res, error);
     }
 };
 
@@ -113,13 +122,15 @@ const obtenerTodasLasFirmas = async (req, res) => {
         const firmas = await Muestra.find({}, "id_muestra firmas");
         console.log("Firmas obtenidas:", firmas.length);
 
-        res.status(200).json({
-            mensaje: "Lista de todas las firmas",
-            firmas,
-        });
+        return ResponseHandler.success(
+            res,
+            { firmas },
+            "Lista de todas las firmas obtenida con éxito"
+        );
+
     } catch (error) {
         console.error("Error al obtener todas las firmas:", error);
-        res.status(500).json({ error: "Error al obtener las firmas" });
+        return ResponseHandler.error(res, error);
     }
 };
 

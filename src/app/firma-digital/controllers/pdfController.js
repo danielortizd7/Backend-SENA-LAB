@@ -1,27 +1,27 @@
+const { validationResult } = require('express-validator');
 const generarPDF = require("../../../shared/utils/generarPDF");
 const { Muestra } = require("../../../shared/models/muestrasModel");
+const ResponseHandler = require("../../../shared/utils/responseHandler");
+const { NotFoundError, ValidationError } = require("../../../shared/errors/AppError");
 
 const generarReportePDF = async (req, res) => {
     try {
-        const { idMuestra } = req.params;
-
-        if (!idMuestra) {
-            return res.status(400).json({
-                error: "El ID de la muestra es obligatorio",
-            });
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            throw new ValidationError('Datos inválidos', errors.array());
         }
+
+        const { idMuestra } = req.params;
 
         const muestra = await Muestra.findOne({ id_muestra: idMuestra.trim() })
             .collation({ locale: "es", strength: 2 });
 
         if (!muestra) {
-            return res.status(404).json({ error: "Muestra no encontrada" });
+            throw new NotFoundError("Muestra no encontrada");
         }
 
         if (!muestra.firmas) {
-            return res.status(400).json({
-                error: "La muestra no tiene firmas registradas",
-            });
+            throw new ValidationError("La muestra no tiene firmas registradas");
         }
 
         const { 
@@ -40,13 +40,15 @@ const generarReportePDF = async (req, res) => {
             firmaLaboratorista
         );
 
-        res.status(200).json({
-            message: "PDF generado correctamente",
-            rutaPDF
-        });
+        return ResponseHandler.success(
+            res,
+            { rutaPDF },
+            "PDF generado correctamente"
+        );
+
     } catch (error) {
         console.error("Error al generar el PDF:", error);
-        res.status(500).json({ error: "Error al generar el PDF" });
+        return ResponseHandler.error(res, error);
     }
 };
 

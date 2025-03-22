@@ -1,0 +1,12 @@
+{
+  "name": "interfaces-server",
+  "version": "1.0.0",
+  "description": "Servidor web para las interfaces del laboratorio",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+} 

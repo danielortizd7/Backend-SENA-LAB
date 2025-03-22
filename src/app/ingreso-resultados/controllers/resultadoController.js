@@ -1,5 +1,10 @@
+const { validationResult } = require('express-validator');
+
+
 const Resultado = require("../models/resultadoModel");
 const mongoose = require("mongoose");
+const ResponseHandler = require("../../../shared/utils/responseHandler");
+const { NotFoundError, ValidationError, AuthorizationError } = require("../../../shared/errors/AppError");
 
 const dbExterna = mongoose.connection.useDb("test");
 
@@ -15,6 +20,11 @@ const Muestra = dbExterna.model("Muestra", muestraSchema, "muestras");
 
 exports.registrarResultado = async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Datos inválidos', errors.array());
+    }
+
     const {
       idMuestra,
       pH,
@@ -26,20 +36,12 @@ exports.registrarResultado = async (req, res) => {
       observaciones,
     } = req.body;
 
-    if (!idMuestra || !cedulaLaboratorista) {
-      return res.status(400).json({
-        error: "idMuestra y cedulaLaboratorista son obligatorios",
-      });
-    }
-
     const muestraEncontrada = await Muestra.findOne({
       id_muestra: idMuestra.trim(),
     }).collation({ locale: "es", strength: 2 });
 
     if (!muestraEncontrada) {
-      return res.status(404).json({
-        error: "Muestra no encontrada",
-      });
+      throw new NotFoundError("Muestra no encontrada");
     }
 
     const resultadoOrdenado = {
@@ -66,16 +68,15 @@ exports.registrarResultado = async (req, res) => {
 
     const nuevoResultado = await Resultado.create(resultadoOrdenado);
 
-    res.status(201).json({
-      mensaje: "Resultado registrado exitosamente",
-      resultado: nuevoResultado,
-    });
+    return ResponseHandler.created(
+      res,
+      { resultado: nuevoResultado },
+      "Resultado registrado exitosamente"
+    );
+
   } catch (error) {
     console.error("Error registrando el resultado:", error);
-    res.status(500).json({
-      error: "Error interno del servidor",
-      detalle: error.message,
-    });
+    return ResponseHandler.error(res, error);
   }
 };
 
@@ -83,53 +84,45 @@ exports.obtenerResultados = async (req, res) => {
   try {
     const resultados = await Resultado.find()
       .sort({ createdAt: -1 })
-      .select("-__v"); // Oculta el campo __v
+      .select("-__v");
 
-    res.status(200).json({
-      mensaje: "Lista de resultados",
-      resultados,
-    });
+    return ResponseHandler.success(
+      res,
+      { resultados },
+      "Lista de resultados obtenida con éxito"
+    );
+
   } catch (error) {
     console.error("Error al obtener resultados:", error);
-    res.status(500).json({
-      mensaje: "Error interno del servidor",
-      error: error.message,
-    });
+    return ResponseHandler.error(res, error);
   }
 };
 
-
 exports.editarResultado = async (req, res) => {
   try {
-    const { idMuestra } = req.params; // Viene desde la URL
-    const { cedulaLaboratorista, observacion, ...datosEditados } = req.body;
-
-    if (!cedulaLaboratorista) {
-      return res.status(400).json({
-        mensaje: "La cédula del laboratorista es obligatoria",
-      });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Datos inválidos', errors.array());
     }
 
-    const resultado = await Resultado.findOne({ idMuestra: idMuestra.trim() }).collation({ locale: "es", strength: 2 });
+    const { idMuestra } = req.params;
+    const { cedulaLaboratorista, observacion, ...datosEditados } = req.body;
+
+    const resultado = await Resultado.findOne({ idMuestra: idMuestra.trim() })
+      .collation({ locale: "es", strength: 2 });
 
     if (!resultado) {
-      return res.status(404).json({
-        mensaje: "Resultado no encontrado",
-      });
+      throw new NotFoundError("Resultado no encontrado");
     }
 
     // Bloquear si ya está verificado
     if (resultado.verificado) {
-      return res.status(403).json({
-        mensaje: "Este resultado ya fue verificado, no se puede editar",
-      });
+      throw new ValidationError("Este resultado ya fue verificado, no se puede editar");
     }
 
     // Solo el laboratorista que lo registró puede editar
     if (resultado.cedulaLaboratorista !== cedulaLaboratorista) {
-      return res.status(403).json({
-        mensaje: "No autorizado para modificar este resultado",
-      });
+      throw new AuthorizationError("No autorizado para modificar este resultado");
     }
 
     const cambios = {};
@@ -148,7 +141,7 @@ exports.editarResultado = async (req, res) => {
     }
 
     if (Object.keys(cambios).length === 0) {
-      return res.status(400).json({ mensaje: "No se realizaron cambios" });
+      throw new ValidationError("No se realizaron cambios");
     }
 
     // Guardamos en el historial
@@ -162,38 +155,36 @@ exports.editarResultado = async (req, res) => {
 
     await resultado.save();
 
-    res.status(200).json({
-      mensaje: "Resultado actualizado correctamente",
-      resultado,
-    });
+    return ResponseHandler.success(
+      res,
+      { resultado },
+      "Resultado actualizado correctamente"
+    );
+
   } catch (error) {
     console.error("Error al editar resultado:", error);
-    res.status(500).json({
-      mensaje: "Error interno del servidor",
-      error: error.message,
-    });
+    return ResponseHandler.error(res, error);
   }
 };
 
 exports.verificarResultado = async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      throw new ValidationError('Datos inválidos', errors.array());
+    }
+
     const { idMuestra } = req.params;
     const { cedulaLaboratorista } = req.body;
-
-    if (!cedulaLaboratorista) {
-      return res.status(400).json({
-        mensaje: "La cédula del laboratorista es obligatoria",
-      });
-    }
 
     const resultado = await Resultado.findOne({ idMuestra: idMuestra.trim() });
 
     if (!resultado) {
-      return res.status(404).json({ mensaje: "Resultado no encontrado" });
+      throw new NotFoundError("Resultado no encontrado");
     }
 
     if (resultado.verificado) {
-      return res.status(400).json({ mensaje: "Este resultado ya fue verificado" });
+      throw new ValidationError("Este resultado ya fue verificado");
     }
 
     resultado.verificado = true;
@@ -212,15 +203,14 @@ exports.verificarResultado = async (req, res) => {
 
     await resultado.save();
 
-    res.status(200).json({
-      mensaje: "Resultado verificado correctamente",
-      resultado,
-    });
+    return ResponseHandler.success(
+      res,
+      { resultado },
+      "Resultado verificado correctamente"
+    );
+
   } catch (error) {
     console.error("Error al verificar resultado:", error);
-    res.status(500).json({
-      mensaje: "Error interno del servidor",
-      error: error.message,
-    });
+    return ResponseHandler.error(res, error);
   }
 };
