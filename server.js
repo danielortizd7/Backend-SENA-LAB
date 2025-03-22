@@ -16,12 +16,13 @@ app.use((req, res, next) => {
     next();
 });
 
-// Configuración de CORS más específica
+// Configuración de CORS permisiva
 app.use(cors({
-    origin: ['http://localhost:8080', 'http://127.0.0.1:8080', "https://laboratorio-drab.vercel.app/login"],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-    credentials: true
+    origin: '*', // Permite todas las origenes
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+    credentials: true,
+    optionsSuccessStatus: 200
 }));
 
 // Parsear JSON
@@ -62,7 +63,7 @@ const PORT = process.env.PORT || 5000;
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
-    console.log('CORS habilitado para:', ['http://localhost:8080', 'http://127.0.0.1:8080']);
+    console.log('CORS habilitado para todos los orígenes');
     console.log('Rutas disponibles:');
     console.log('- POST /api/auth/login');
     console.log('- GET /api/auth/verificar');
