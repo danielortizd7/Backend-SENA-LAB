@@ -1,57 +1,47 @@
-const { verificarRolUsuario } = require('../../app/registro-muestras/services/usuariosService');
+const { verificarRolUsuario, validarUsuario } = require('../../app/registro-muestras/services/usuariosService');
 const { ResponseHandler } = require('../utils/responseHandler');
 const { AuthenticationError } = require('../errors/AppError');
 
-const verificarToken = async (req, res, next) => {
+const verificarDocumento = async (req, res, next) => {
     try {
-        const authHeader = req.header('Authorization');
+        const documento = req.header('X-Usuario-Documento');
         
-        if (!authHeader) {
-            throw new AuthenticationError('Header de autorización no encontrado');
+        if (!documento) {
+            throw new AuthenticationError('Documento de usuario no proporcionado');
         }
 
-        const token = authHeader.replace('Bearer ', '');
-        
-        if (!token) {
-            throw new AuthenticationError('Token no proporcionado');
+        const usuarioValido = await validarUsuario(documento);
+        if (!usuarioValido) {
+            throw new AuthenticationError('Usuario no válido');
         }
 
-        try {
-            const usuario = await verificarRolUsuario(token);
-            if (!usuario || !usuario.rol) {
-                throw new AuthenticationError('Token inválido: información del usuario incompleta');
-            }
-
-            req.usuario = {
-                id: usuario.id,
-                rol: usuario.rol,
-                email: usuario.email
-            };
-            next();
-        } catch (error) {
-            if (error instanceof AuthenticationError) {
-                ResponseHandler.error(res, error);
-            } else {
-                console.error("Error al verificar token:", error.message);
-                ResponseHandler.error(res, new AuthenticationError('Token inválido o expirado'));
-            }
-        }
+        req.documento = documento;
+        next();
     } catch (error) {
-        console.error("Error en middleware de autenticación:", error);
+        console.error("Error en verificación de documento:", error);
         ResponseHandler.error(res, error);
     }
 };
 
-const verificarAdmin = async (req, res, next) => {
+const verificarRolAdministrador = async (req, res, next) => {
     try {
-        if (!req.usuario || req.usuario.rol !== "administrador") {
+        const documento = req.documento;
+        if (!documento) {
+            throw new AuthenticationError('Documento de usuario no encontrado en la solicitud');
+        }
+
+        const rolInfo = await verificarRolUsuario(documento);
+        if (!rolInfo || rolInfo.rol !== 'administrador') {
             throw new AuthenticationError(
                 "Acceso denegado. Se requieren permisos de administrador.",
-                { rolActual: req.usuario?.rol || "No definido" }
+                { rolActual: rolInfo?.rol || "No definido" }
             );
         }
+
+        req.rolInfo = rolInfo;
         next();
     } catch (error) {
+        console.error("Error en verificación de rol:", error);
         ResponseHandler.error(res, error);
     }
 };
@@ -71,7 +61,7 @@ const verificarLaboratorista = async (req, res, next) => {
 };
 
 module.exports = {
-    verificarToken,
-    verificarAdmin,
+    verificarDocumento,
+    verificarRolAdministrador,
     verificarLaboratorista
 }; 

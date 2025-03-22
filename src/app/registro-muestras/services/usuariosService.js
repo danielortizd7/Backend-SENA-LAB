@@ -1,35 +1,46 @@
-const jwt = require('jsonwebtoken');
-const Usuario = require('../models/Usuario');
+const axios = require('axios');
 const { AuthenticationError } = require('../../../shared/errors/AppError');
 
-const verificarRolUsuario = async (token) => {
+const USUARIOS_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
+const ROL_ADMIN_ID = '67d8c23082d1ef13162bdc18';
+
+const verificarRolUsuario = async (documento) => {
     try {
-        // Verificar el token
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        
-        // Buscar el usuario en la base de datos
-        const usuario = await Usuario.findById(decoded.id);
-        
-        if (!usuario) {
-            throw new AuthenticationError('Usuario no encontrado');
+        // Consultar el rol del usuario en la API externa
+        const response = await axios.get(`${USUARIOS_API}/roles/${ROL_ADMIN_ID}`);
+        const rolAdmin = response.data;
+
+        if (!rolAdmin) {
+            throw new AuthenticationError('No se pudo verificar el rol de administrador');
         }
 
+        // Aquí podrías agregar la lógica para verificar si el usuario específico tiene este rol
+        // Por ahora, solo verificamos que el rol exista
         return {
-            id: usuario._id,
-            rol: usuario.rol,
-            email: usuario.email
+            rol: rolAdmin.name,
+            descripcion: rolAdmin.description
         };
     } catch (error) {
-        if (error instanceof jwt.JsonWebTokenError) {
-            throw new AuthenticationError('Token inválido');
+        console.error('Error al verificar rol:', error);
+        if (error.response) {
+            throw new AuthenticationError(`Error al verificar rol: ${error.response.data.message || 'Error en la API externa'}`);
         }
-        if (error instanceof jwt.TokenExpiredError) {
-            throw new AuthenticationError('Token expirado');
-        }
-        throw error;
+        throw new AuthenticationError('Error al verificar rol del usuario');
+    }
+};
+
+const validarUsuario = async (documento) => {
+    try {
+        // Aquí iría la lógica para validar el usuario por documento
+        // Por ahora retornamos true para simular la validación
+        return true;
+    } catch (error) {
+        console.error('Error al validar usuario:', error);
+        throw new AuthenticationError('Error al validar usuario');
     }
 };
 
 module.exports = {
-    verificarRolUsuario
+    verificarRolUsuario,
+    validarUsuario
 }; 

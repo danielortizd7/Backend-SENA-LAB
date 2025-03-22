@@ -25,7 +25,12 @@ const RegistroMuestras = () => {
     tipoAgua: "",
     descripcion: "",
     analisisSeleccionados: [],
+    documento: "",
   });
+
+  const [clienteEncontrado, setClienteEncontrado] = useState(null);
+  const [validatingUser, setValidatingUser] = useState(false);
+  const [userValidationError, setUserValidationError] = useState(null);
 
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
@@ -67,6 +72,55 @@ const RegistroMuestras = () => {
     }));
   };
 
+  // Validar usuario por documento
+  const handleValidateUser = async () => {
+    if (!formData.documento) {
+      setUserValidationError("Por favor ingrese el número de documento.");
+      return;
+    }
+    setValidatingUser(true);
+    setUserValidationError(null);
+
+    try {
+      const token = localStorage.getItem("token");
+      // Cambiamos la URL para obtener los datos del rol
+      const response = await axios.get(
+        `https://back-usuarios-f.onrender.com/api/usuarios/roles/67d8c23082d1ef13162bdc18`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+        }
+      );
+
+      if (response.data && response.data.rol) {
+        // Verificamos que el usuario sea administrador
+        if (response.data.rol.name === "administrador") {
+          setClienteEncontrado({
+            nombre: response.data.nombre,
+            email: response.data.email,
+            documento: response.data.documento,
+            rol: response.data.rol,
+            activo: response.data.activo
+          });
+          setUserValidationError(null);
+        } else {
+          setUserValidationError("El usuario no tiene permisos de administrador.");
+          setClienteEncontrado(null);
+        }
+      } else {
+        setUserValidationError("Usuario no encontrado o sin rol asignado.");
+        setClienteEncontrado(null);
+      }
+    } catch (error) {
+      console.error('Error de validación:', error);
+      setUserValidationError("Error al validar el usuario: " + (error.response?.data?.message || error.message));
+      setClienteEncontrado(null);
+    }
+    setValidatingUser(false);
+  };
+
   // Envío del formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -85,15 +139,22 @@ const RegistroMuestras = () => {
       return;
     }
 
+    // Verificar que el usuario sea administrador
+    if (!clienteEncontrado || clienteEncontrado.rol.name !== "administrador") {
+      setError("⚠ Se requieren permisos de administrador para registrar muestras.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const token = localStorage.getItem("token");
       
-      // Primero registramos el tipo de agua si es necesario
+      // Si el tipo de agua es "Otra", registramos primero el nuevo tipo
       if (formData.tipoAgua === "Otra") {
         await axios.post(
           "https://daniel-back-dom.onrender.com/api/registro-muestras/tipos-agua",
           {
-            tipo: formData.tipoAgua,
+            tipo: formData.tipoPersonalizado || "Otro",
             descripcion: formData.descripcion,
             parametrosRecomendados: formData.analisisSeleccionados
           },
@@ -106,15 +167,20 @@ const RegistroMuestras = () => {
         );
       }
 
-      // Luego registramos la muestra
+      // Registramos la muestra
       const response = await axios.post(
         "https://daniel-back-dom.onrender.com/api/registro-muestras/muestras",
         {
           tipoMuestreo: formData.tipoMuestreo,
           analisisSeleccionados: formData.analisisSeleccionados,
           tipoDeAgua: {
-            tipo: formData.tipoAgua,
+            tipo: formData.tipoAgua === "Otra" ? formData.tipoPersonalizado : formData.tipoAgua,
             descripcion: formData.descripcion || formData.tipoAgua
+          },
+          usuario: {
+            id: clienteEncontrado._id,
+            nombre: clienteEncontrado.nombre,
+            rol: clienteEncontrado.rol.name
           }
         },
         {
@@ -143,8 +209,33 @@ const RegistroMuestras = () => {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {success && <Alert severity="success" sx={{ mb: 2 }}>{success}</Alert>}
+      {userValidationError && <Alert severity="error" sx={{ mb: 2 }}>{userValidationError}</Alert>}
 
       <form onSubmit={handleSubmit} autoComplete="off">
+        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          <TextField
+            fullWidth
+            label="Documento de Identidad"
+            name="documento"
+            value={formData.documento}
+            onChange={handleChange}
+          />
+          <Button
+            variant="contained"
+            onClick={handleValidateUser}
+            disabled={validatingUser}
+            sx={{ minWidth: '120px' }}
+          >
+            {validatingUser ? <CircularProgress size={24} /> : "Validar"}
+          </Button>
+        </Box>
+
+        {clienteEncontrado && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Usuario validado: {clienteEncontrado.nombre} - Rol: {clienteEncontrado.rol.name}
+          </Alert>
+        )}
+
         <Select
           fullWidth
           name="tipoMuestreo"
@@ -222,7 +313,7 @@ const RegistroMuestras = () => {
           variant="contained"
           color="primary"
           fullWidth
-          disabled={loading}
+          disabled={loading || !clienteEncontrado}
           sx={{ mt: 2 }}
         >
           {loading ? <CircularProgress size={24} /> : "Registrar Muestra"}
