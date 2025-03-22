@@ -1,7 +1,7 @@
 import express from 'express';
 import { 
     obtenerMuestras, 
-    obtenerMuestraPorId,  //  Se importa la nueva función
+    obtenerMuestraPorId,  
     registrarMuestra, 
     actualizarMuestra, 
     eliminarMuestra 
@@ -10,8 +10,8 @@ import { verificarToken, verificarAdmin } from '../middlewares/authMiddleware.js
 
 const router = express.Router();
 
-router.get('/', obtenerMuestras); // Obtener todas las muestras
-router.get('/:id', obtenerMuestraPorId); //  Nueva ruta para obtener una muestra por ID
+router.get('/', obtenerMuestras); 
+router.get('/:id', obtenerMuestraPorId);
 router.post('/registrar',verificarToken, verificarAdmin, registrarMuestra);
 router.put('/:id',verificarToken, verificarAdmin, actualizarMuestra);
 router.delete('/:idUsuario/:idMuestra', eliminarMuestra);

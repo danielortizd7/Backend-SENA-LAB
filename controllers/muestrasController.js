@@ -1,14 +1,13 @@
 import { verificarRolUsuario } from '../services/usuariosService.js';
 import Muestra from '../models/Muestra.js';
 
-// 1️ Obtiene todas las muestras con filtros
+
 export const obtenerMuestras = async (req, res) => {
     try {
         let filtros = {};
 
-        if (req.query.documento) filtros.documento = req.query.documento;
         if (req.query.id_muestra) filtros.id_muestra = req.query.id_muestra;
-        if (req.query.tipoMuestra) filtros.tipoMuestra = req.query.tipoMuestra; // Filtro por tipo de muestra
+        if (req.query.tipoMuestra) filtros.tipoMuestra = req.query.tipoMuestra; 
         if (req.query.tipoMuestreo) {
             filtros.tipoMuestreo = { $in: req.query.tipoMuestreo.split(",") };
         }
@@ -58,7 +57,7 @@ export const obtenerMuestras = async (req, res) => {
     }
 };
 
-// 2️ Registrar una nueva muestra
+
 export const registrarMuestra = async (req, res) => {
     try {
         let { tipoMuestra,
@@ -70,7 +69,7 @@ export const registrarMuestra = async (req, res) => {
              preservacionMuestra,
               ...restoDatos
              } = req.body;
-         // Validar que tipoMuestra sea "agua" o "suelo"
+         // Valida que tipoMuestra sea "agua" o "suelo"
          if (!["agua", "suelo"].includes(tipoMuestra)) {
             return res.status(400).json({ mensaje: "El tipo de muestra debe ser 'agua' o 'suelo'." });
         }
@@ -79,9 +78,9 @@ export const registrarMuestra = async (req, res) => {
             tipoMuestreo = tipoMuestreo.split(',').map(item => item.trim());
         }
 
-        //   todos los elementos de tipoMuestreo sean strings
+        //  valida que todos los elementos de tipoMuestreo sean strings
         if (Array.isArray(tipoMuestreo)) {
-            tipoMuestreo = tipoMuestreo.map(item => String(item)); // Convierte cada elemento a string
+            tipoMuestreo = tipoMuestreo.map(item => String(item));
         }
 
         // Valida que tipoMuestreo sea un array
@@ -112,7 +111,7 @@ export const registrarMuestra = async (req, res) => {
         if (!preservacionMuestra || typeof preservacionMuestra!=='string' || preservacionMuestra.trim()==='') {
             return res.status(400).json({ mensaje: "La preservación de la muestra es requerida y debe ser una cadena no vacía." });
         }
-        // Crear la nueva muestra
+        
         const nuevaMuestra = new Muestra({tipoMuestra,
              tipoMuestreo,
               analisisSeleccionados,
@@ -128,7 +127,7 @@ export const registrarMuestra = async (req, res) => {
     }
 };
 
-// 3️ Obtener una muestra por su ID
+
 export const obtenerMuestraPorId = async (req, res) => {
     try {
         const { id } = req.params;
@@ -144,7 +143,7 @@ export const obtenerMuestraPorId = async (req, res) => {
     }
 };
 
-// 4️ Actualizar una muestra existente
+
 export const actualizarMuestra = async (req, res) => {
     try {
         const { id } = req.params;
@@ -170,11 +169,10 @@ export const actualizarMuestra = async (req, res) => {
     }
 };
 
-// 5️ Eliminar una muestra
+
 export const eliminarMuestra = async (req, res) => {
     const { idUsuario, idMuestra } = req.params;
     try { 
-        /*const muestraEliminada = await Muestra.findByIdAndDelete(idUsuario);*/
         const usuario = await verificarRolUsuario(idUsuario);
         if(usuario.rol.name == "administrador" || usuario.rol.name == "Administrador" || usuario.rol.name == "admin" || usuario.rol.name == "Admin"){
             const muestraEliminada = await Muestra.findByIdAndDelete(idMuestra);

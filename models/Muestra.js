@@ -16,7 +16,6 @@ const opcionesTipoMuestra = ["agua", "suelo"];
 
 const MuestraSchema = new mongoose.Schema({
     id_muestra: { type: String, unique: true },
-    documento: { type: String, required: true, match: /^\d{5,15}$/ },
     fechaHora: { type: Date, required: true },
     planMuestreo: { type: String, required: true},
     lugarMuestreo: { type: String, required: true},
@@ -29,7 +28,7 @@ const MuestraSchema = new mongoose.Schema({
         required: true
     },
     preservacionMuestra: {type: String, required: true},
-    tipoMuestra: { // Campo de selección
+    tipoMuestra: { 
         type: String,
         required: true,
         enum: opcionesTipoMuestra, // Solo permite "agua" o "suelo"
@@ -41,7 +40,7 @@ const MuestraSchema = new mongoose.Schema({
         validate: {
             validator: function(val) {
                 return val.every(v => {
-                    if (typeof v !== 'string') return false; // Asegúrate de que v sea un string
+                    if (typeof v !== 'string') return false; 
                     return opcionesMuestreo.includes(v) || v.startsWith("OTRO:");
                 });
             },
