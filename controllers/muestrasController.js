@@ -66,8 +66,8 @@ export const registrarMuestra = async (req, res) => {
              planMuestreo,
              lugarMuestreo,
              condicionesAmbientales,
-             preservacionMuestra,
-              ...restoDatos
+             preservacionMuestra
+             /* ...restoDatos*/
              } = req.body;
          // Valida que tipoMuestra sea "agua" o "suelo"
          if (!["agua", "suelo"].includes(tipoMuestra)) {
@@ -117,9 +117,14 @@ export const registrarMuestra = async (req, res) => {
               analisisSeleccionados,
               planMuestreo,
               lugarMuestreo,
-              condicionesAmbientales,
+              condicionesAmbientales:{
+                temperatura: condicionesAmbientales.temperatura,
+                humedad: condicionesAmbientales.humedad
+
+              },
               preservacionMuestra,
-               ...restoDatos });
+              fechaHora: new Date()
+             /*  ...restoDatos */});
         await nuevaMuestra.save();
         res.status(201).json({ mensaje: "Muestra registrada exitosamente", data: nuevaMuestra });
     } catch (err) {
