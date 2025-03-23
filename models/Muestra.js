@@ -17,23 +17,6 @@ const opcionesTipoMuestra = ["agua", "suelo"];
 const MuestraSchema = new mongoose.Schema({
     id_muestra: { type: String, unique: true },
     fechaHora: { type: Date, required: true },
-    planMuestreo: { type: String, required: true},
-    lugarMuestreo: { type: String, required: true},
-    condicionesAmbientales: {
-        type: {
-            temperatura: {type: Number, required: true},
-            humedad: {type: Number, required: true}
-            
-        },
-        required: true
-    },
-    preservacionMuestra: {type: String, required: true},
-    tipoMuestra: { 
-        type: String,
-        required: true,
-        enum: opcionesTipoMuestra, // Solo permite "agua" o "suelo"
-        message: "El tipo de muestra debe ser 'agua' o 'suelo'."
-    },
     tipoMuestreo: {
         type: [String],
         required: true,
@@ -47,6 +30,12 @@ const MuestraSchema = new mongoose.Schema({
             message: "El tipo de muestreo no es válido."
         }
     },
+    tipoMuestra: { 
+        type: String,
+        required: true,
+        enum: opcionesTipoMuestra, // Solo permite "agua" o "suelo"
+        message: "El tipo de muestra debe ser 'agua' o 'suelo'."
+    },
     analisisSeleccionados: {
         type: [String], 
         required: true,
@@ -56,7 +45,15 @@ const MuestraSchema = new mongoose.Schema({
             },
             message: "Uno o más valores de análisis no son válidos."
         }
-    }
+    },
+    planMuestreo: { type: String, required: true},
+    lugarMuestreo: { type: String, required: true},
+    condicionesAmbientales: {
+            temperatura: {type: Number, required: true},
+            humedad: {type: Number, required: true}
+    },
+    preservacionMuestra: {type: String, required: true},
+    
 });
 
 // Genera un ID único automáticamente antes de guardar
