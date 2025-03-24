@@ -18,6 +18,35 @@ const muestraSchema = new mongoose.Schema({
 
 const Muestra = dbExterna.model("Muestra", muestraSchema, "muestras");
 
+// Validar que los valores numéricos sean válidos
+const validarValoresNumericos = (datos) => {
+  const campos = ['pH', 'turbidez', 'oxigenoDisuelto', 'nitratos', 'fosfatos'];
+  campos.forEach(campo => {
+    if (datos[campo] !== undefined) {
+      const valor = Number(datos[campo]);
+      if (isNaN(valor)) {
+        throw new ValidationError(`El valor de ${campo} debe ser numérico`);
+      }
+      // Validaciones específicas para cada campo
+      switch (campo) {
+        case 'pH':
+          if (valor < 0 || valor > 14) {
+            throw new ValidationError('El pH debe estar entre 0 y 14');
+          }
+          break;
+        case 'turbidez':
+        case 'oxigenoDisuelto':
+        case 'nitratos':
+        case 'fosfatos':
+          if (valor < 0) {
+            throw new ValidationError(`El valor de ${campo} no puede ser negativo`);
+          }
+          break;
+      }
+    }
+  });
+};
+
 exports.registrarResultado = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -32,10 +61,13 @@ exports.registrarResultado = async (req, res) => {
       oxigenoDisuelto,
       nitratos,
       fosfatos,
-      cedulaLaboratorista,
       observaciones,
     } = req.body;
 
+    // Validar valores numéricos
+    validarValoresNumericos(req.body);
+
+    // Verificar que la muestra existe
     const muestraEncontrada = await Muestra.findOne({
       id_muestra: idMuestra.trim(),
     }).collation({ locale: "es", strength: 2 });
@@ -44,23 +76,33 @@ exports.registrarResultado = async (req, res) => {
       throw new NotFoundError("Muestra no encontrada");
     }
 
+    // Verificar que la muestra no tenga resultados ya registrados
+    const resultadoExistente = await Resultado.findOne({ idMuestra: idMuestra.trim() });
+    if (resultadoExistente) {
+      throw new ValidationError("Esta muestra ya tiene resultados registrados");
+    }
+
+    // Usar la información del laboratorista del middleware
+    const laboratorista = req.laboratorista;
+
     const resultadoOrdenado = {
       idMuestra: idMuestra.trim(),
       documento: muestraEncontrada.documento,
       fechaHora: muestraEncontrada.fechaHora,
       tipoMuestreo: muestraEncontrada.tipoMuestreo,
-      pH: Number(pH),
-      turbidez: Number(turbidez),
-      oxigenoDisuelto: Number(oxigenoDisuelto),
-      nitratos: Number(nitratos),
-      fosfatos: Number(fosfatos),
-      cedulaLaboratorista: cedulaLaboratorista.trim(),
-      nombreLaboratorista: req.nombreLaboratorista,
+      pH: pH !== undefined ? Number(pH) : undefined,
+      turbidez: turbidez !== undefined ? Number(turbidez) : undefined,
+      oxigenoDisuelto: oxigenoDisuelto !== undefined ? Number(oxigenoDisuelto) : undefined,
+      nitratos: nitratos !== undefined ? Number(nitratos) : undefined,
+      fosfatos: fosfatos !== undefined ? Number(fosfatos) : undefined,
+      cedulaLaboratorista: laboratorista.documento,
+      nombreLaboratorista: laboratorista.nombre,
       observaciones,
       historialCambios: [
         {
           accion: "Registrado",
-          nombre: req.nombreLaboratorista,
+          nombre: laboratorista.nombre,
+          cedula: laboratorista.documento,
           fecha: new Date(),
         },
       ],
@@ -68,7 +110,7 @@ exports.registrarResultado = async (req, res) => {
 
     const nuevoResultado = await Resultado.create(resultadoOrdenado);
 
-    return ResponseHandler.created(
+    return ResponseHandler.success(
       res,
       { resultado: nuevoResultado },
       "Resultado registrado exitosamente"
@@ -106,7 +148,10 @@ exports.editarResultado = async (req, res) => {
     }
 
     const { idMuestra } = req.params;
-    const { cedulaLaboratorista, observacion, ...datosEditados } = req.body;
+    const { observacion, ...datosEditados } = req.body;
+
+    // Validar valores numéricos de los datos editados
+    validarValoresNumericos(datosEditados);
 
     const resultado = await Resultado.findOne({ idMuestra: idMuestra.trim() })
       .collation({ locale: "es", strength: 2 });
@@ -115,19 +160,17 @@ exports.editarResultado = async (req, res) => {
       throw new NotFoundError("Resultado no encontrado");
     }
 
-    // Bloquear si ya está verificado
     if (resultado.verificado) {
       throw new ValidationError("Este resultado ya fue verificado, no se puede editar");
     }
 
-    // Solo el laboratorista que lo registró puede editar
-    if (resultado.cedulaLaboratorista !== cedulaLaboratorista) {
+    const laboratorista = req.laboratorista;
+    if (resultado.cedulaLaboratorista !== laboratorista.documento) {
       throw new AuthorizationError("No autorizado para modificar este resultado");
     }
 
     const cambios = {};
 
-    // Actualizamos los datos que cambien
     Object.keys(datosEditados).forEach((campo) => {
       if (datosEditados[campo] !== undefined && resultado[campo] !== datosEditados[campo]) {
         cambios[campo] = datosEditados[campo];
@@ -144,11 +187,10 @@ exports.editarResultado = async (req, res) => {
       throw new ValidationError("No se realizaron cambios");
     }
 
-    // Guardamos en el historial
     resultado.historialCambios.push({
       accion: "Editado",
-      nombre: req.nombreLaboratorista,
-      cedula: cedulaLaboratorista,
+      nombre: laboratorista.nombre,
+      cedula: laboratorista.documento,
       cambios,
       fecha: new Date(),
     });
@@ -175,7 +217,7 @@ exports.verificarResultado = async (req, res) => {
     }
 
     const { idMuestra } = req.params;
-    const { cedulaLaboratorista } = req.body;
+    const laboratorista = req.laboratorista;
 
     const resultado = await Resultado.findOne({ idMuestra: idMuestra.trim() });
 
@@ -187,17 +229,21 @@ exports.verificarResultado = async (req, res) => {
       throw new ValidationError("Este resultado ya fue verificado");
     }
 
+    if (resultado.cedulaLaboratorista === laboratorista.documento) {
+      throw new ValidationError("No puedes verificar tus propios resultados");
+    }
+
     resultado.verificado = true;
     resultado.verificadoPor = {
-      nombre: req.nombreLaboratorista,
-      cedula: cedulaLaboratorista,
+      nombre: laboratorista.nombre,
+      cedula: laboratorista.documento,
       fecha: new Date(),
     };
 
     resultado.historialCambios.push({
       accion: "Verificado",
-      nombre: req.nombreLaboratorista,
-      cedula: cedulaLaboratorista,
+      nombre: laboratorista.nombre,
+      cedula: laboratorista.documento,
       fecha: new Date(),
     });
 

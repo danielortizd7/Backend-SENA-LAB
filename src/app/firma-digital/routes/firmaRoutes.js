@@ -5,23 +5,23 @@ const router = express.Router();
 const { firmaValidators } = require("../../../shared/validators");
 const ResponseHandler = require("../../../shared/utils/responseHandler");
 const firmaController = require("../controllers/firmaController");
-const { verificarToken, verificarLaboratorista } = require("../../../shared/middleware/authMiddleware");
+const { verificarDocumento, verificarLaboratorista } = require("../../../shared/middleware/authMiddleware");
 
 const { guardarFirma, buscarMuestra, obtenerTodasLasFirmas } = require("../controllers/firmaController");
 const { generarReportePDF } = require("../controllers/pdfController");
 
-router.get("/todas", verificarToken, obtenerTodasLasFirmas);
+router.get("/todas", verificarDocumento, obtenerTodasLasFirmas);
 
 router.get(
   "/buscar/:idMuestra", 
-  verificarToken,
+  verificarDocumento,
   firmaValidators.buscarMuestra, 
   firmaController.buscarMuestra
 );
 
 router.post(
   "/guardarFirma",
-  verificarToken,
+  verificarDocumento,
   verificarLaboratorista,
   firmaValidators.guardarFirma,
   guardarFirma
@@ -29,7 +29,7 @@ router.post(
 
 router.get(
   "/generar-pdf/:idMuestra",
-  verificarToken,
+  verificarDocumento,
   firmaValidators.buscarMuestra,
   generarReportePDF
 );

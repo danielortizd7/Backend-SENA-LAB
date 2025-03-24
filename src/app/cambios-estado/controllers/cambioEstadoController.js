@@ -4,8 +4,8 @@ const { Muestra, estadosValidos } = require("../../../shared/models/muestrasMode
 const ResponseHandler = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError } = require("../../../shared/errors/AppError");
 
-// Función para asignar estado
-const asignarEstado = async (req, res) => {
+// Función para cambiar estado (solo laboratorista)
+const cambiarEstado = async (req, res) => {
     try {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
@@ -15,27 +15,32 @@ const asignarEstado = async (req, res) => {
         const { cedula, estado } = req.body;
         const { idMuestra } = req.params;
 
-        console.log("Asignando estado:", { cedula, idMuestra, estado });
+        // Verificar que no sea el estado inicial
+        if (estado === "Recibida") {
+            throw new ValidationError("El estado 'Recibida' es asignado automáticamente al registrar la muestra");
+        }
+
+        console.log("Cambiando estado:", { cedula, idMuestra, estado });
 
         const muestra = await cambiarEstadoMuestra(cedula, idMuestra, estado);
 
         if (!muestra) {
-            throw new NotFoundError("No se encontró la muestra o no se pudo asignar el estado.");
+            throw new NotFoundError("No se encontró la muestra o no se pudo cambiar el estado.");
         }
 
         return ResponseHandler.success(
             res, 
             { muestra }, 
-            "Estado asignado con éxito"
+            "Estado cambiado con éxito"
         );
 
     } catch (error) {
-        console.error("Error al asignar estado:", error);
+        console.error("Error al cambiar estado:", error);
         return ResponseHandler.error(res, error);
     }
 };
 
-// Función para actualizar estado
+// Función para actualizar estado (solo laboratorista)
 const actualizarEstado = async (req, res) => {
     try {
         const errors = validationResult(req);
@@ -45,6 +50,11 @@ const actualizarEstado = async (req, res) => {
 
         const { cedula, estado } = req.body;
         const { idMuestra } = req.params;
+
+        // Verificar que no sea el estado inicial
+        if (estado === "Recibida") {
+            throw new ValidationError("El estado 'Recibida' es asignado automáticamente al registrar la muestra");
+        }
 
         console.log("Actualizando estado:", { cedula, idMuestra, estado });
 
@@ -74,4 +84,4 @@ const actualizarEstado = async (req, res) => {
     }
 };
 
-module.exports = { asignarEstado, actualizarEstado };
+module.exports = { cambiarEstado, actualizarEstado };

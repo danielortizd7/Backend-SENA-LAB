@@ -1,5 +1,23 @@
 const { Muestra } = require('../../../shared/models/muestrasModel');
-const { NotFoundError, DatabaseError } = require('../../../shared/errors/AppError');
+const { NotFoundError, DatabaseError, ValidationError } = require('../../../shared/errors/AppError');
+
+// Validar rol de usuario
+const validarRolUsuario = (usuario) => {
+    if (!usuario) {
+        throw new ValidationError('Usuario no autenticado');
+    }
+
+    if (!usuario.rol) {
+        throw new ValidationError('No se encontró el rol del usuario');
+    }
+
+    const rolesPermitidos = ['administrador', 'laboratorista'];
+    if (!rolesPermitidos.includes(usuario.rol.toLowerCase())) {
+        throw new ValidationError('No tienes permisos para realizar esta acción');
+    }
+
+    return true;
+};
 
 // Obtener todas las muestras
 const obtenerMuestras = async () => {
@@ -15,7 +33,10 @@ const obtenerMuestras = async () => {
 // Obtener una muestra por ID
 const obtenerMuestra = async (id) => {
     try {
-        const muestra = await Muestra.findOne({ id_muestra: id });
+        const muestra = await Muestra.findOne({ id_muestra: id })
+            .populate('registradoPor', 'nombre documento')
+            .populate('firmas.laboratorista', 'nombre documento')
+            .populate('firmas.cliente', 'nombre documento');
         
         if (!muestra) {
             throw new NotFoundError('Muestra no encontrada');
@@ -30,22 +51,41 @@ const obtenerMuestra = async (id) => {
 };
 
 // Crear una nueva muestra
-const crearMuestra = async (datosMuestra) => {
+const crearMuestra = async (datosMuestra, usuario) => {
     try {
-        const muestra = new Muestra(datosMuestra);
+        // Validar el rol del usuario
+        validarRolUsuario(usuario);
+
+        const muestra = new Muestra({
+            ...datosMuestra,
+            registradoPor: {
+                documento: usuario.documento,
+                nombre: usuario.nombre
+            }
+        });
         await muestra.save();
         return muestra;
     } catch (error) {
+        if (error instanceof ValidationError) {
+            throw error;
+        }
         throw new DatabaseError('Error al crear la muestra', error);
     }
 };
 
 // Actualizar una muestra
-const actualizarMuestra = async (id, datosActualizacion) => {
+const actualizarMuestra = async (id, datosActualizacion, usuario) => {
     try {
+        // Validar el rol del usuario
+        validarRolUsuario(usuario);
+
         const muestra = await Muestra.findOneAndUpdate(
             { id_muestra: id },
-            datosActualizacion,
+            {
+                ...datosActualizacion,
+                'actualizadoPor.usuario': usuario.documento,
+                'actualizadoPor.fecha': new Date()
+            },
             { 
                 new: true, 
                 runValidators: true
@@ -57,16 +97,56 @@ const actualizarMuestra = async (id, datosActualizacion) => {
         }
         return muestra;
     } catch (error) {
-        if (error instanceof NotFoundError) {
+        if (error instanceof NotFoundError || error instanceof ValidationError) {
             throw error;
         }
         throw new DatabaseError('Error al actualizar la muestra', error);
     }
 };
 
-// Eliminar una muestra
-const eliminarMuestra = async (id) => {
+// Registrar firma en una muestra
+const registrarFirma = async (idMuestra, datosFirma, usuario) => {
     try {
+        // Validar el rol del usuario
+        validarRolUsuario(usuario);
+
+        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
+        if (!muestra) {
+            throw new NotFoundError('Muestra no encontrada');
+        }
+
+        // Inicializar el objeto de firmas si no existe
+        if (!muestra.firmas) {
+            muestra.firmas = {};
+        }
+
+        // Actualizar las firmas según el rol
+        if (usuario.rol === 'administrador' || usuario.rol === 'laboratorista') {
+            muestra.firmas.firmaLaboratorista = datosFirma.firma;
+            muestra.firmas.cedulaLaboratorista = usuario.documento;
+            muestra.firmas.fechaFirmaLaboratorista = new Date();
+        } else if (usuario.rol === 'cliente') {
+            muestra.firmas.firmaCliente = datosFirma.firma;
+            muestra.firmas.cedulaCliente = usuario.documento;
+            muestra.firmas.fechaFirmaCliente = new Date();
+        }
+
+        await muestra.save();
+        return muestra;
+    } catch (error) {
+        if (error instanceof NotFoundError || error instanceof ValidationError) {
+            throw error;
+        }
+        throw new DatabaseError('Error al registrar la firma', error);
+    }
+};
+
+// Eliminar una muestra
+const eliminarMuestra = async (id, usuario) => {
+    try {
+        // Validar el rol del usuario
+        validarRolUsuario(usuario);
+
         const muestra = await Muestra.findOneAndDelete({ id_muestra: id });
         
         if (!muestra) {
@@ -74,7 +154,7 @@ const eliminarMuestra = async (id) => {
         }
         return muestra;
     } catch (error) {
-        if (error instanceof NotFoundError) {
+        if (error instanceof NotFoundError || error instanceof ValidationError) {
             throw error;
         }
         throw new DatabaseError('Error al eliminar la muestra', error);
@@ -110,5 +190,6 @@ module.exports = {
     actualizarMuestra,
     eliminarMuestra,
     obtenerMuestrasPorTipo,
-    obtenerMuestrasPorEstado
+    obtenerMuestrasPorEstado,
+    registrarFirma
 }; 

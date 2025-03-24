@@ -2,21 +2,21 @@ const express = require("express");
 const router = express.Router();
 const cambioEstadoController = require("../controllers/cambioEstadoController");
 const { cambioEstadoValidators } = require("../../../shared/validators");
-const { verificarToken, verificarLaboratorista } = require("../../../shared/middleware/authMiddleware");
+const { verificarDocumento, verificarLaboratorista } = require("../../../shared/middleware/authMiddleware");
 
-// Ruta para asignar estado
+// Ruta para cambiar estado (solo laboratorista)
 router.post(
-  "/asignar/:idMuestra",
-  verificarToken,
+  "/cambiar/:idMuestra",
+  verificarDocumento,
   verificarLaboratorista,
   cambioEstadoValidators.cambiarEstado,
-  cambioEstadoController.asignarEstado
+  cambioEstadoController.cambiarEstado
 );
 
-// Ruta para actualizar estado
+// Ruta para actualizar estado (solo laboratorista)
 router.put(
   "/actualizar/:idMuestra",
-  verificarToken,
+  verificarDocumento,
   verificarLaboratorista,
   cambioEstadoValidators.cambiarEstado,
   cambioEstadoController.actualizarEstado
