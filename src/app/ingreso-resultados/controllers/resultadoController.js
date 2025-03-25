@@ -320,3 +320,20 @@ exports.verificarResultado = async (req, res) => {
     return ResponseHandler.error(res, error);
   }
 };
+
+exports.obtenerTodosResultados = async (req, res) => {
+  try {
+    const resultados = await Resultado.find()
+      .sort({ createdAt: -1 }); // Ordenados por fecha de creación, más recientes primero
+
+    return ResponseHandler.success(
+      res,
+      { resultados },
+      "Resultados obtenidos exitosamente"
+    );
+
+  } catch (error) {
+    console.error("Error obteniendo todos los resultados:", error);
+    return ResponseHandler.error(res, error);
+  }
+};

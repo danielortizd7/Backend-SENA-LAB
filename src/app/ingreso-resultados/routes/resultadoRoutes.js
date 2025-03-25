@@ -7,15 +7,20 @@ const { resultadoValidators } = require("../../../shared/validators");
 // Rutas protegidas - requieren autenticación como laboratorista
 router.use(verificarLaboratorista);
 
-// Registrar resultados de una muestra
-router.post("/registrar/:idMuestra", 
-  resultadoValidators.guardarResultado,
-  resultadoController.registrarResultado
+// Obtener todos los resultados
+router.get("/resultados", 
+  resultadoController.obtenerTodosResultados
 );
 
 // Obtener resultados de una muestra específica
 router.get("/muestra/:idMuestra", 
   resultadoController.obtenerResultados
+);
+
+// Registrar resultados de una muestra
+router.post("/registrar/:idMuestra", 
+  resultadoValidators.guardarResultado,
+  resultadoController.registrarResultado
 );
 
 // Editar resultados de una muestra
