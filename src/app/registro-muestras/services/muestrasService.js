@@ -33,16 +33,18 @@ const obtenerMuestras = async () => {
 // Obtener una muestra por ID
 const obtenerMuestra = async (id) => {
     try {
-        const muestra = await Muestra.findOne({ id_muestra: id })
-            .populate('registradoPor', 'nombre documento')
-            .populate('firmas.laboratorista', 'nombre documento')
-            .populate('firmas.cliente', 'nombre documento');
+        console.log('Buscando muestra con ID:', id);
+        const muestra = await Muestra.findOne({ id_muestra: id.trim() })
+            .collation({ locale: "es", strength: 2 });
         
         if (!muestra) {
+            console.log('Muestra no encontrada');
             throw new NotFoundError('Muestra no encontrada');
         }
+        console.log('Muestra encontrada:', muestra.id_muestra);
         return muestra;
     } catch (error) {
+        console.error('Error al obtener la muestra:', error);
         if (error instanceof NotFoundError) {
             throw error;
         }
