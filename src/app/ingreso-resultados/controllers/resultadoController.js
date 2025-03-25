@@ -1,26 +1,13 @@
 const { validationResult } = require('express-validator');
-
-
 const Resultado = require("../models/resultadoModel");
 const mongoose = require("mongoose");
-const ResponseHandler = require("../../../shared/utils/responseHandler");
+const { ResponseHandler } = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError, AuthorizationError } = require("../../../shared/errors/AppError");
-
-const dbExterna = mongoose.connection.useDb("test");
-
-const muestraSchema = new mongoose.Schema({
-  documento: String,
-  fechaHora: Date,
-  tipoMuestreo: String,
-  analisisSeleccionados: Array,
-  id_muestra: String,
-});
-
-const Muestra = dbExterna.model("Muestra", muestraSchema, "muestras");
+const { Muestra } = require("../../../shared/models/muestrasModel");
 
 // Validar que los valores numéricos sean válidos
 const validarValoresNumericos = (datos) => {
-  const campos = ['pH', 'turbidez', 'oxigenoDisuelto', 'nitratos', 'fosfatos'];
+  const campos = ['pH', 'turbidez', 'oxigenoDisuelto', 'nitratos', 'solidosSuspendidos', 'fosfatos'];
   campos.forEach(campo => {
     if (datos[campo] !== undefined) {
       const valor = Number(datos[campo]);
@@ -37,6 +24,7 @@ const validarValoresNumericos = (datos) => {
         case 'turbidez':
         case 'oxigenoDisuelto':
         case 'nitratos':
+        case 'solidosSuspendidos':
         case 'fosfatos':
           if (valor < 0) {
             throw new ValidationError(`El valor de ${campo} no puede ser negativo`);
@@ -49,40 +37,48 @@ const validarValoresNumericos = (datos) => {
 
 exports.registrarResultado = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      throw new ValidationError('Datos inválidos', errors.array());
-    }
-
+    const { idMuestra } = req.params;
     const {
-      idMuestra,
       pH,
       turbidez,
       oxigenoDisuelto,
       nitratos,
-      fosfatos,
-      observaciones,
+      solidosSuspendidos,
+      fosfatos
     } = req.body;
-
-    // Validar valores numéricos
-    validarValoresNumericos(req.body);
 
     // Verificar que la muestra existe
     const muestraEncontrada = await Muestra.findOne({
-      id_muestra: idMuestra.trim(),
+      id_muestra: idMuestra.trim()
     }).collation({ locale: "es", strength: 2 });
 
     if (!muestraEncontrada) {
-      throw new NotFoundError("Muestra no encontrada");
+      throw new ValidationError("Muestra no encontrada");
     }
 
-    // Verificar que la muestra no tenga resultados ya registrados
+    // Verificar que la muestra tenga firmas
+    if (!muestraEncontrada.firmas || !muestraEncontrada.firmas.cedulaLaboratorista || !muestraEncontrada.firmas.cedulaCliente) {
+      throw new ValidationError("La muestra debe tener firmas registradas para poder ingresar resultados");
+    }
+
+    // Verificar que la muestra esté en estado "Recibida"
+    if (muestraEncontrada.estado !== "Recibida") {
+      throw new ValidationError("Solo se pueden registrar resultados de muestras en estado 'Recibida'");
+    }
+
+    // Verificar que no existan resultados previos
     const resultadoExistente = await Resultado.findOne({ idMuestra: idMuestra.trim() });
     if (resultadoExistente) {
       throw new ValidationError("Esta muestra ya tiene resultados registrados");
     }
 
-    // Usar la información del laboratorista del middleware
+    // Validar que al menos un análisis tenga valor
+    if (!pH?.valor && !turbidez?.valor && !oxigenoDisuelto?.valor && 
+        !nitratos?.valor && !solidosSuspendidos?.valor && !fosfatos?.valor) {
+      throw new ValidationError("Debe ingresar al menos un resultado");
+    }
+
+    // Obtener información del laboratorista del token
     const laboratorista = req.laboratorista;
 
     const resultadoOrdenado = {
@@ -90,25 +86,57 @@ exports.registrarResultado = async (req, res) => {
       documento: muestraEncontrada.documento,
       fechaHora: muestraEncontrada.fechaHora,
       tipoMuestreo: muestraEncontrada.tipoMuestreo,
-      pH: pH !== undefined ? Number(pH) : undefined,
-      turbidez: turbidez !== undefined ? Number(turbidez) : undefined,
-      oxigenoDisuelto: oxigenoDisuelto !== undefined ? Number(oxigenoDisuelto) : undefined,
-      nitratos: nitratos !== undefined ? Number(nitratos) : undefined,
-      fosfatos: fosfatos !== undefined ? Number(fosfatos) : undefined,
+      pH: pH?.valor ? { 
+        valor: Number(pH.valor),
+        unidad: "mg/L"
+      } : undefined,
+      turbidez: turbidez?.valor ? {
+        valor: Number(turbidez.valor),
+        unidad: "NTU"
+      } : undefined,
+      oxigenoDisuelto: oxigenoDisuelto?.valor ? {
+        valor: Number(oxigenoDisuelto.valor),
+        unidad: "mg/L"
+      } : undefined,
+      nitratos: nitratos?.valor ? {
+        valor: Number(nitratos.valor),
+        unidad: "mg/L"
+      } : undefined,
+      solidosSuspendidos: solidosSuspendidos?.valor ? {
+        valor: Number(solidosSuspendidos.valor),
+        unidad: "mg/L"
+      } : undefined,
+      fosfatos: fosfatos?.valor ? {
+        valor: Number(fosfatos.valor),
+        unidad: "mg/L"
+      } : undefined,
+      verificado: false,
       cedulaLaboratorista: laboratorista.documento,
       nombreLaboratorista: laboratorista.nombre,
-      observaciones,
       historialCambios: [
         {
-          accion: "Registrado",
           nombre: laboratorista.nombre,
           cedula: laboratorista.documento,
-          fecha: new Date(),
-        },
-      ],
+          fecha: new Date()
+        }
+      ]
     };
 
     const nuevoResultado = await Resultado.create(resultadoOrdenado);
+
+    // Actualizar estado de la muestra
+    await Muestra.findByIdAndUpdate(muestraEncontrada._id, {
+      estado: "En análisis",
+      $push: {
+        historial: {
+          estado: "En análisis",
+          cedulaadministrador: laboratorista.documento,
+          nombreadministrador: laboratorista.nombre,
+          fechaCambio: new Date(),
+          observaciones: "Resultados registrados"
+        }
+      }
+    });
 
     return ResponseHandler.success(
       res,
@@ -124,35 +152,42 @@ exports.registrarResultado = async (req, res) => {
 
 exports.obtenerResultados = async (req, res) => {
   try {
-    const resultados = await Resultado.find()
-      .sort({ createdAt: -1 })
-      .select("-__v");
+    const { idMuestra } = req.params;
+
+    const resultado = await Resultado.findOne({ 
+      idMuestra: idMuestra.trim() 
+    }).collation({ locale: "es", strength: 2 });
+
+    if (!resultado) {
+      throw new ValidationError("No se encontraron resultados para esta muestra");
+    }
 
     return ResponseHandler.success(
       res,
-      { resultados },
-      "Lista de resultados obtenida con éxito"
+      { resultado },
+      "Resultados obtenidos exitosamente"
     );
 
   } catch (error) {
-    console.error("Error al obtener resultados:", error);
+    console.error("Error obteniendo resultados:", error);
     return ResponseHandler.error(res, error);
   }
 };
 
 exports.editarResultado = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      throw new ValidationError('Datos inválidos', errors.array());
-    }
-
     const { idMuestra } = req.params;
-    const { observacion, ...datosEditados } = req.body;
+    const {
+      pH,
+      turbidez,
+      oxigenoDisuelto,
+      nitratos,
+      solidosSuspendidos,
+      fosfatos,
+      observaciones
+    } = req.body;
 
-    // Validar valores numéricos de los datos editados
-    validarValoresNumericos(datosEditados);
-
+    // Buscar el resultado existente
     const resultado = await Resultado.findOne({ idMuestra: idMuestra.trim() })
       .collation({ locale: "es", strength: 2 });
 
@@ -164,35 +199,53 @@ exports.editarResultado = async (req, res) => {
       throw new ValidationError("Este resultado ya fue verificado, no se puede editar");
     }
 
+    // Verificar que sea el mismo laboratorista
     const laboratorista = req.laboratorista;
     if (resultado.cedulaLaboratorista !== laboratorista.documento) {
       throw new AuthorizationError("No autorizado para modificar este resultado");
     }
 
+    // Preparar los cambios
     const cambios = {};
+    let hayCambios = false;
 
-    Object.keys(datosEditados).forEach((campo) => {
-      if (datosEditados[campo] !== undefined && resultado[campo] !== datosEditados[campo]) {
-        cambios[campo] = datosEditados[campo];
-        resultado[campo] = datosEditados[campo];
+    // Función auxiliar para actualizar un campo si hay cambios
+    const actualizarCampo = (campo, nuevoValor) => {
+      if (nuevoValor?.valor !== undefined) {
+        if (!resultado[campo] || resultado[campo].valor !== nuevoValor.valor) {
+          cambios[campo] = {
+            valor: Number(nuevoValor.valor),
+            unidad: resultado[campo]?.unidad || (campo === 'turbidez' ? 'NTU' : 'mg/L')
+          };
+          resultado[campo] = cambios[campo];
+          hayCambios = true;
+        }
       }
-    });
+    };
 
-    if (observacion) {
-      resultado.observaciones = observacion;
-      cambios.observacion = observacion;
+    // Actualizar cada campo si hay cambios
+    actualizarCampo('pH', pH);
+    actualizarCampo('turbidez', turbidez);
+    actualizarCampo('oxigenoDisuelto', oxigenoDisuelto);
+    actualizarCampo('nitratos', nitratos);
+    actualizarCampo('solidosSuspendidos', solidosSuspendidos);
+    actualizarCampo('fosfatos', fosfatos);
+
+    if (observaciones !== undefined && observaciones !== resultado.observaciones) {
+      cambios.observaciones = observaciones;
+      resultado.observaciones = observaciones;
+      hayCambios = true;
     }
 
-    if (Object.keys(cambios).length === 0) {
+    if (!hayCambios) {
       throw new ValidationError("No se realizaron cambios");
     }
 
+    // Registrar el cambio en el historial
     resultado.historialCambios.push({
-      accion: "Editado",
       nombre: laboratorista.nombre,
       cedula: laboratorista.documento,
-      cambios,
-      fecha: new Date(),
+      fecha: new Date()
     });
 
     await resultado.save();
@@ -211,52 +264,59 @@ exports.editarResultado = async (req, res) => {
 
 exports.verificarResultado = async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      throw new ValidationError('Datos inválidos', errors.array());
-    }
-
     const { idMuestra } = req.params;
     const laboratorista = req.laboratorista;
 
-    const resultado = await Resultado.findOne({ idMuestra: idMuestra.trim() });
+    const resultado = await Resultado.findOne({ 
+      idMuestra: idMuestra.trim() 
+    }).collation({ locale: "es", strength: 2 });
 
     if (!resultado) {
-      throw new NotFoundError("Resultado no encontrado");
+      throw new ValidationError("No se encontraron resultados para esta muestra");
     }
 
-    if (resultado.verificado) {
-      throw new ValidationError("Este resultado ya fue verificado");
-    }
-
+    // Verificar que no sea el mismo laboratorista que registró
     if (resultado.cedulaLaboratorista === laboratorista.documento) {
-      throw new ValidationError("No puedes verificar tus propios resultados");
+      throw new ValidationError("No puede verificar sus propios resultados");
+    }
+
+    // Verificar que no esté ya verificado
+    if (resultado.verificado) {
+      throw new ValidationError("Los resultados ya están verificados");
     }
 
     resultado.verificado = true;
-    resultado.verificadoPor = {
-      nombre: laboratorista.nombre,
-      cedula: laboratorista.documento,
-      fecha: new Date(),
-    };
-
     resultado.historialCambios.push({
-      accion: "Verificado",
       nombre: laboratorista.nombre,
       cedula: laboratorista.documento,
-      fecha: new Date(),
+      fecha: new Date()
     });
 
     await resultado.save();
 
+    // Actualizar estado de la muestra
+    const muestra = await Muestra.findOne({ id_muestra: idMuestra.trim() });
+    await Muestra.findByIdAndUpdate(muestra._id, {
+      estado: "Verificada",
+      $push: {
+        historial: {
+          estado: "Verificada",
+          cedulaadministrador: laboratorista.documento,
+          nombreadministrador: laboratorista.nombre,
+          fechaCambio: new Date(),
+          observaciones: "Resultados verificados"
+        }
+      }
+    });
+
     return ResponseHandler.success(
       res,
       { resultado },
-      "Resultado verificado correctamente"
+      "Resultados verificados exitosamente"
     );
 
   } catch (error) {
-    console.error("Error al verificar resultado:", error);
+    console.error("Error verificando resultados:", error);
     return ResponseHandler.error(res, error);
   }
 };

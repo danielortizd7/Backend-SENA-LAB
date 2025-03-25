@@ -1,10 +1,9 @@
 const { verificarRolUsuario, validarUsuario } = require('../../app/registro-muestras/services/usuariosService');
 const { ResponseHandler } = require('../utils/responseHandler');
-const { AuthenticationError } = require('../errors/AppError');
+const { AuthenticationError, AuthorizationError } = require('../errors/AppError');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
-const { AuthorizationError } = require('../errors/AppError');
 
 // Función para obtener el payload del token sin verificar la firma
 const decodeToken = (token) => {
@@ -176,49 +175,25 @@ const verificarRolAdministrador = async (req, res, next) => {
 
 const verificarLaboratorista = async (req, res, next) => {
     try {
-        const token = req.headers.authorization;
-        if (!token) {
-            throw new AuthorizationError('Token no proporcionado');
+        if (!req.usuario) {
+            throw new AuthorizationError('Usuario no encontrado en la solicitud');
         }
 
-        // Limpiar el token
-        const tokenLimpio = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-        
-        // Hacer la petición al servicio de usuarios
-        const response = await axios.get(USUARIOS_API, {
-            headers: {
-                'Authorization': tokenLimpio,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        if (!response.data) {
-            throw new AuthorizationError('No se pudo verificar el usuario');
-        }
-
-        // Buscar el usuario en la respuesta
-        const usuarios = Array.isArray(response.data) ? response.data : [response.data];
-        const usuario = usuarios.find(u => {
-            // Verificar si el rol es un objeto o un string
-            const rol = typeof u.rol === 'string' ? u.rol : u.rol?.name;
-            return rol === 'laboratorista' && u.activo === true;
-        });
-
-        if (!usuario) {
+        if (req.usuario.rol !== 'laboratorista') {
             throw new AuthorizationError('Acceso denegado - Se requiere rol de laboratorista');
         }
 
         // Agregar información del laboratorista al request para uso posterior
         req.laboratorista = {
-            documento: usuario.documento,
-            nombre: usuario.nombre,
-            id: usuario._id
+            documento: req.usuario.documento,
+            nombre: req.usuario.nombre,
+            id: req.usuario.id
         };
 
         next();
     } catch (error) {
         console.error('Error en verificación de laboratorista:', error);
-        next(new AuthorizationError('No autorizado - Se requiere rol de laboratorista'));
+        next(error);
     }
 };
 

@@ -1,45 +1,32 @@
 const express = require("express");
 const router = express.Router();
 const resultadoController = require("../controllers/resultadoController");
+const { verificarLaboratorista } = require("../../../shared/middleware/authMiddleware");
 const { resultadoValidators } = require("../../../shared/validators");
-const { verificarDocumento, verificarLaboratorista } = require("../../../shared/middleware/authMiddleware");
 
-// Manejador de errores async
-const asyncHandler = (fn) => (req, res, next) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
+// Rutas protegidas - requieren autenticación como laboratorista
+router.use(verificarLaboratorista);
 
-// Ruta para registrar resultados (solo laboratorista)
-router.post(
-  "/registrar",
-  verificarDocumento,
-  verificarLaboratorista,
+// Registrar resultados de una muestra
+router.post("/registrar/:idMuestra", 
   resultadoValidators.guardarResultado,
   resultadoController.registrarResultado
 );
 
-// Ruta para editar resultados (solo laboratorista)
-router.put(
-  "/editar/:idMuestra",
-  verificarDocumento,
-  verificarLaboratorista,
+// Obtener resultados de una muestra específica
+router.get("/muestra/:idMuestra", 
+  resultadoController.obtenerResultados
+);
+
+// Editar resultados de una muestra
+router.put("/editar/:idMuestra",
   resultadoValidators.editarResultado,
   resultadoController.editarResultado
 );
 
-// Ruta para verificar resultados (solo laboratorista)
-router.post(
-  "/verificar/:idMuestra",
-  verificarDocumento,
-  verificarLaboratorista,
-  resultadoValidators.verificarResultado,
+// Verificar resultados de una muestra
+router.post("/verificar/:idMuestra",
   resultadoController.verificarResultado
-);
-
-// Ruta para obtener resultados (todos los usuarios autenticados)
-router.get(
-  "/resultados",
-  verificarDocumento,
-  resultadoController.obtenerResultados
 );
 
 module.exports = router;
