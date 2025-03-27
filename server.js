@@ -20,16 +20,9 @@ const app = express();
 // Conectar a la base de datos
 connectDB();
 
-// Middleware para logging de requests
-app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-    console.log('Headers:', req.headers);
-    next();
-});
-
 // Configuración de CORS
 app.use(cors({
-    origin: '*', // Permitir todos los orígenes en modo debug
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Usuario-Documento'],
     exposedHeaders: ['Content-Type', 'Authorization'],
@@ -43,7 +36,6 @@ app.use(express.json());
 app.use((req, res, next) => {
     const documento = req.headers['x-usuario-documento'];
     if (documento) {
-        console.log('Documento recibido:', documento);
         req.usuarioDocumento = documento;
     }
     next();
@@ -80,8 +72,6 @@ app.get("/", (req, res) => {
 
 // Middleware unificado para manejo de errores
 app.use((err, req, res, next) => {
-    console.error('Error:', err);
-    
     if (err.name === 'UnauthorizedError') {
         return ResponseHandler.error(res, {
             statusCode: 401,
@@ -95,15 +85,6 @@ app.use((err, req, res, next) => {
 
 // Iniciar servidor
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
-    console.log('CORS habilitado para todos los orígenes (modo debug)');
-    console.log('Rutas disponibles:');
-    console.log('- /api/muestras');
-    console.log('- /api/registro-muestras');
-    console.log('- /api/tipos-agua');
-    console.log('- /api/cambios-estado');
-    console.log('- /api/ingreso-resultados');
-    console.log('- /api/firma-digital');
-    console.log('- /api/auth');
-});
+}); 

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { verificarDocumento } = require('../../../shared/middleware/authMiddleware');
-const { validarUsuarioController } = require('../controllers/registroMuestrasController');
+const { validarUsuarioController } = require('../controllers/muestrasController');
 
 // Ruta para validar usuario (requiere autenticación)
 router.get('/validar-usuario', verificarDocumento, validarUsuarioController);

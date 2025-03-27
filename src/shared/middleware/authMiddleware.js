@@ -4,6 +4,7 @@ const { AuthenticationError, AuthorizationError } = require('../errors/AppError'
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
+const Usuario = require('../models/usuarioModel');
 
 // Función para obtener el payload del token sin verificar la firma
 const decodeToken = (token) => {
@@ -20,41 +21,47 @@ const login = async (req, res) => {
         const { email, password } = req.body;
         console.log('Intento de login recibido:', { email });
 
-        // Usuario administrador por defecto (debería venir de variables de entorno en producción)
-        const defaultAdmin = {
-            id: process.env.ADMIN_ID || '1',
-            email: process.env.ADMIN_EMAIL || 'danielortizd7@gmail.com',
-            password: process.env.ADMIN_PASSWORD || 'Daniel123!',
-            nombre: process.env.ADMIN_NAME || 'Daniel Ortiz',
-            rol: { name: 'administrador' }
-        };
-
-        // Verificar credenciales
-        if (email === defaultAdmin.email && password === defaultAdmin.password) {
-            const token = jwt.sign(
-                {
-                    id: defaultAdmin.id,
-                    email: defaultAdmin.email,
-                    rol: defaultAdmin.rol.name,
-                    nombre: defaultAdmin.nombre
-                },
-                process.env.JWT_SECRET || 'tu_clave_secreta',
-                { expiresIn: '8h' }
-            );
-
-            console.log('Login exitoso para:', email);
-            return ResponseHandler.success(res, {
-                token,
-                usuario: {
-                    id: defaultAdmin.id,
-                    email: defaultAdmin.email,
-                    nombre: defaultAdmin.nombre,
-                    rol: defaultAdmin.rol
-                }
-            }, 'Login exitoso');
+        // Buscar usuario en la base de datos
+        const usuario = await Usuario.findOne({ email });
+        if (!usuario) {
+            return ResponseHandler.error(res, new AuthenticationError('Credenciales inválidas'));
         }
 
-        return ResponseHandler.error(res, new AuthenticationError('Credenciales inválidas'));
+        // Verificar si el usuario está activo
+        if (!usuario.activo) {
+            return ResponseHandler.error(res, new AuthenticationError('Usuario inactivo'));
+        }
+
+        // Verificar contraseña
+        const passwordValido = await bcrypt.compare(password, usuario.password);
+        if (!passwordValido) {
+            return ResponseHandler.error(res, new AuthenticationError('Credenciales inválidas'));
+        }
+
+        // Generar token
+        const token = jwt.sign(
+            {
+                id: usuario._id,
+                email: usuario.email,
+                rol: usuario.rol,
+                nombre: usuario.nombre,
+                documento: usuario.documento
+            },
+            process.env.JWT_SECRET || 'tu_clave_secreta',
+            { expiresIn: '8h' }
+        );
+
+        console.log('Login exitoso para:', email);
+        return ResponseHandler.success(res, {
+            token,
+            usuario: {
+                id: usuario._id,
+                email: usuario.email,
+                nombre: usuario.nombre,
+                rol: usuario.rol,
+                documento: usuario.documento
+            }
+        }, 'Login exitoso');
     } catch (error) {
         console.error('Error en login:', error);
         return ResponseHandler.error(res, error);
