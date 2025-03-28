@@ -23,9 +23,8 @@ const resultadoSchema = new mongoose.Schema(
     },
     pH: {
       valor: {
-        type: Number,
-        min: 0,
-        max: 14
+        type: String,
+        trim: true
       },
       unidad: {
         type: String,
@@ -34,8 +33,8 @@ const resultadoSchema = new mongoose.Schema(
     },
     turbidez: {
       valor: {
-        type: Number,
-        min: 0
+        type: String,
+        trim: true
       },
       unidad: {
         type: String,
@@ -44,8 +43,8 @@ const resultadoSchema = new mongoose.Schema(
     },
     oxigenoDisuelto: {
       valor: {
-        type: Number,
-        min: 0
+        type: String,
+        trim: true
       },
       unidad: {
         type: String,
@@ -54,8 +53,8 @@ const resultadoSchema = new mongoose.Schema(
     },
     nitratos: {
       valor: {
-        type: Number,
-        min: 0
+        type: String,
+        trim: true
       },
       unidad: {
         type: String,
@@ -64,8 +63,8 @@ const resultadoSchema = new mongoose.Schema(
     },
     solidosSuspendidos: {
       valor: {
-        type: Number,
-        min: 0
+        type: String,
+        trim: true
       },
       unidad: {
         type: String,
@@ -74,8 +73,8 @@ const resultadoSchema = new mongoose.Schema(
     },
     fosfatos: {
       valor: {
-        type: Number,
-        min: 0
+        type: String,
+        trim: true
       },
       unidad: {
         type: String,
@@ -106,6 +105,10 @@ const resultadoSchema = new mongoose.Schema(
       fecha: {
         type: Date,
         default: Date.now
+      },
+      cambiosRealizados: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
       }
     }]
   },
