@@ -1,18 +1,33 @@
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+const mongoose = require("mongoose");
+require("dotenv").config();
 
-dotenv.config();
+let connectionAttempts = 0;
 
 const connectDB = async () => {
-    try {
-        await mongoose.connect(process.env.MONGO_URI);
-        console.log("Conectado a MongoDB Atlas");
-    } catch (err) {
-        console.error(" Error al conectar a MongoDB:", err);
-        process.exit(1); // Detiene la ejecución si hay un error
+  try {
+    connectionAttempts++;
+    
+
+    if (mongoose.connection.readyState === 1) {
+      console.log("Ya conectado a MongoDB");
+      return;
     }
+
+    const uri = process.env.MONGO_URI;
+    if (!uri) {
+      console.error("ERROR: No se encontró la variable MONGO_URI");
+      process.exit(1);
+    }
+
+    await mongoose.connect(uri, {
+    
+    });
+
+    console.log("Conexión exitosa a MongoDB");
+  } catch (error) {
+    console.error("Error de conexión:", error.message);
+    process.exit(1);
+  }
 };
 
-export default connectDB;
-
-
+module.exports = connectDB;
