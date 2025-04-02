@@ -6,32 +6,13 @@ class AuditoriaService {
       // Agregar duración de la acción
       datos.duracion = Date.now() - datos.fecha.getTime();
 
-      const auditoria = new Auditoria({
-        ...datos,
-        detalles: {
-          ...datos.detalles,
-          idMuestra: datos.idMuestra // Agregar el ID de la muestra registrada
-        }
-      });
+      const auditoria = new Auditoria(datos);
       await auditoria.save();
       return auditoria;
     } catch (error) {
       console.error('Error al registrar acción:', error);
       throw new Error(`Error al registrar acción: ${error.message}`);
     }
-  }
-
-  async registrarMuestraCreada(usuarioId, muestraId) {
-    const datos = {
-      usuario: {
-        id: usuarioId,
-        nombre: 'Nombre del Administrador' // Aquí se debe obtener el nombre del administrador
-      },
-      fechaRegistro: new Date(),
-      idMuestra: muestraId,
-      accion: 'Creación de muestra'
-    };
-    return this.registrarAccion(datos);
   }
 
   async obtenerRegistroAuditoria(filtros = {}, pagina = 1, limite = 10) {
@@ -155,4 +136,4 @@ class AuditoriaService {
   }
 }
 
-module.exports = new AuditoriaService();
+module.exports = new AuditoriaService(); 

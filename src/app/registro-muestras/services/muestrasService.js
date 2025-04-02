@@ -114,27 +114,60 @@ const actualizarMuestra = async (id, datosActualizacion, usuario) => {
         // Validar el rol del usuario
         validarRolUsuario(usuario);
 
+        // Limpiar el ID de la muestra y validar formato
+        const idLimpio = id.trim().replace(/\/+/g, '/');
+        console.log('ID de muestra a actualizar (limpio):', idLimpio);
+
+        // Filtrar campos inmutables y agregar validaciones
+        const { documento, ...datosActualizados } = datosActualizacion;
+        
+        // Validar tipoMuestreo si está presente
+        if (datosActualizados.tipoMuestreo) {
+            const tiposValidos = ['Simple', 'Compuesto', 'Integrado'];
+            if (!tiposValidos.includes(datosActualizados.tipoMuestreo)) {
+                throw new ValidationError(`Tipo de muestreo no válido. Valores permitidos: ${tiposValidos.join(', ')}`);
+            }
+        }
+
+        console.log('Datos de actualización filtrados:', datosActualizados);
+
+        // Verificar si la muestra existe antes de actualizar
+        const muestraExistente = await Muestra.findOne({ id_muestra: idLimpio });
+        if (!muestraExistente) {
+            throw new NotFoundError('Muestra no encontrada');
+        }
+
         const muestra = await Muestra.findOneAndUpdate(
-            { id_muestra: id },
+            { id_muestra: idLimpio },
             {
-                ...datosActualizacion,
-                'actualizadoPor.usuario': usuario.documento,
-                'actualizadoPor.fecha': new Date()
+                ...datosActualizados,
+                $push: {
+                    actualizadoPor: [{
+                        usuario: usuario.documento,
+                        nombre: usuario.nombre,
+                        fecha: new Date()
+                    }]
+                }
             },
             { 
                 new: true, 
-                runValidators: true
+                runValidators: true,
+                context: 'query'
             }
         );
 
-        if (!muestra) {
-            throw new NotFoundError('Muestra no encontrada');
-        }
+        console.log('Muestra actualizada:', muestra);
         return muestra;
     } catch (error) {
         if (error instanceof NotFoundError || error instanceof ValidationError) {
             throw error;
         }
+        console.error('Error detallado de MongoDB:', {
+            message: error.message,
+            code: error.code,
+            keyPattern: error.keyPattern,
+            keyValue: error.keyValue
+        });
         throw new DatabaseError('Error al actualizar la muestra', error);
     }
 };

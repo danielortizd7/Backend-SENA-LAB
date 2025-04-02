@@ -29,8 +29,7 @@ const auditoriaSchema = new mongoose.Schema(
         enum: Object.values(PERMISOS)
       }]
     },
-    detalles: { 
-      idMuestra: String, // Agregar el ID de la muestra registrada
+    detalles: {
       idMuestra: String,
       cambios: {
         antes: Object,

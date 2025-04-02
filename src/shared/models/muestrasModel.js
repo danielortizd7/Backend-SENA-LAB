@@ -61,15 +61,35 @@ const muestraSchema = new mongoose.Schema(
       required: true,
       immutable: true
     },
-    tipoMuestra: {
+   /* tipoMuestra: {
       type: String,
       enum: ['Agua', 'Suelo'],
+      required: true
+    },*/
+    tipoDeAgua: {
+      tipo: {
+        type: String,
+        enum: ['Residual Domestica','Residual No Domestica','potable', 'natural','otra'],
+        required: true
+        /*required: function() {
+          return this.tipoMuestra === 'Agua';
+        }*/
+      },
+      tipoPersonalizado: String,
+      descripcion: String
+    },
+    tipoAnalisis:{
+      type: String,
+      enum:['FisicoQuimico','Microbiologico'],
       required: true
     },
     tipoMuestreo: { 
       type: String,
       enum: ['Simple', 'Compuesto'],
       required: true 
+    },
+    fechaMuestreo:{
+      type:Date,
     },
     fechaHora: { 
       type: Date, 
@@ -91,8 +111,8 @@ const muestraSchema = new mongoose.Schema(
     },
     preservacionMuestra: {
       type: String,
-      enum: ['Refrigeración', 'Congelación', 'Temperatura Ambiente'],
-      default: 'Temperatura Ambiente'
+      enum: ['Refrigeración', 'Congelación', 'Acidificación','otra'],
+      required: true
     },
     identificacionMuestra: {
       type: String,
@@ -108,7 +128,7 @@ const muestraSchema = new mongoose.Schema(
         message: 'Debe seleccionar al menos un análisis'
       }
     },
-    tipoDeAgua: {
+    /*tipoDeAgua: {
       tipo: {
         type: String,
         enum: ['potable', 'natural', 'residual', 'otra'],
@@ -118,7 +138,7 @@ const muestraSchema = new mongoose.Schema(
       },
       tipoPersonalizado: String,
       descripcion: String
-    },
+    },*/
     estado: {
       type: String,
       enum: estadosValidos,
@@ -175,15 +195,45 @@ const muestraSchema = new mongoose.Schema(
 
 // Middleware para generar el id_muestra antes de guardar
 muestraSchema.pre('save', async function(next) {
-    if (!this.id_muestra) {
-        try {
-            const count = await mongoose.model('Muestra').countDocuments();
-            this.id_muestra = `MUESTRA-H${(count + 111).toString()}`;
-        } catch (error) {
-            return next(error);
-        }
-    }
-    next();
+  if (!this.id_muestra) {
+      try {
+          // Buscar la última muestra ordenada por id_muestra de forma descendente
+          const ultimaMuestra = await mongoose.model('Muestra')
+              .findOne({})
+              .sort({ id_muestra: -1 })
+              .exec();
+
+          let nuevoNumero = 111; // Número inicial si no hay muestras
+
+          if (ultimaMuestra && ultimaMuestra.id_muestra) {
+              // Extraer el número del último ID y sumar 1
+              const match = ultimaMuestra.id_muestra.match(/H(\d+)/);
+              if (match) {
+                  const ultimoNumero = parseInt(match[1]);
+                  nuevoNumero = Math.max(ultimoNumero + 1, 111);
+              }
+          }
+
+          // Verificar que el nuevo ID no exista
+          let idExists = true;
+          while (idExists) {
+              const existingMuestra = await mongoose.model('Muestra')
+                  .findOne({ id_muestra: `MUESTRA-H${nuevoNumero}` })
+                  .exec();
+              
+              if (!existingMuestra) {
+                  idExists = false;
+              } else {
+                  nuevoNumero++;
+              }
+          }
+
+          this.id_muestra = `MUESTRA-H${nuevoNumero}`;
+      } catch (error) {
+          return next(error);
+      }
+  }
+  next();
 });
 
 // Crear los modelos

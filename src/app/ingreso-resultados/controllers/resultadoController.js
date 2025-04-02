@@ -251,12 +251,6 @@ exports.editarResultado = async (req, res) => {
       throw new ValidationError("Este resultado ya fue verificado, no se puede editar");
     }
 
-    // Verificar que sea el mismo laboratorista
-    const laboratorista = req.laboratorista;
-    if (resultado.cedulaLaboratorista !== laboratorista.documento) {
-      throw new AuthorizationError("No autorizado para modificar este resultado");
-    }
-
     // Validar que al menos un campo tenga valor
     if (!pH && !turbidez && !oxigenoDisuelto && 
         !nitratos && !solidosSuspendidos && !fosfatos) {
@@ -295,28 +289,6 @@ exports.editarResultado = async (req, res) => {
       
       // Solo registrar el cambio si es diferente
       if (observacionAnterior !== observacionNueva) {
-        // Verificar si la nueva observación sigue el patrón de actualización
-        const matchActualizacion = observacionNueva.match(/^actualizacion\s+(\d+)$/);
-        if (matchActualizacion) {
-          const numActualizacion = parseInt(matchActualizacion[1]);
-          const ultimaActualizacion = resultado.historialCambios
-            .filter(h => h.cambiosRealizados.observaciones)
-            .map(h => {
-              const match = h.cambiosRealizados.observaciones.valorNuevo.match(/^actualizacion\s+(\d+)$/);
-              return match ? parseInt(match[1]) : 0;
-            })
-            .reduce((max, num) => Math.max(max, num), 0);
-
-          // Verificar que la actualización sea la siguiente en la secuencia
-          if (numActualizacion !== ultimaActualizacion + 1) {
-            throw new ValidationError(
-              `La secuencia de actualizaciones debe ser consecutiva. ` +
-              `La última actualización fue ${ultimaActualizacion}, ` +
-              `la siguiente debe ser ${ultimaActualizacion + 1}`
-            );
-          }
-        }
-
         cambiosRealizados.observaciones = {
           valorAnterior: observacionAnterior,
           valorNuevo: observacionNueva
@@ -361,8 +333,8 @@ exports.editarResultado = async (req, res) => {
         $push: {
           historial: {
             estado: muestra.estado,
-            cedulaadministrador: laboratorista.documento,
-            nombreadministrador: laboratorista.nombre,
+            cedulaadministrador: req.laboratorista.documento,
+            nombreadministrador: req.laboratorista.nombre,
             fechaCambio: new Date(),
             observaciones: "Resultados actualizados",
             detallesCambios: cambiosRealizados

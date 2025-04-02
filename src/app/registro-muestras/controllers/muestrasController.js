@@ -5,11 +5,9 @@ const { Muestra, estadosValidos } = require('../../../shared/models/muestrasMode
 const Usuario = require('../../../shared/models/usuarioModel');
 const { validarUsuario } = require('../services/usuariosService');
 const muestrasService = require('../services/muestrasService');
-const auditoriaService = require('../../auditoria/services/auditoriaService'); // Importar el servicio de auditoría
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
-
 
 const USUARIOS_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
 const BUSCAR_USUARIO_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
@@ -151,28 +149,7 @@ const crearMuestra = async (req, res, next) => {
             throw new ValidationError('Las firmas no pueden estar vacías');
         }
 
-        const nuevaMuestra = await muestrasService.crearMuestra(req.body, usuario);
-
-        // Registrar la acción de auditoría
-        await auditoriaService.registrarMuestraCreada(req.usuario.id, nuevaMuestra._id);
-        
-        // Registrar auditoría
-        await auditoriaService.registrarAccion({
-          usuario: {
-            id: usuario.id,
-            nombre: usuario.nombre,
-            rol: usuario.rol,
-            documento: usuario.documento
-          },
-          accion: {
-            tipo: 'POST',
-            ruta: '/api/muestras', // Ruta donde se registró la muestra
-            descripcion: 'Registro de nueva muestra'
-          },
-          detalles: {
-            idMuestra: muestra.id_muestra // ID de la muestra registrada
-          }
-        });
+        const muestra = await muestrasService.crearMuestra(req.body, usuario);
         console.log('Muestra creada exitosamente con ID:', muestra.id_muestra);
         
         ResponseHandler.success(res, { muestra }, 'Muestra creada exitosamente');
@@ -187,11 +164,34 @@ const crearMuestra = async (req, res, next) => {
 
 const actualizarMuestra = async (req, res, next) => {
     try {
+        console.log('Iniciando actualización de muestra...');
         const usuario = obtenerDatosUsuario(req);
         const { id } = req.params;
-        const muestra = await muestrasService.actualizarMuestra(id, req.body, usuario);
+        
+        console.log('Datos de actualización recibidos:', {
+  tipoMuestreo: 'Simple',
+  preservacionMuestra: 'Refrigeración',
+  lugarMuestreo: 'Río Bogotá',
+  analisisSeleccionados: ['pH', 'turbidez'],
+  observaciones: 'Muestra tomada en temporada seca'
+});
+        // Filter out immutable fields and restructure payload
+        const { documento, fechaHora, ...validUpdate } = req.body;
+        const payload = {
+            ...validUpdate,
+            tipoDeAgua: {
+                tipo: 'natural',
+                descripcion: 'Agua de río para análisis'
+            }
+        };
+        const muestra = await muestrasService.actualizarMuestra(id, payload, usuario);
+        console.log('Muestra actualizada exitosamente:', muestra);
         ResponseHandler.success(res, { muestra }, 'Muestra actualizada exitosamente');
     } catch (error) {
+        console.error('Error detallado al actualizar muestra:', error);
+        if (error instanceof ValidationError || error instanceof NotFoundError) {
+            return ResponseHandler.error(res, error);
+        }
         next(error);
     }
 };
