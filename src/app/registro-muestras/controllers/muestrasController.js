@@ -59,6 +59,11 @@ const validarUsuarioController = async (req, res) => {
     }
 };
 
+const analisisDisponibles = {
+    FisicoQuimico: ["pH", "Conductividad", "Sólidos Totales"],
+    Microbiologico: ["Coliformes Totales Cuantitativo", "E. coli"]
+};
+
 // ============= Controladores de Muestras =============
 const obtenerMuestras = async (req, res, next) => {
     try {
@@ -128,7 +133,8 @@ const crearMuestra = async (req, res, next) => {
         console.log('Iniciando creación de muestra...');
         console.log('Datos recibidos:', JSON.stringify({
             documento: req.body.documento,
-            tipoMuestra: req.body.tipoMuestra,
+            tipoDeAgua: req.body.tipoDeAgua,
+            tipoAnalisis: req.body.tipoAnalisis,
             firmas: req.body.firmas
         }, null, 2));
         
@@ -168,22 +174,22 @@ const actualizarMuestra = async (req, res, next) => {
         const usuario = obtenerDatosUsuario(req);
         const { id } = req.params;
         
-        console.log('Datos de actualización recibidos:', {
-  tipoMuestreo: 'Simple',
-  preservacionMuestra: 'Refrigeración',
-  lugarMuestreo: 'Río Bogotá',
-  analisisSeleccionados: ['pH', 'turbidez'],
-  observaciones: 'Muestra tomada en temporada seca'
-});
+        console.log('Datos de actualización recibidos:', req.body);
+        
         // Filter out immutable fields and restructure payload
         const { documento, fechaHora, ...validUpdate } = req.body;
         const payload = {
             ...validUpdate,
             tipoDeAgua: {
-                tipo: 'natural',
-                descripcion: 'Agua de río para análisis'
-            }
+                tipo: validUpdate.tipoDeAgua.tipo,
+                descripcion: validUpdate.tipoDeAgua.descripcion
+            },
+            tipoAnalisis: validUpdate.tipoAnalisis,
+            fechaMuestreo: validUpdate.fechaMuestreo,
+            aceptada: validUpdate.aceptada,
+            observacionRechazo: validUpdate.observacionRechazo
         };
+        
         const muestra = await muestrasService.actualizarMuestra(id, payload, usuario);
         console.log('Muestra actualizada exitosamente:', muestra);
         ResponseHandler.success(res, { muestra }, 'Muestra actualizada exitosamente');

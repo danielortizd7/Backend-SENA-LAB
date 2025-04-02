@@ -91,7 +91,8 @@ const crearMuestra = async (datosMuestra, usuario) => {
         
         console.log('Datos de la muestra a crear:', {
             documento: muestra.documento,
-            tipoMuestra: muestra.tipoMuestra,
+            tipoDeAgua: muestra.tipoDeAgua,
+            tipoAnalisis: muestra.tipoAnalisis,
             firmas: muestra.firmas,
             estado: muestra.estado,
             historial: muestra.historial[0]
@@ -260,4 +261,4 @@ module.exports = {
     obtenerMuestrasPorTipo,
     obtenerMuestrasPorEstado,
     registrarFirma
-}; 
+};

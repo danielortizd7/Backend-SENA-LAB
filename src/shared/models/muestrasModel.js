@@ -61,35 +61,41 @@ const muestraSchema = new mongoose.Schema(
       required: true,
       immutable: true
     },
-   /* tipoMuestra: {
-      type: String,
-      enum: ['Agua', 'Suelo'],
-      required: true
-    },*/
     tipoDeAgua: {
-      tipo: {
-        type: String,
-        enum: ['Residual Domestica','Residual No Domestica','potable', 'natural','otra'],
-        required: true
-        /*required: function() {
-          return this.tipoMuestra === 'Agua';
-        }*/
-      },
-      tipoPersonalizado: String,
-      descripcion: String
-    },
-    tipoAnalisis:{
       type: String,
-      enum:['FisicoQuimico','Microbiologico'],
+      enum: ['Residual Domestica','Residual No Domestica','Potable', 'Natural','Otra'],
       required: true
+    },
+    tipoAnalisis: {
+      type: String,
+      enum: ['FisicoQuimico', 'Microbiologico'],
+      required: true
+    },
+    analisisSeleccionados: {
+      type: [String],
+      required: true,
+      validate: {
+        validator: function(v) {
+          return Array.isArray(v) && v.length > 0;
+        },
+        message: 'Debe seleccionar al menos un análisis'
+      }
+    },
+    analisisMicrobiologicos: {
+      type: String,
+      enum: ['Coliformes Totales Cuantitativo', 'Coliformes Totales Cualitativo'],
+      required: function() {
+        return this.tipoAnalisis === 'Microbiologico';
+      }
     },
     tipoMuestreo: { 
       type: String,
       enum: ['Simple', 'Compuesto'],
       required: true 
     },
-    fechaMuestreo:{
-      type:Date,
+    fechaMuestreo: {
+      type: Date,
+      required: true
     },
     fechaHora: { 
       type: Date, 
@@ -99,7 +105,7 @@ const muestraSchema = new mongoose.Schema(
     },
     lugarMuestreo: {
       type: String,
-      required: true
+      required: false // Cambiado a false para que no sea obligatorio
     },
     planMuestreo: {
       type: String,
@@ -111,34 +117,21 @@ const muestraSchema = new mongoose.Schema(
     },
     preservacionMuestra: {
       type: String,
-      enum: ['Refrigeración', 'Congelación', 'Acidificación','otra'],
+      enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otra', 'Ninguna'], // Agregada la opción "Ninguna"
       required: true
     },
     identificacionMuestra: {
       type: String,
       default: ''
     },
-    analisisSeleccionados: { 
-      type: [String], 
-      required: true,
-      validate: {
-        validator: function(v) {
-          return Array.isArray(v) && v.length > 0;
-        },
-        message: 'Debe seleccionar al menos un análisis'
-      }
+    aceptada: {
+      type: Boolean,
+      required: true
     },
-    /*tipoDeAgua: {
-      tipo: {
-        type: String,
-        enum: ['potable', 'natural', 'residual', 'otra'],
-        required: function() {
-          return this.tipoMuestra === 'Agua';
-        }
-      },
-      tipoPersonalizado: String,
-      descripcion: String
-    },*/
+    observacionRechazo: {
+      type: String,
+      default: ''
+    },
     estado: {
       type: String,
       enum: estadosValidos,
