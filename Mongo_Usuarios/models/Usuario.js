@@ -121,10 +121,8 @@ usuarioSchema.statics.crear = async function(datos) {
   }
 };
 
-// En el modelo (usuarioModel.js)
 usuarioSchema.statics.actualizarUsuario = async function(id, datosActualizados, usuarioActual) {
   try {
-      // Validar que id sea un ObjectId válido
       if (!mongoose.Types.ObjectId.isValid(id)) {
           throw new Error('ID de usuario inválido');
       }

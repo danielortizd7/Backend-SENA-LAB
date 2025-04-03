@@ -130,12 +130,21 @@ class UsuarioController {
                 ...datosEspecificos
               };
               break;
-            case 'cliente':
-              nuevoUsuario.detalles = {
-                tipo: "cliente",
-                razonSocial: datosEspecificos?.razonSocial || ""
-              };
-              break;
+              case 'cliente':
+                nuevoUsuario.detalles = {
+                  tipo: "cliente",
+                  razonSocial: datosEspecificos?.razonSocial || "",
+                  tipo_cliente: datosEspecificos?.tipo_cliente || "",
+                  opciones_tipo_cliente: [
+                    "empresa",
+                    "emprendedor",
+                    "persona natural",
+                    "institucion educativa",
+                    "aprendiz/instructor Sena"
+                  ]
+                };
+                break;
+              
           }
       
           const resultado = await this.usuarioModel.crear(nuevoUsuario);
@@ -287,15 +296,12 @@ class UsuarioController {
             });
         }
 
-        // Obtener usuario autenticado y usuario objetivo
-        const usuarioActual = req.usuario; // El middleware ya asigna el usuario completo
+        const usuarioActual = req.usuario; 
         const usuarioObjetivo = await Usuario.findById(id).populate('rol').lean();
 
-        // Validar permisos de edición
         const miRol = usuarioActual.rol.name.toLowerCase();
         const rolObjetivo = usuarioObjetivo.rol.name.toLowerCase();
         
-        // Lógica de verificación de permisos (simplificada)
         if (miRol === 'super_admin' && rolObjetivo !== 'administrador') {
             return res.status(403).json({
                 error: 'Acceso denegado',
@@ -310,7 +316,6 @@ class UsuarioController {
             });
         }
 
-        // Preparar datos para actualización
         const { password, ...datosActualizados } = req.body;
         
         if (password) {
@@ -323,7 +328,6 @@ class UsuarioController {
             datosActualizados.password = await bcrypt.hash(password, 10);
         }
 
-        // Realizar actualización
         const resultado = await Usuario.findByIdAndUpdate(
             id,
             datosActualizados,
@@ -344,7 +348,6 @@ class UsuarioController {
             });
         }
 
-        // Formatear respuesta
         const respuesta = {
             _id: resultado._id,
             email: resultado.email,
