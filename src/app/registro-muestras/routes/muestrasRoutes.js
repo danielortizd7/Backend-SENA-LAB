@@ -3,6 +3,9 @@ const router = express.Router();
 const muestrasController = require('../controllers/muestrasController');
 const { verificarDocumento } = require('../../../shared/middleware/authMiddleware');
 
+// Ruta para obtener análisis disponibles
+router.get('/analisis', verificarDocumento, muestrasController.obtenerAnalisisDisponibles);
+
 // Ruta para crear una nueva muestra
 router.post('/', verificarDocumento, muestrasController.crearMuestra);
 
@@ -24,4 +27,4 @@ router.put('/:id', verificarDocumento, muestrasController.actualizarMuestra);
 // Ruta para registrar firma en una muestra
 router.post('/:idMuestra/firma', verificarDocumento, muestrasController.registrarFirma);
 
-module.exports = router; 
+module.exports = router;

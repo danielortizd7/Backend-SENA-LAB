@@ -128,7 +128,29 @@ const obtenerMuestra = async (req, res, next) => {
     }
 };
 
+const obtenerAnalisisDisponibles = async (req, res, next) => {
+    try {
+        const analisisFisicoQuimicos = [
+            { nombre: "pH", rangos: ["4,0 - 10,0"], unidad: "Und. pH", tipo: "FisicoQuimico" },
+            { nombre: "Conductividad", rangos: ["10 - 10000"], unidad: "uS/cm", tipo: "FisicoQuimico" }
+        ];
+
+        const analisisMicrobiologicos = [
+            { nombre: "Coliformes Totales Cuantitativo", rangos: ["UFC/100ml"], unidad: "UFC", tipo: "Microbiologico" },
+            { nombre: "Coliformes Totales Cualitativo", rangos: ["Ausencia/Presencia"], unidad: "Ausencia/Presencia", tipo: "Microbiologico" }
+        ];
+
+        res.status(200).json({
+            success: true,
+            data: [...analisisFisicoQuimicos, ...analisisMicrobiologicos]
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 const crearMuestra = async (req, res, next) => {
+    console.log('Datos recibidos para crear muestra:', req.body);
     try {
         console.log('Iniciando creación de muestra...');
         console.log('Datos recibidos:', JSON.stringify({
@@ -155,7 +177,27 @@ const crearMuestra = async (req, res, next) => {
             throw new ValidationError('Las firmas no pueden estar vacías');
         }
 
-        const muestra = await muestrasService.crearMuestra(req.body, usuario);
+        // Validar análisis seleccionados según tipo
+        if (Array.isArray(req.body.analisisSeleccionados)) {
+            req.body.analisisSeleccionados.forEach(analisis => {
+                if (typeof analisis === 'object') {
+                    if (req.body.tipoAnalisis === 'FisicoQuimico') {
+                        if (analisis.rango && !/^[\d,\.]+\s*-\s*[\d,\.]+$/.test(analisis.rango)) {
+                            throw new ValidationError(`Formato de rango inválido para ${analisis.nombre}. Use "X,X - Y,Y"`);
+                        }
+                    } else if (req.body.tipoAnalisis === 'Microbiologico') {
+                        if (analisis.rango && !/^(UFC\/\d+ml|Ausencia\/Presencia)$/.test(analisis.rango)) {
+                            throw new ValidationError(`Formato de rango inválido para ${analisis.nombre}. Use "UFC/Xml" o "Ausencia/Presencia"`);
+                        }
+                    }
+                }
+            });
+        }
+
+        const muestra = await muestrasService.crearMuestra({
+            ...req.body,
+            analisisSeleccionados: req.body.analisisSeleccionados
+        }, usuario);
         console.log('Muestra creada exitosamente con ID:', muestra.id_muestra);
         
         ResponseHandler.success(res, { muestra }, 'Muestra creada exitosamente');
@@ -169,6 +211,7 @@ const crearMuestra = async (req, res, next) => {
 };
 
 const actualizarMuestra = async (req, res, next) => {
+    console.log('Datos recibidos para actualizar muestra:', req.body);
     try {
         console.log('Iniciando actualización de muestra...');
         const usuario = obtenerDatosUsuario(req);
@@ -239,5 +282,6 @@ module.exports = {
     crearMuestra,
     actualizarMuestra,
     registrarFirma,
-    eliminarMuestra
+    eliminarMuestra,
+    obtenerAnalisisDisponibles
 };

@@ -75,8 +75,36 @@ const crearMuestra = async (datosMuestra, usuario) => {
             fechaFirmaCliente: new Date()
         };
 
-        const muestra = new Muestra({
+        // Procesar análisis seleccionados con validación por tipo
+        const analisisProcesados = Array.isArray(datosMuestra.analisisSeleccionados)
+            ? datosMuestra.analisisSeleccionados.map(a => {
+                if (typeof a === 'object') {
+                    // Validar formato de rango según tipo de análisis
+                    if (datosMuestra.tipoAnalisis === 'FisicoQuimico' && a.rango && !/^[\d,\.]+\s*-\s*[\d,\.]+$/.test(a.rango)) {
+                        throw new ValidationError(`Formato de rango inválido para ${a.nombre}. Use "X,X - Y,Y"`);
+                    }
+                    if (datosMuestra.tipoAnalisis === 'Microbiologico' && a.rango && !/^(UFC\/\d+ml|Ausencia\/Presencia)$/.test(a.rango)) {
+                        throw new ValidationError(`Formato de rango inválido para ${a.nombre}. Use "UFC/Xml" o "Ausencia/Presencia"`);
+                    }
+                    
+                    return {
+                        nombre: a.nombre,
+                        rango: a.rango || '',
+                        unidad: a.unidad || ''
+                    };
+                }
+                return {
+                    nombre: a,
+                    rango: '',
+                    unidad: ''
+                };
+            })
+            : [];
+
+        const muestraData = {
             ...datosMuestra,
+            analisisSeleccionados: analisisProcesados,
+            tipoAnalisis: datosMuestra.tipoAnalisis, // Ahora acepta string directamente
             firmas,
             creadoPor: usuario.id,
             estado: 'Recibida',
@@ -87,17 +115,18 @@ const crearMuestra = async (datosMuestra, usuario) => {
                 fechaCambio: new Date(),
                 observaciones: 'Muestra registrada inicialmente'
             }]
-        });
+        };
         
         console.log('Datos de la muestra a crear:', {
-            documento: muestra.documento,
-            tipoDeAgua: muestra.tipoDeAgua,
-            tipoAnalisis: muestra.tipoAnalisis,
-            firmas: muestra.firmas,
-            estado: muestra.estado,
-            historial: muestra.historial[0]
+            documento: muestraData.documento,
+            tipoDeAgua: muestraData.tipoDeAgua,
+            tipoAnalisis: muestraData.tipoAnalisis,
+            firmas: muestraData.firmas,
+            estado: muestraData.estado,
+            historial: muestraData.historial[0]
         });
 
+        const muestra = new Muestra(muestraData);
         await muestra.save();
         return muestra;
     } catch (error) {
@@ -111,6 +140,7 @@ const crearMuestra = async (datosMuestra, usuario) => {
 
 // Actualizar una muestra
 const actualizarMuestra = async (id, datosActualizacion, usuario) => {
+    console.log('Datos recibidos para actualizar muestra:', datosActualizacion);
     try {
         // Validar el rol del usuario
         validarRolUsuario(usuario);

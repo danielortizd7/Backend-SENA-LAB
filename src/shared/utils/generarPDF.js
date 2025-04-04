@@ -1,11 +1,15 @@
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
+const { Muestra } = require("../models/muestrasModel");
 
-const generarPDF = async (muestra, cedulaCliente, firmaCliente, cedulaAdministrador, firmaAdministrador) => {
-    return new Promise((resolve, reject) => {
+const generarPDF = (muestra, cedulaCliente, firmaCliente, cedulaAdministrador, firmaAdministrador) => {
+    return new Promise(async (resolve, reject) => {
         try {
             console.log("Iniciando generación de PDF para:", muestra.id_muestra);
+            
+            // Usar muestra directamente (los análisis ya son strings)
+            const muestraPopulada = muestra;
             
             const doc = new PDFDocument({ margin: 50 });
             const nombreArchivo = `muestra_${muestra.id_muestra}.pdf`;
@@ -34,9 +38,13 @@ const generarPDF = async (muestra, cedulaCliente, firmaCliente, cedulaAdministra
 
             // Análisis seleccionados
             doc.text("Análisis Seleccionados:", { underline: true }).moveDown(0.5);
-            if (Array.isArray(muestra.analisisSeleccionados)) {
-                muestra.analisisSeleccionados.forEach((analisis, index) => {
-                    doc.text(`   ${index + 1}. ${analisis}`);
+            if (Array.isArray(muestraPopulada.analisisSeleccionados)) {
+                muestraPopulada.analisisSeleccionados.forEach((analisis, index) => {
+                    const lineaAnalisis = `   ${index + 1}. ${analisis.nombre}`;
+                    const lineaDetalle = `      Rango: ${analisis.rango || 'N/A'} - Unidad: ${analisis.unidad || 'N/A'}`;
+                    
+                    doc.text(lineaAnalisis);
+                    doc.fontSize(10).text(lineaDetalle).fontSize(12);
                 });
             }
             doc.moveDown(2);

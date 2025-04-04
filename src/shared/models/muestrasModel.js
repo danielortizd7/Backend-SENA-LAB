@@ -68,24 +68,48 @@ const muestraSchema = new mongoose.Schema(
     },
     tipoAnalisis: {
       type: String,
-      enum: ['FisicoQuimico', 'Microbiologico'],
+      enum: ['FisicoQuimico', 'Microbiologico', 'Otro'],
       required: true
     },
     analisisSeleccionados: {
-      type: [String],
+      type: [{
+        nombre: {
+          type: String,
+          required: true
+        },
+        rango: {
+          type: String,
+          required: false,
+          validate: {
+            validator: function(value) {
+              if (!value) return true;
+              if (this.tipoAnalisis === 'FisicoQuimico') {
+                return /^[\d,\.]+\s*-\s*[\d,\.]+$/.test(value);
+              } else if (this.tipoAnalisis === 'Microbiologico') {
+                return /^(UFC\/\d+ml|Ausencia\/Presencia)$/.test(value);
+              }
+              return true;
+            },
+            message: function(props) {
+              if (this.tipoAnalisis === 'FisicoQuimico') {
+                return `Formato de rango inválido para ${props.path.split('.')[1]}. Use "X,X - Y,Y"`;
+              } else {
+                return `Formato de rango inválido para ${props.path.split('.')[1]}. Use "UFC/Xml" o "Ausencia/Presencia"`;
+              }
+            }
+          }
+        },
+        unidad: {
+          type: String,
+          required: false
+        }
+      }],
       required: true,
       validate: {
-        validator: function(v) {
-          return Array.isArray(v) && v.length > 0;
+        validator: function(arr) {
+          return arr.length > 0;
         },
         message: 'Debe seleccionar al menos un análisis'
-      }
-    },
-    analisisMicrobiologicos: {
-      type: String,
-      enum: ['Coliformes Totales Cuantitativo', 'Coliformes Totales Cualitativo'],
-      required: function() {
-        return this.tipoAnalisis === 'Microbiologico';
       }
     },
     tipoMuestreo: { 

@@ -1,4 +1,5 @@
 const { body, param, query, custom } = require('express-validator');
+const mongoose = require('mongoose');
 
 // Validadores para firma-digital
 const firmaValidators = {
@@ -206,12 +207,48 @@ const senaLabValidators = {
         body('analisisSeleccionados')
             .isArray().withMessage('Los análisis seleccionados deben ser un array')
             .notEmpty().withMessage('Debe seleccionar al menos un análisis')
-            .custom((value) => {
-                const analisisValidos = ['pH', 'turbidez', 'conductividad', 'temperatura', 'oxigenoDisuelto', 'nitratos', 'fosfatos'];
-                const todosValidos = value.every(analisis => analisisValidos.includes(analisis));
-                if (!todosValidos) {
+            .custom((value, { req }) => {
+                const analisisValidos = [
+                    "pH", "Conductividad", "Turbiedad", "Color aparente", "Alcalinidad total",
+                    "Dureza total", "Dureza cálcica", "Calcio", "Magnesio", "Cloro libre (residual)",
+                    "Cloruros", "Fluoruros", "Nitratos", "Nitritos", "Sulfatos", "Fosfatos",
+                    "Manganeso", "Hierro", "Mercurio total", "Análisis de metales en agua",
+                    "Oxígeno Disuelto", "Demanda Bioquímica de Oxígeno (DB05)",
+                    "Demanda Química de Oxígeno (DQO)", "Sólidos Sedimentables (SSED)",
+                    "Sólidos Suspendidos Totales (SST)", "Coliformes Totales Cuantitativo",  
+                    "Coliformes Totales Cualitativo"
+                ];
+
+                // Validar nombres de análisis
+                if (!value.every(analisis => {
+                    if (typeof analisis === 'object') {
+                        return analisisValidos.includes(analisis.nombre);
+                    }
+                    return analisisValidos.includes(analisis);
+                })) {
                     throw new Error('Uno o más análisis seleccionados no son válidos');
                 }
+
+                // Validar rangos según tipo de análisis
+                if (req.body.tipoAnalisis === 'FisicoQuimico') {
+                    value.forEach(analisis => {
+                        if (typeof analisis === 'object' && !/^[\d,\.]+\s*-\s*[\d,\.]+$/.test(analisis.rango)) {
+                            throw new Error(`Formato de rango inválido para ${analisis.nombre}. Use "X,X - Y,Y"`);
+                        }
+                    });
+                } else if (req.body.tipoAnalisis === 'Microbiologico') {
+                    value.forEach(analisis => {
+                        if (typeof analisis === 'object') {
+                            if (!/^(UFC\/\d+ml|Ausencia\/Presencia)$/.test(analisis.rango)) {
+                                throw new Error(`Formato de rango inválido para ${analisis.nombre}. Use "UFC/Xml" o "Ausencia/Presencia"`);
+                            }
+                            if (!analisis.unidad || !['UFC', 'Ausencia/Presencia'].includes(analisis.unidad)) {
+                                throw new Error(`Unidad inválida para ${analisis.nombre}. Use "UFC" o "Ausencia/Presencia"`);
+                            }
+                        }
+                    });
+                }
+
                 return true;
             }),
         body('tipoDeAgua.tipo')
@@ -251,9 +288,18 @@ const senaLabValidators = {
             .isArray().withMessage('Los análisis seleccionados deben ser un array')
             .notEmpty().withMessage('Debe seleccionar al menos un análisis')
             .custom((value) => {
-                const analisisValidos = ['pH', 'turbidez', 'conductividad', 'temperatura', 'oxigenoDisuelto', 'nitratos', 'fosfatos'];
-                const todosValidos = value.every(analisis => analisisValidos.includes(analisis));
-                if (!todosValidos) {
+                const analisisValidos = [
+                    "pH", "Conductividad", "Turbiedad", "Color aparente", "Alcalinidad total",
+                    "Dureza total", "Dureza cálcica", "Calcio", "Magnesio", "Cloro libre (residual)",
+                    "Cloruros", "Fluoruros", "Nitratos", "Nitritos", "Sulfatos", "Fosfatos",
+                    "Manganeso", "Hierro", "Mercurio total", "Análisis de metales en agua",
+                    "Oxígeno Disuelto", "Demanda Bioquímica de Oxígeno (DB05)",
+                    "Demanda Química de Oxígeno (DQO)", "Sólidos Sedimentables (SSED)",
+                    "Sólidos Suspendidos Totales (SST)","Coliformes Totales Cuantitativo",
+                    "Coliformes Totales Cualitativo"
+                ];
+                
+                if (!value.every(analisis => analisisValidos.includes(analisis))) {
                     throw new Error('Uno o más análisis seleccionados no son válidos');
                 }
                 return true;
