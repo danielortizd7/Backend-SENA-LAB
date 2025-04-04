@@ -82,14 +82,29 @@ class UsuarioController {
               detalles: 'El email proporcionado ya está en uso'
             });
           }
-          if (!this.validarFortalezaContraseña(password)) {
-            return res.status(400).json({
-                error: 'Contraseña débil',
-                detalles: 'La contraseña debe tener al menos 8 caracteres, incluir una mayúscula, un número y un caracter especial'
-            });
+
+          
+
+        let contrasenaInput;
+        if (tipo ==='cliente'){
+            contrasenaInput = documento;
+        }else {
+            if (!password){
+                return res.status(400).json({
+                    error: 'La contraseña es obligatoria para este tipo de usuario'
+                });
+            }
+
+            if (!this.validarFortalezaContraseña(password)){
+                return res.status(400).json({
+                    error: 'Contraseña débil',
+                    detalles: 'La contraseña debe tener al menos 8 caracteres, incluir una mayúscula, un número y un caracter especial'
+                });
+            }
+            contrasenaInput = password;
         }
       
-          const hashedPassword = await bcrypt.hash(password, 10);
+          const hashedPassword = await bcrypt.hash(contrasenaInput, 10);
       
           const Role = require('../models/Role');
           const rolEncontrado = await Role.findOne({ name: tipo });
@@ -146,23 +161,31 @@ class UsuarioController {
                 break;
               
           }
-      
+          console.log(nuevoUsuario);
+
           const resultado = await this.usuarioModel.crear(nuevoUsuario);
-          return res.status(201).json({
+
+          const respuesta = {
             mensaje: 'Usuario creado exitosamente',
             usuario: {
-              _id: resultado.insertedId,
-              email,
-              nombre,
-              tipo
+                _id: resultado.insertedId,
+                email,
+                nombre,
+                tipo
             }
-          });
-        } catch (error) {
-          console.error('Error en el registro:', error);
-          res.status(500).json({ 
-            error: 'Error en el servidor', 
-            detalles: error.message 
-          });
+        };
+
+        if (tipo === 'cliente') {
+            respuesta.usuario.tipo_cliente = nuevoUsuario.detalles.tipo_cliente;
+        }
+
+        return res.status(201).json(respuesta);
+    } catch (error) {
+        console.error('Error en el registro:', error);
+        res.status(500).json({
+            error: 'Error en el servidor',
+            detalles: error.message
+        });
         }
       }
       

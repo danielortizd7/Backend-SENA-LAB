@@ -4,7 +4,7 @@ require('dotenv').config();
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 20000,
+      serverSelectionTimeoutMS: 30000,
     });
     console.log("Conectado a MongoDB Atlas vía Mongoose");
 

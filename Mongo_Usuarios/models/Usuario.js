@@ -55,6 +55,7 @@ const usuarioSchema = new mongoose.Schema({
     especialidad: String,
     nivelAcceso: Number,
     codigoSeguridad: String,
+    tipo_cliente: String,
     registroAcciones: [{
       accion: String,
       fecha: Date,
