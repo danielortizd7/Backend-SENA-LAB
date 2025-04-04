@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const estadosValidos = ["Recibida", "En análisis", "Pendiente de resultados", "Finalizada", "Rechazada"];
+const estadosValidos = ["Recibida", "En análisis", "Finalizada", "Rechazada"];
 
 // Esquema para resultados de análisis
 const resultadoAnalisisSchema = new mongoose.Schema({
@@ -48,7 +48,7 @@ const historialEstadoSchema = new mongoose.Schema({
     estado: {
         type: String,
         required: true,
-        enum: ['Recibida', 'En análisis', 'Pendiente de resultados', 'Finalizada', 'Rechazada']
+        enum: ['Recibida', 'En análisis','Finalizada', 'Rechazada']
     },
     cedulaadministrador: {
         type: String,
@@ -104,49 +104,84 @@ const actualizacionSchema = new mongoose.Schema({
 
 // Esquema principal de muestra
 const muestraSchema = new mongoose.Schema({
+    // 1. ID único generado automáticamente
     id_muestra: {
         type: String,
         required: true,
         unique: true
     },
+
+    // . Documento del cliente
     documento: {
         type: String,
         required: true
     },
+    
+    // 3. Tipo de Agua
     tipoDeAgua: {
         type: tipoAguaSchema,
         required: true
     },
-    fechaHoraMuestreo: {
-        type: Date,
-        required: true
-    },
-    tipoAnalisis: {
-        type: String,
-        required: true,
-        enum: ['Fisicoquímico', 'Microbiológico', 'Otro']
-    },
-    preservacionMuestra: {
-        type: String,
-        required: true,
-        enum: ['Refrigeración', 'Congelación', 'Otra']
-    },
-    preservacionOtra: {
-        type: String
-    },
+    
+    // 4. Lugar de Muestreo
     lugarMuestreo: {
         type: String,
         required: true
     },
+    
+    // 5. Fecha y Hora de Muestreo
+    fechaHoraMuestreo: {
+        type: Date,
+        required: true
+    },
+    
+    // 6. Tipo de Análisis
+    tipoAnalisis: {
+        type: String,
+        required: true,
+        enum: ['Fisicoquímico', 'Microbiológico']
+    },
+    
+    // 7. Identificación proporcionada por el cliente
+    identificacionMuestra: {
+        type: String,
+        required: true
+    },
+
+    
+    
+    // 8. Plan de muestreo
+    planMuestreo: {
+        type: String,
+        required: true
+    },
+    
+    // 9. Condiciones ambientales
+    condicionesAmbientales: {
+        type: String,
+        required: true
+    },
+    
+    // 10. Preservación de la muestra
+    preservacionMuestra: {
+        type: String,
+        required: true,
+        enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otra']
+    },
+    preservacionOtra: {
+        type: String,
+        required: function() {
+            return this.preservacionMuestra === 'Otra';
+        }
+    },
+    
+    // 11. Análisis seleccionados
     analisisSeleccionados: [{
         type: String,
         required: true
     }],
-    resultados: {
-        type: Map,
-        of: resultadoAnalisisSchema,
-        default: new Map()
-    },
+    
+    // 12. Estado y rechazo
     estado: {
         type: String,
         required: true,
@@ -154,10 +189,18 @@ const muestraSchema = new mongoose.Schema({
         default: 'Recibida'
     },
     rechazoMuestra: {
-        type: rechazoSchema,
-        default: { rechazada: false }
+        rechazada: {
+            type: Boolean,
+            default: false
+        },
+        motivo: String,
+        fechaRechazo: Date
     },
-    historial: [historialEstadoSchema],
+
+    // Campos adicionales
+    observaciones: {
+        type: String
+    },
     firmas: {
         cedulaAdministrador: {
             type: String,
@@ -184,9 +227,7 @@ const muestraSchema = new mongoose.Schema({
             required: true
         }
     },
-    observaciones: {
-        type: String
-    },
+    historial: [historialEstadoSchema],
     creadoPor: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Usuario',

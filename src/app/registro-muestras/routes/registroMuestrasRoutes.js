@@ -8,7 +8,7 @@ router.get('/analisis', verificarDocumento, muestrasController.obtenerAnalisis);
 router.get('/analisis/tipo', verificarDocumento, muestrasController.obtenerAnalisisPorTipoAgua);
 
 // Rutas de Muestras
-router.post('/muestras', verificarDocumento, muestrasController.crearMuestra);
+router.post('/muestras', verificarDocumento, muestrasController.registrarMuestra);
 router.get('/muestras', verificarDocumento, muestrasController.obtenerMuestras);
 router.get('/muestras/:id', verificarDocumento, muestrasController.obtenerMuestra);
 router.put('/muestras/:id', verificarDocumento, muestrasController.actualizarMuestra);

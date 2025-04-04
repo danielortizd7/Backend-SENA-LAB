@@ -15,7 +15,7 @@ router.get('/analisis/tipo', verificarToken, muestrasController.obtenerAnalisisP
 // Rutas de Muestras
 router.get('/muestras', verificarToken, muestrasController.obtenerMuestras);
 router.get('/muestras/:id', verificarToken, muestrasController.obtenerMuestra);
-router.post('/muestras', verificarToken, muestrasController.crearMuestra);
+router.post('/muestras', verificarToken, muestrasController.registrarMuestra);
 router.put('/muestras/:id', verificarToken, muestrasController.actualizarMuestra);
 router.delete('/muestras/:id', verificarToken, muestrasController.eliminarMuestra);
 

@@ -13,7 +13,7 @@ const axios = require('axios');
 const USUARIOS_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
 const BUSCAR_USUARIO_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
 
-// ============= Funciones de Utilidad =============
+//Funciones de Utilidad 
 const obtenerDatosUsuario = (req) => {
     if (!req.usuario) {
         throw new ValidationError('Usuario no autenticado');
@@ -57,32 +57,69 @@ const normalizarCampos = (datos) => {
 const validarDatosMuestra = (datos) => {
     const errores = [];
 
-    // Validar campos requeridos
-    if (!datos.documento) errores.push('El documento es requerido');
-    if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
-    if (!datos.tipoAnalisis) errores.push('El tipo de análisis es requerido');
-    if (!datos.fechaHoraMuestreo) errores.push('La fecha y hora de muestreo son requeridas');
-    if (!datos.preservacionMuestra) errores.push('El método de preservación es requerido');
-    if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
+    // Si la muestra está rechazada, solo validar campos básicos
+    if (datos.estado === 'Rechazada') {
+        if (!datos.documento) errores.push('El documento es requerido');
+        if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
+        if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
+        if (!datos.motivoRechazo) errores.push('El motivo de rechazo es requerido');
+        
+        if (errores.length > 0) {
+            throw new ValidationError(errores.join('. '));
+        }
+        return;
+    }
 
-    // Validar análisis seleccionados
+    // 1. Documento
+    if (!datos.documento) errores.push('El documento es requerido');
+    
+    // 2. Tipo de Agua
+    if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
+    if (!datos.tipoDeAgua?.codigo) errores.push('El código del tipo de agua es requerido');
+    if (!datos.tipoDeAgua?.descripcion) errores.push('La descripción del tipo de agua es requerida');
+    
+    // 3. Lugar de Muestreo
+    if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
+    
+    // 4. Fecha y Hora de Muestreo
+    if (!datos.fechaHoraMuestreo) errores.push('La fecha y hora de muestreo son requeridas');
+    
+    // 5. Tipo de Análisis
+    if (!datos.tipoAnalisis) errores.push('El tipo de análisis es requerido');
+    
+    // 7. Plan de Muestreo
+    if (!datos.planMuestreo) errores.push('El plan de muestreo es requerido');
+    
+    // 8. Condiciones Ambientales
+    if (!datos.condicionesAmbientales) {
+        errores.push('Las condiciones ambientales son requeridas');
+    }
+    
+    // 9. Preservación de la Muestra
+    if (!datos.preservacionMuestra) {
+        errores.push('El método de preservación es requerido');
+    } else if (datos.preservacionMuestra === 'Otra' && !datos.preservacionOtra) {
+        errores.push('Debe especificar el método de preservación cuando selecciona "Otra"');
+    }
+    
+    // 10. Análisis Seleccionados
     if (!Array.isArray(datos.analisisSeleccionados) || datos.analisisSeleccionados.length === 0) {
         errores.push('Debe seleccionar al menos un análisis');
+    } else {
+        // Validar que los análisis seleccionados existan y correspondan al tipo de agua
+        const analisisDisponibles = getAnalisisPorTipoAgua(datos.tipoDeAgua.tipo);
+        const todosLosAnalisis = [...analisisDisponibles.fisicoquimico, ...analisisDisponibles.microbiologico];
+        const analisisInvalidos = datos.analisisSeleccionados.filter(
+            analisis => !todosLosAnalisis.some(a => a.nombre === analisis)
+        );
+        if (analisisInvalidos.length > 0) {
+            errores.push(`Los siguientes análisis no son válidos para el tipo de agua seleccionado: ${analisisInvalidos.join(', ')}`);
+        }
     }
 
     // Validar firmas
     if (!datos.firmas?.firmaAdministrador?.firma || !datos.firmas?.firmaCliente?.firma) {
         errores.push('Se requieren las firmas del administrador y del cliente');
-    }
-
-    // Validar preservación "Otra"
-    if (datos.preservacionMuestra === 'Otra' && !datos.preservacionOtra) {
-        errores.push('Debe especificar el método de preservación cuando selecciona "Otra"');
-    }
-
-    // Validar subtipo de agua residual
-    if (datos.tipoDeAgua?.tipo === 'residual' && !datos.tipoDeAgua?.subtipoResidual) {
-        errores.push('Debe especificar el subtipo de agua residual');
     }
 
     if (errores.length > 0) {
@@ -104,6 +141,7 @@ const validarRolAdministrador = (usuario) => {
 
 // Función de validación de análisis según tipo de agua
 const validarAnalisisParaTipoAgua = (analisisSeleccionados, tipoAgua, subtipoResidual = null) => {
+
     // Determinar matriz permitida según tipo de agua
     let matrizPermitida;
     switch (tipoAgua) {
@@ -134,7 +172,7 @@ const validarAnalisisParaTipoAgua = (analisisSeleccionados, tipoAgua, subtipoRes
     return true;
 };
 
-// ============= Controladores de Usuario =============
+// Controladores de Usuarios
 const validarUsuarioController = async (req, res) => {
     try {
         const { documento } = req.query;
@@ -151,7 +189,7 @@ const validarUsuarioController = async (req, res) => {
     }
 };
 
-// ============= Controladores de Tipos de Agua =============
+//Tipos de Agua 
 const obtenerTiposAgua = async (req, res, next) => {
     try {
         const tiposAgua = await TipoAgua.find({ activo: true });
@@ -202,7 +240,7 @@ const actualizarTipoAgua = async (req, res, next) => {
     }
 };
 
-// ============= Controladores de Análisis =============
+// Análisis 
 const obtenerAnalisis = async (req, res) => {
     try {
         ResponseHandler.success(res, { 
@@ -229,7 +267,7 @@ const obtenerAnalisisPorTipoAgua = async (req, res) => {
     }
 };
 
-// ============= Controladores de Muestras =============
+//Controladores de Muestras
 const obtenerMuestras = async (req, res, next) => {
     try {
         const { tipo, estado, fechaInicio, fechaFin } = req.query;
@@ -272,114 +310,72 @@ const obtenerMuestra = async (req, res, next) => {
     }
 };
 
-const generarIdMuestra = async (tipoAgua, tipoAnalisis) => {
-    const fecha = new Date();
-    const año = fecha.getFullYear().toString().slice(-2);
-    const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
-    const dia = fecha.getDate().toString().padStart(2, '0');
-    
-    // Primer carácter: Tipo de agua
-    let tipoChar;
-    switch (tipoAgua.toLowerCase()) {
-        case 'potable':
-            tipoChar = 'P';
-            break;
-        case 'residual':
-            tipoChar = 'R';
-            break;
-        case 'natural':
-            tipoChar = 'N';
-            break;
-        default:
-            tipoChar = 'O';
-    }
-    
-    // Segundo carácter: Tipo de análisis
-    let analisisChar;
-    switch (tipoAnalisis.toLowerCase()) {
-        case 'fisicoquímico':
-        case 'fisicoquimico':
-            analisisChar = 'F';
-            break;
-        case 'microbiológico':
-        case 'microbiologico':
-            analisisChar = 'M';
-            break;
-        default:
-            throw new Error('Tipo de análisis no válido');
-    }
-    
-    // Buscar el último consecutivo del día
-    const patron = `^${tipoChar}${analisisChar}${año}${mes}${dia}`;
-    const ultimaMuestra = await Muestra.findOne({
-        id_muestra: new RegExp(patron)
-    }).sort({ id_muestra: -1 });
-    
-    // Generar consecutivo
-    let consecutivo = '001';
-    if (ultimaMuestra) {
-        const ultimoConsecutivo = parseInt(ultimaMuestra.id_muestra.slice(-3));
-        if (ultimoConsecutivo >= 999) {
-            throw new Error('Se ha alcanzado el límite de muestras para el día');
-        }
-        consecutivo = (ultimoConsecutivo + 1).toString().padStart(3, '0');
-    }
-    
-    // Generar id_muestra final
-    return `${tipoChar}${analisisChar}${año}${mes}${dia}${consecutivo}`;
-};
-
-const crearMuestra = async (req, res, next) => {
+const registrarMuestra = async (req, res, next) => {
     try {
-        console.log('Iniciando creación de muestra...');
-        const datosMuestra = normalizarCampos(req.body);
+        const datos = req.body;
         
-        // Validar datos
-        validarDatosMuestra(datosMuestra);
+        // Validar los datos de la muestra
+        validarDatosMuestra(datos);
 
-        // Obtener datos del usuario
-        const usuario = obtenerDatosUsuario(req);
+        // Generar ID único de muestra
+        const fecha = new Date();
+        const año = fecha.getFullYear().toString().slice(-2);
+        const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
+        const dia = fecha.getDate().toString().padStart(2, '0');
+        
+        // Obtener el último consecutivo del día
+        const ultimaMuestra = await Muestra.findOne({
+            id_muestra: new RegExp(`^${datos.tipoDeAgua.codigo}${datos.tipoAnalisis.charAt(0)}${año}${mes}${dia}`)
+        }).sort({ id_muestra: -1 });
+        
+        let consecutivo = '001';
+        if (ultimaMuestra) {
+            const ultimoConsecutivo = parseInt(ultimaMuestra.id_muestra.slice(-3));
+            consecutivo = (ultimoConsecutivo + 1).toString().padStart(3, '0');
+        }
+        
+        const id_muestra = `${datos.tipoDeAgua.codigo}${datos.tipoAnalisis.charAt(0)}${año}${mes}${dia}${consecutivo}`;
 
-        // Preparar datos de firmas
+        // Verificar que tenemos el ID del usuario
+        if (!req.usuario || !req.usuario.id) {
+            throw new ValidationError('Usuario no autenticado o ID no disponible');
+        }
+
+        // Convertir el ID a ObjectId
+        const usuarioId = new mongoose.Types.ObjectId(req.usuario.id);
+
+        // Preparar las firmas en el formato correcto
         const firmas = {
-            cedulaAdministrador: usuario.documento,
-            firmaAdministrador: datosMuestra.firmas.firmaAdministrador.firma,
-            cedulaCliente: datosMuestra.documento,
-            firmaCliente: datosMuestra.firmas.firmaCliente.firma,
-            fechaFirmaAdministrador: new Date(datosMuestra.firmas.firmaAdministrador.fecha),
-            fechaFirmaCliente: new Date(datosMuestra.firmas.firmaCliente.fecha)
+            cedulaAdministrador: req.usuario.documento || datos.documento,
+            firmaAdministrador: datos.firmas?.firmaAdministrador?.firma || '',
+            fechaFirmaAdministrador: datos.firmas?.firmaAdministrador?.fecha || new Date(),
+            cedulaCliente: datos.documento,
+            firmaCliente: datos.firmas?.firmaCliente?.firma || '',
+            fechaFirmaCliente: datos.firmas?.firmaCliente?.fecha || new Date()
         };
 
-        // Generar ID de muestra
-        const id_muestra = await generarIdMuestra(datosMuestra.tipoDeAgua.tipo, datosMuestra.tipoAnalisis);
-        console.log('ID de muestra generado:', id_muestra);
-
-        // Crear la muestra
+        // Crear la muestra con los datos formateados correctamente
         const muestra = new Muestra({
-            ...datosMuestra,
+            ...datos,
             id_muestra,
-            firmas,
-            creadoPor: usuario.id,
             estado: 'Recibida',
+            firmas,
+            creadoPor: usuarioId, // Usar el ID convertido a ObjectId
             historial: [{
                 estado: 'Recibida',
-                cedulaadministrador: usuario.documento,
-                nombreadministrador: usuario.nombre,
+                cedulaadministrador: req.usuario.documento || datos.documento,
+                nombreadministrador: req.usuario.nombre || 'Sistema',
                 fechaCambio: new Date(),
-                observaciones: datosMuestra.observaciones || 'Muestra registrada inicialmente'
+                observaciones: datos.observaciones || 'Registro inicial de muestra'
             }]
         });
 
         await muestra.save();
-        console.log('Muestra creada exitosamente con ID:', muestra.id_muestra);
-        
-        ResponseHandler.success(res, { muestra }, 'Muestra creada exitosamente');
+        ResponseHandler.success(res, { muestra }, 'Muestra registrada exitosamente');
+
     } catch (error) {
-        console.error('Error al crear muestra:', error.message);
-        if (error instanceof ValidationError) {
-            return ResponseHandler.error(res, error);
-        }
-        next(error);
+        console.error('Error al registrar muestra:', error);
+        return ResponseHandler.error(res, error);
     }
 };
 
@@ -483,7 +479,7 @@ module.exports = {
     // Controladores de Muestras
     obtenerMuestras,
     obtenerMuestra,
-    crearMuestra,
+    registrarMuestra,
     actualizarMuestra,
     registrarFirma,
     eliminarMuestra

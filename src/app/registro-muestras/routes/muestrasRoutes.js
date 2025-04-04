@@ -13,7 +13,7 @@ router.get('/analisis', verificarDocumento, muestrasController.obtenerAnalisis);
 router.get('/analisis/tipo', verificarDocumento, muestrasController.obtenerAnalisisPorTipoAgua);
 
 // Rutas de Muestras
-router.post('/', verificarDocumento, muestrasController.crearMuestra);
+router.post('/', verificarDocumento, muestrasController.registrarMuestra);
 router.get('/', verificarDocumento, muestrasController.obtenerMuestras);
 router.get('/:id', verificarDocumento, muestrasController.obtenerMuestra);
 router.put('/:id', verificarDocumento, muestrasController.actualizarMuestra);
