@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const { ResponseHandler } = require('../../../shared/utils/responseHandler');
 const { ValidationError, NotFoundError } = require('../../../shared/errors/AppError');
-const { Muestra, estadosValidos, TipoAgua } = require('../../../shared/models/muestrasModel');
+const { Muestra, estadosValidos, TipoAgua, TIPOS_AGUA, SUBTIPOS_RESIDUAL } = require('../../../shared/models/muestrasModel');
 const { getAnalisisPorTipoAgua } = require('../../../shared/models/analisisModel');
 const Usuario = require('../../../shared/models/usuarioModel');
 const { validarUsuario } = require('../services/usuariosService');
@@ -10,8 +10,8 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 
-const USUARIOS_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
-const BUSCAR_USUARIO_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
+const USUARIOS_API = 'https://backend-sena-lab-1-qpzp.onrender.com/api/usuarios';
+const BUSCAR_USUARIO_API = 'https://backend-sena-lab-1-qpzp.onrender.com/api/usuarios';
 
 //Funciones de Utilidad 
 const obtenerDatosUsuario = (req) => {
@@ -77,6 +77,15 @@ const validarDatosMuestra = (datos) => {
     if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
     if (!datos.tipoDeAgua?.codigo) errores.push('El código del tipo de agua es requerido');
     if (!datos.tipoDeAgua?.descripcion) errores.push('La descripción del tipo de agua es requerida');
+    
+    // Validación específica para agua residual
+    if (datos.tipoDeAgua?.tipo === TIPOS_AGUA.RESIDUAL) {
+        if (!datos.tipoDeAgua?.subtipoResidual) {
+            errores.push('Para agua residual debe especificar si es doméstica o no doméstica');
+        } else if (!Object.values(SUBTIPOS_RESIDUAL).includes(datos.tipoDeAgua.subtipoResidual)) {
+            errores.push('El subtipo de agua residual debe ser "domestica" o "no_domestica"');
+        }
+    }
     
     // 3. Lugar de Muestreo
     if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');

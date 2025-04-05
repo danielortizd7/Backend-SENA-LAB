@@ -8,6 +8,26 @@ const TIPOS_MUESTREO = {
     COMPUESTO: "Compuesto"
 };
 
+// Constantes para validación
+const TIPOS_AGUA = {
+    POTABLE: 'potable',
+    NATURAL: 'natural',
+    RESIDUAL: 'residual',
+    OTRA: 'otra'
+};
+
+const SUBTIPOS_RESIDUAL = {
+    DOMESTICA: 'domestica',
+    NO_DOMESTICA: 'no domestica'
+};
+
+const ESTADOS = {
+    RECIBIDA: 'Recibida',
+    EN_PROCESO: 'En proceso',
+    COMPLETADA: 'Completada',
+    RECHAZADA: 'Rechazada'
+};
+
 // Esquema para resultados de análisis
 const resultadoAnalisisSchema = new mongoose.Schema({
     valor: {
@@ -25,7 +45,7 @@ const tipoAguaSchema = new mongoose.Schema({
     tipo: {
         type: String,
         required: true,
-        enum: ['potable', 'natural', 'residual', 'otra']
+        enum: Object.values(TIPOS_AGUA)
     },
     codigo: {
         type: String,
@@ -34,6 +54,13 @@ const tipoAguaSchema = new mongoose.Schema({
     descripcion: {
         type: String,
         required: true
+    },
+    subtipoResidual: {
+        type: String,
+        enum: Object.values(SUBTIPOS_RESIDUAL),
+        required: function() {
+            return this.tipo === TIPOS_AGUA.RESIDUAL;
+        }
     }
 });
 
@@ -259,6 +286,9 @@ const TipoAgua = mongoose.models.TipoAgua || mongoose.model('TipoAgua', tipoAgua
 module.exports = {
     Muestra,
     TipoAgua,
+    TIPOS_AGUA,
+    SUBTIPOS_RESIDUAL,
+    ESTADOS,
     estadosValidos,
     TIPOS_MUESTREO
 };
