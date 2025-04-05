@@ -28,7 +28,7 @@ const autenticar = (usuarioModel) => async (req, res, next) => {
             });
         }
         
-        // Asignar usuario y sus permisos a req
+        
         req.usuario = {
             ...usuario.toObject(),
             permisos: usuario.rol?.permisos || []
@@ -38,7 +38,7 @@ const autenticar = (usuarioModel) => async (req, res, next) => {
     } catch (error) {
         console.error("Error de autenticación:", error);
         if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({ // Corregido de join a json
+            return res.status(401).json({ 
                 error: 'Sesión expirada',
                 detalles: 'Por favor, inicie sesión nuevamente'
             });
@@ -85,7 +85,7 @@ const soloRoles = (rolesPermitidos = []) => {
     };
 };
 
-// Middleware de verificación de permisos
+
 const verificarPermisos = (permisosRequeridos = []) => {
     return async (req, res, next) => {
         try {
