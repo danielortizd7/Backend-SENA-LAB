@@ -3,6 +3,7 @@ const router = express.Router();
 const { verificarDocumento, verificarToken, verificarRolAdministrador, verificarLaboratorista } = require('../../../shared/middleware/authMiddleware');
 const { senaLabValidators } = require('../../../shared/validators');
 const muestrasController = require('../controllers/muestrasController');
+const { paginationMiddleware } = require('../../../shared/middleware/paginationMiddleware');
 
 // ===== RUTAS PÚBLICAS (verificarDocumento) =====
 // Ruta para validar usuario
@@ -16,8 +17,8 @@ router.put('/tipos-agua/:id', verificarToken, verificarRolAdministrador, muestra
 
 // Rutas de Muestras
 router.post('/', verificarToken, muestrasController.registrarMuestra);
-router.get('/', verificarToken, muestrasController.obtenerMuestras);
-router.get('/:id', verificarToken, muestrasController.obtenerMuestra);
+router.get('/', paginationMiddleware, muestrasController.obtenerMuestras);
+router.get('/:id', muestrasController.obtenerMuestra);
 router.put('/:id', verificarToken, muestrasController.actualizarMuestra);
 router.delete('/:id', verificarToken, verificarRolAdministrador, muestrasController.eliminarMuestra);
 

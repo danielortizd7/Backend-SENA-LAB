@@ -82,26 +82,37 @@ const crearCambioMedicion = (campo, valorAnterior, valorNuevo) => {
   };
 };
 
-const registrarResultado = async (req, res, next) => {
+const registrarResultado = async (req, res) => {
     try {
-        const { idMuestra } = req.params;
+        const { id } = req.params;
         const { resultados, observaciones } = req.body;
-        const usuario = req.usuario; // Datos del usuario del token
+        const usuario = req.usuario;
 
-        // Validar que la muestra existe
-        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'El ID de la muestra es requerido',
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
+
+        // Obtener la muestra primero
+        const muestra = await Muestra.findOne({ id_muestra: id });
         if (!muestra) {
-            throw new ValidationError('Muestra no encontrada');
+            return res.status(404).json({
+                success: false,
+                message: 'Muestra no encontrada',
+                errorCode: 'NOT_FOUND'
+            });
         }
 
         // Validar que hay resultados y que es un objeto
         if (!resultados || typeof resultados !== 'object' || Array.isArray(resultados)) {
-            throw new ValidationError('Los resultados deben ser un objeto con al menos un análisis');
-        }
-
-        // Validar que hay al menos un resultado
-        if (Object.keys(resultados).length === 0) {
-            throw new ValidationError('Debe ingresar al menos un resultado');
+            return res.status(400).json({
+                success: false,
+                message: 'Los resultados deben ser un objeto con al menos un análisis',
+                errorCode: 'VALIDATION_ERROR'
+            });
         }
 
         // Validar que los análisis registrados correspondan a los seleccionados
@@ -110,274 +121,297 @@ const registrarResultado = async (req, res, next) => {
         );
 
         if (analisisNoSeleccionados.length > 0) {
-            throw new ValidationError(`Los siguientes análisis no fueron seleccionados originalmente: ${analisisNoSeleccionados.join(', ')}`);
+            return res.status(400).json({
+                success: false,
+                message: `Los siguientes análisis no fueron seleccionados originalmente: ${analisisNoSeleccionados.join(', ')}`,
+                errorCode: 'VALIDATION_ERROR'
+            });
         }
 
-        // Preparar el registro de cambios
-        const cambiosRealizados = {
-            resultados: {}
-        };
-
-        // Validar estructura de cada resultado y preparar registro de cambios
-        Object.entries(resultados).forEach(([analisis, resultado]) => {
-            if (!resultado || typeof resultado !== 'object') {
-                throw new ValidationError(`El resultado para ${analisis} debe ser un objeto`);
-            }
-            if (!resultado.valor) {
-                throw new ValidationError(`Debe especificar un valor para ${analisis}`);
-            }
-            if (!resultado.unidad) {
-                throw new ValidationError(`Debe especificar una unidad para ${analisis}`);
-            }
-
-            // Registrar cambios para cada análisis
-            cambiosRealizados.resultados[analisis] = {
-                valorAnterior: muestra.resultados?.[analisis]?.valor || "",
-                valorNuevo: resultado.valor,
-                unidad: resultado.unidad
-            };
-        });
-
-        // Registrar cambios en observaciones
-        if (observaciones) {
-            cambiosRealizados.observaciones = {
-                valorAnterior: muestra.observaciones || "",
-                valorNuevo: observaciones
-            };
-        }
-
-        // Crear entrada en el historial de cambios
-        const cambioHistorial = {
-            nombre: usuario.nombre,
-            cedula: usuario.documento,
-            fecha: new Date(),
-            cambiosRealizados
-        };
-
-        // Actualizar la muestra
-        const actualizacion = {
-            resultados,
-            observaciones,
-            verificado: false,
-            cedulaLaboratorista: usuario.documento,
-            nombreLaboratorista: usuario.nombre,
-            $push: {
-                historialCambios: cambioHistorial
-            }
-        };
-
-        const muestraActualizada = await Muestra.findOneAndUpdate(
-            { id_muestra: idMuestra },
-            actualizacion,
-            { new: true }
-        );
-
-        if (!muestraActualizada) {
-            throw new ValidationError('Error al actualizar la muestra');
-        }
-
-        ResponseHandler.success(res, { 
-            muestra: muestraActualizada 
-        }, 'Resultados registrados exitosamente');
-
-    } catch (error) {
-        console.error('Error al registrar resultados:', error);
-        if (error instanceof ValidationError) {
-            return ResponseHandler.error(res, error);
-        }
-        next(error);
-    }
-};
-
-const editarResultado = async (req, res, next) => {
-    try {
-        const { idMuestra } = req.params;
-        const { resultados, observaciones } = req.body;
-        const usuario = req.usuario; // Datos del usuario del token
-
-        // Validar que la muestra existe
-        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
-        if (!muestra) {
-            throw new ValidationError('Muestra no encontrada');
-        }
-
-        // Las mismas validaciones que en registrar
-        if (!resultados || typeof resultados !== 'object' || Array.isArray(resultados)) {
-            throw new ValidationError('Los resultados deben ser un objeto con al menos un análisis');
-        }
-
-        if (Object.keys(resultados).length === 0) {
-            throw new ValidationError('Debe ingresar al menos un resultado');
-        }
-
-        // Preparar el registro de cambios
-        const cambiosRealizados = {
-            resultados: {}
-        };
-
-        // Validar y registrar cambios para cada resultado
-        Object.entries(resultados).forEach(([analisis, resultado]) => {
-            if (!resultado || typeof resultado !== 'object') {
-                throw new ValidationError(`El resultado para ${analisis} debe ser un objeto`);
-            }
-            if (!resultado.valor) {
-                throw new ValidationError(`Debe especificar un valor para ${analisis}`);
-            }
-            if (!resultado.unidad) {
-                throw new ValidationError(`Debe especificar una unidad para ${analisis}`);
-            }
-
-            // Solo registrar si hay cambios
-            if (muestra.resultados?.[analisis]?.valor !== resultado.valor) {
-                cambiosRealizados.resultados[analisis] = {
-                    valorAnterior: muestra.resultados?.[analisis]?.valor || "",
-                    valorNuevo: resultado.valor,
-                    unidad: resultado.unidad
+        let resultado = await Resultado.findOne({ idMuestra: id });
+        
+        if (resultado) {
+            // Si existe, actualizar
+            const cambiosRealizados = {};
+            
+            Object.entries(resultados).forEach(([nombre, datos]) => {
+                const nombreLower = nombre.toLowerCase();
+                // Guardar el valor anterior antes de actualizarlo
+                const valorAnterior = resultado[nombreLower] ? {
+                    valor: resultado[nombreLower].valor,
+                    unidad: resultado[nombreLower].unidad
+                } : null;
+                
+                // Actualizar el valor
+                resultado[nombreLower] = {
+                    valor: datos.valor,
+                    unidad: datos.unidad
                 };
-            }
-        });
-
-        // Registrar cambios en observaciones si hay
-        if (observaciones && observaciones !== muestra.observaciones) {
-            cambiosRealizados.observaciones = {
-                valorAnterior: muestra.observaciones || "",
-                valorNuevo: observaciones
-            };
-        }
-
-        // Solo actualizar si hay cambios
-        if (Object.keys(cambiosRealizados.resultados).length > 0 || cambiosRealizados.observaciones) {
-            const cambioHistorial = {
+                
+                // Registrar el cambio
+                cambiosRealizados[nombre] = {
+                    valorAnterior: valorAnterior ? `${valorAnterior.valor} ${valorAnterior.unidad}`.trim() : "No registrado",
+                    valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
+                    unidad: datos.unidad
+                };
+            });
+            
+            resultado.observaciones = observaciones;
+            resultado.verificado = false;
+            
+            // Agregar al historial de cambios
+            const cambio = {
                 nombre: usuario.nombre,
                 cedula: usuario.documento,
                 fecha: new Date(),
-                cambiosRealizados
+                observaciones: observaciones || "Sin observaciones",
+                cambiosRealizados: {
+                    resultados: cambiosRealizados
+                }
             };
+            
+            resultado.historialCambios.push(cambio);
+            
+            await resultado.save();
+        } else {
+            // Si no existe, crear nuevo
+            const cambiosIniciales = {};
+            Object.entries(resultados).forEach(([nombre, datos]) => {
+                cambiosIniciales[nombre] = {
+                    valorAnterior: "No registrado",
+                    valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
+                    unidad: datos.unidad
+                };
+            });
 
-            const actualizacion = {
-                resultados: {
-                    ...muestra.resultados,
-                    ...resultados
-                },
+            const nuevoResultado = {
+                idMuestra: id,
+                cliente: muestra.cliente,
+                tipoDeAgua: muestra.tipoDeAgua,
+                lugarMuestreo: muestra.lugarMuestreo,
+                fechaHoraMuestreo: muestra.fechaHoraMuestreo,
+                tipoAnalisis: muestra.tipoAnalisis,
+                estado: 'En análisis',
                 observaciones,
                 verificado: false,
-                $push: {
-                    historialCambios: cambioHistorial
-                }
+                cedulaLaboratorista: usuario.documento,
+                nombreLaboratorista: usuario.nombre,
+                historialCambios: [{
+                    nombre: usuario.nombre,
+                    cedula: usuario.documento,
+                    fecha: new Date(),
+                    observaciones: observaciones || "Sin observaciones",
+                    cambiosRealizados: {
+                        resultados: cambiosIniciales
+                    }
+                }]
             };
 
-            const muestraActualizada = await Muestra.findOneAndUpdate(
-                { id_muestra: idMuestra },
-                actualizacion,
-                { new: true }
-            );
+            // Agregar los resultados
+            Object.entries(resultados).forEach(([nombre, datos]) => {
+                nuevoResultado[nombre.toLowerCase()] = {
+                    valor: datos.valor,
+                    unidad: datos.unidad
+                };
+            });
 
-            if (!muestraActualizada) {
-                throw new ValidationError('Error al actualizar la muestra');
-            }
-
-            ResponseHandler.success(res, { 
-                muestra: muestraActualizada 
-            }, 'Resultados actualizados exitosamente');
-        } else {
-            ResponseHandler.success(res, { 
-                muestra 
-            }, 'No se detectaron cambios en los resultados');
+            resultado = await Resultado.create(nuevoResultado);
         }
 
-    } catch (error) {
-        console.error('Error al editar resultados:', error);
-        if (error instanceof ValidationError) {
-            return ResponseHandler.error(res, error);
-        }
-        next(error);
-    }
-};
-
-const obtenerResultados = async (req, res, next) => {
-    try {
-        const { idMuestra } = req.params;
-
-        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
-        if (!muestra) {
-            throw new ValidationError('Muestra no encontrada');
-        }
-
-        ResponseHandler.success(res, {
-            resultados: muestra.resultados,
-            observaciones: muestra.observaciones,
-            historialCambios: muestra.historialCambios,
-            verificado: muestra.verificado
-        });
-
-    } catch (error) {
-        console.error('Error al obtener resultados:', error);
-        if (error instanceof ValidationError) {
-            return ResponseHandler.error(res, error);
-        }
-        next(error);
-    }
-};
-
-const verificarResultado = async (req, res, next) => {
-    try {
-        const { idMuestra } = req.params;
-        const usuario = req.usuario;
-
-        const muestra = await Muestra.findOneAndUpdate(
-            { id_muestra: idMuestra },
-            { 
-                verificado: true,
-                $push: {
-                    historialCambios: {
-                        nombre: usuario.nombre,
-                        cedula: usuario.documento,
-                        fecha: new Date(),
-                        cambiosRealizados: {
-                            verificacion: {
-                                valorAnterior: false,
-                                valorNuevo: true
-                            }
-                        }
-                    }
-                }
-            },
-            { new: true }
+        // Actualizar el estado de la muestra
+        await Muestra.findOneAndUpdate(
+            { id_muestra: id },
+            { estado: 'En análisis' }
         );
 
-        if (!muestra) {
-            throw new ValidationError('Muestra no encontrada');
-        }
+        // Obtener el resultado actualizado
+        const resultadoActualizado = await Resultado.findOne({ idMuestra: id });
 
-        ResponseHandler.success(res, { 
-            muestra 
-        }, 'Resultados verificados exitosamente');
-
+        return res.status(200).json({
+            success: true,
+            message: 'Resultados registrados exitosamente',
+            data: resultadoActualizado
+        });
     } catch (error) {
-        console.error('Error al verificar resultados:', error);
-        if (error instanceof ValidationError) {
-            return ResponseHandler.error(res, error);
-        }
-        next(error);
+        console.error('Error al registrar resultados:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error interno al registrar resultados',
+            error: error.message
+        });
     }
 };
 
-const obtenerTodosResultados = async (req, res, next) => {
+const editarResultado = async (req, res) => {
     try {
-        const muestras = await Muestra.find({
-            resultados: { $exists: true, $ne: {} }
-        }).sort({ createdAt: -1 });
+        const { id } = req.params;
+        const { resultados, observaciones } = req.body;
+        const usuario = req.usuario;
 
-        ResponseHandler.success(res, {
-            resultados: muestras
-        }, 'Resultados obtenidos exitosamente');
-
-    } catch (error) {
-        console.error('Error al obtener todos los resultados:', error);
-        if (error instanceof ValidationError) {
-            return ResponseHandler.error(res, error);
+        // Buscar el resultado usando idMuestra en lugar de id_muestra
+        const resultado = await Resultado.findOne({ idMuestra: id });
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'Resultado no encontrado',
+                errorCode: 'NOT_FOUND'
+            });
         }
-        next(error);
+
+        // Validar que hay resultados y que es un objeto
+        if (!resultados || typeof resultados !== 'object' || Array.isArray(resultados)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Los resultados deben ser un objeto con al menos un análisis',
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
+
+        // Registrar cambios
+        const cambiosRealizados = {};
+        Object.entries(resultados).forEach(([nombre, datos]) => {
+            const nombreLower = nombre.toLowerCase();
+            // Guardar el valor anterior
+            const valorAnterior = resultado[nombreLower] ? {
+                valor: resultado[nombreLower].valor,
+                unidad: resultado[nombreLower].unidad
+            } : null;
+            
+            // Actualizar el valor
+            resultado[nombreLower] = {
+                valor: datos.valor,
+                unidad: datos.unidad
+            };
+            
+            // Registrar el cambio
+            cambiosRealizados[nombre] = {
+                valorAnterior: valorAnterior ? `${valorAnterior.valor} ${valorAnterior.unidad}`.trim() : "No registrado",
+                valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
+                unidad: datos.unidad
+            };
+        });
+
+        resultado.observaciones = observaciones;
+        resultado.verificado = false;
+        
+        // Agregar al historial de cambios
+        const cambio = {
+            nombre: usuario.nombre,
+            cedula: usuario.documento,
+            fecha: new Date(),
+            observaciones: observaciones || "Sin observaciones",
+            cambiosRealizados: {
+                resultados: cambiosRealizados
+            }
+        };
+        
+        resultado.historialCambios.push(cambio);
+
+        await resultado.save();
+
+        // Obtener el resultado actualizado con la muestra relacionada
+        const resultadoActualizado = await Resultado.findWithMuestra(id);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Resultado actualizado exitosamente',
+            data: resultadoActualizado
+        });
+    } catch (error) {
+        console.error('Error al editar resultado:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al editar el resultado',
+            error: error.message
+        });
+    }
+};
+
+const obtenerResultados = async (req, res) => {
+    try {
+        const { page = 1, limit = 10, ...filters } = req.query;
+        const options = {
+            skip: (page - 1) * limit,
+            limit: parseInt(limit),
+            sort: { fechaHoraMuestreo: -1 }
+        };
+
+        const query = {};
+        if (filters.id_muestra) query.id_muestra = filters.id_muestra;
+        if (filters.estado) query.estado = filters.estado;
+        if (filters.verificado !== undefined) query.verificado = filters.verificado === 'true';
+
+        const resultados = await Resultado.findAllWithMuestras(query, options);
+        const total = await Resultado.countDocuments(query);
+
+        return res.status(200).json({
+            success: true,
+            data: resultados,
+            total,
+            page: parseInt(page),
+            totalPages: Math.ceil(total / limit)
+        });
+    } catch (error) {
+        console.error('Error al obtener resultados:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener los resultados',
+            error: error.message
+        });
+    }
+};
+
+const obtenerResultado = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resultado = await Resultado.findWithMuestra(id);
+
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'Resultado no encontrado',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: resultado
+        });
+    } catch (error) {
+        console.error('Error al obtener resultado:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener el resultado',
+            error: error.message
+        });
+    }
+};
+
+const eliminarResultado = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resultado = await Resultado.findOneAndDelete({ id_muestra: id });
+
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'Resultado no encontrado',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Resultado eliminado exitosamente'
+        });
+    } catch (error) {
+        console.error('Error al eliminar resultado:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al eliminar el resultado',
+            error: error.message
+        });
     }
 };
 
@@ -385,6 +419,6 @@ module.exports = {
     registrarResultado,
     editarResultado,
     obtenerResultados,
-    verificarResultado,
-    obtenerTodosResultados
+    obtenerResultado,
+    eliminarResultado
 };

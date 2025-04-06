@@ -10,7 +10,7 @@ const { registrarAccion } = require('./src/shared/middleware/auditMiddleware');
 const muestrasRoutes = require("./src/app/registro-muestras/routes/muestrasRoutes");
 const analisisRoutes = require("./src/app/registro-muestras/routes/analisisRoutes");
 const cambiosEstadoRoutes = require("./src/app/cambios-estado/routes/cambioEstadoRoutes");
-const resultadosRoutes = require("./src/app/ingreso-resultados/routes/resultadoRoutes.js");
+const resultadosRoutes = require("./src/app/ingreso-resultados/routes/resultadosRoutes.js");
 const firmaRoutes = require("./src/app/firma-digital/routes/firmaRoutes.js");
 const auditoriaRoutes = require("./src/app/auditoria/routes/auditoriaRoutes.js");
 

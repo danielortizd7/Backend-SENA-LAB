@@ -9,6 +9,7 @@ const muestrasService = require('../services/muestrasService');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
 
 // URL base para las peticiones a la API de usuarios
 const BASE_URL = process.env.NODE_ENV === 'production' 
@@ -235,69 +236,56 @@ const formatearFechaHora = (fecha) => {
 const obtenerMuestras = async (req, res, next) => {
     try {
         const { 
-            tipo, 
-            estado, 
-            fechaInicio, 
+            id_muestra,
+            tipo,
+            estado,
+            fechaInicio,
             fechaFin,
-            page = 1,
-            limit = 10,
-            sortBy = 'fechaHoraMuestreo',
-            sortOrder = 'desc'
+            cliente
         } = req.query;
 
         let filtro = {};
 
         // Aplicar filtros si se proporcionan
+        if (id_muestra) filtro.id_muestra = id_muestra;
         if (tipo) filtro['tipoDeAgua.tipo'] = tipo;
         if (estado) filtro.estado = estado;
+        if (cliente) filtro['cliente.documento'] = cliente;
         if (fechaInicio || fechaFin) {
             filtro.fechaHoraMuestreo = {};
             if (fechaInicio) filtro.fechaHoraMuestreo.$gte = new Date(fechaInicio);
             if (fechaFin) filtro.fechaHoraMuestreo.$lte = new Date(fechaFin);
         }
 
-        // Calcular skip para paginación
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-        const limitInt = parseInt(limit);
-
         // Configurar el ordenamiento
         const sort = {};
-        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+        sort[req.pagination.sortBy] = req.pagination.sortOrder === 'desc' ? -1 : 1;
 
         // Ejecutar las consultas en paralelo
         const [muestras, total] = await Promise.all([
             Muestra.find(filtro)
-                .select('id_muestra documento tipoDeAgua lugarMuestreo fechaHoraMuestreo estado')
-                .populate('creadoPor', 'nombre email documento')
+                .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente')
                 .sort(sort)
-                .skip(skip)
-                .limit(limitInt)
-                .lean(), // Usar lean() para obtener objetos JavaScript planos
+                .skip(req.pagination.skip)
+                .limit(req.pagination.limit)
+                .lean(),
             Muestra.countDocuments(filtro)
         ]);
 
-        // Formatear las fechas en las muestras
+        // Formatear las fechas en los resultados
         const muestrasFormateadas = muestras.map(muestra => ({
             ...muestra,
             fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo)
         }));
 
-        // Calcular información de paginación
-        const totalPages = Math.ceil(total / limitInt);
-        const hasNextPage = page < totalPages;
-        const hasPrevPage = page > 1;
+        // Formatear la respuesta con paginación
+        const respuesta = formatPaginationResponse(
+            muestrasFormateadas,
+            total,
+            req.pagination
+        );
 
-        ResponseHandler.success(res, {
-            muestras: muestrasFormateadas,
-            pagination: {
-                total,
-                totalPages,
-                currentPage: parseInt(page),
-                limit: limitInt,
-                hasNextPage,
-                hasPrevPage
-            }
-        }, 'Muestras obtenidas correctamente');
+        ResponseHandler.success(res, respuesta, 'Muestras obtenidas correctamente');
     } catch (error) {
         next(error);
     }
@@ -444,8 +432,7 @@ const registrarMuestra = async (req, res, next) => {
             console.error('Error al obtener datos del cliente:', error);
             datosCliente = {
                 documento: datos.documento,
-                nombre: 'Cliente no identificado',
-                rol: 'cliente'
+                nombre: 'Cliente no identificado'
             };
         }
 
