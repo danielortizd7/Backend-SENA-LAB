@@ -88,6 +88,15 @@ const registrarResultado = async (req, res) => {
         const { resultados, observaciones } = req.body;
         const usuario = req.usuario;
 
+        // Validar rol de laboratorista
+        if (usuario.rol !== 'laboratorista') {
+            return res.status(403).json({
+                success: false,
+                message: 'No tiene permisos para registrar resultados. Solo los laboratoristas pueden realizar esta acción.',
+                errorCode: 'AUTHORIZATION_ERROR'
+            });
+        }
+
         if (!id) {
             return res.status(400).json({
                 success: false,
@@ -263,6 +272,15 @@ const editarResultado = async (req, res) => {
         const { resultados, observaciones } = req.body;
         const usuario = req.usuario;
 
+        // Validar rol de laboratorista
+        if (usuario.rol !== 'laboratorista') {
+            return res.status(403).json({
+                success: false,
+                message: 'No tiene permisos para editar resultados. Solo los laboratoristas pueden realizar esta acción.',
+                errorCode: 'AUTHORIZATION_ERROR'
+            });
+        }
+
         // Buscar el resultado usando idMuestra en lugar de id_muestra
         const resultado = await Resultado.findOne({ idMuestra: id });
         if (!resultado) {
@@ -403,6 +421,74 @@ const obtenerResultado = async (req, res) => {
     }
 };
 
+const obtenerResultadoPorMuestra = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const resultado = await Resultado.findOne({ idMuestra: id })
+            .select('-__v') // Excluir el campo __v
+            .lean(); // Convertir a objeto plano
+
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'No hay resultados registrados para esta muestra',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Transformar el resultado antes de enviarlo
+        const resultadoTransformado = {
+            _id: resultado._id,
+            idMuestra: resultado.idMuestra,
+            cliente: {
+                nombre: resultado.cliente?.nombre,
+                documento: resultado.cliente?.documento
+            },
+            tipoDeAgua: resultado.tipoDeAgua,
+            lugarMuestreo: resultado.lugarMuestreo,
+            fechaHoraMuestreo: resultado.fechaHoraMuestreo,
+            tipoAnalisis: resultado.tipoAnalisis,
+            estado: resultado.estado,
+            // Incluir todos los análisis
+            cloruros: resultado.cloruros,
+            fluoruros: resultado.fluoruros,
+            nitratos: resultado.nitratos,
+            nitritos: resultado.nitritos,
+            sulfatos: resultado.sulfatos,
+            fosfatos: resultado.fosfatos,
+            manganeso: resultado.manganeso,
+            observaciones: resultado.observaciones,
+            verificado: resultado.verificado,
+            cedulaLaboratorista: resultado.cedulaLaboratorista,
+            nombreLaboratorista: resultado.nombreLaboratorista,
+            // Incluir el historial completo de cambios
+            historialCambios: resultado.historialCambios.map(cambio => ({
+                nombre: cambio.nombre,
+                cedula: cambio.cedula,
+                fecha: cambio.fecha,
+                observaciones: cambio.observaciones,
+                cambiosRealizados: {
+                    resultados: cambio.cambiosRealizados.resultados
+                }
+            })),
+            createdAt: resultado.createdAt,
+            updatedAt: resultado.updatedAt
+        };
+
+        return res.status(200).json({
+            success: true,
+            data: resultadoTransformado
+        });
+    } catch (error) {
+        console.error('Error al obtener resultado por muestra:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener el resultado',
+            error: error.message
+        });
+    }
+};
+
 const eliminarResultado = async (req, res) => {
     try {
         const { id } = req.params;
@@ -435,5 +521,6 @@ module.exports = {
     editarResultado,
     obtenerResultados,
     obtenerResultado,
+    obtenerResultadoPorMuestra,
     eliminarResultado
 };
