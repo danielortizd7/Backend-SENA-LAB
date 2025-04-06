@@ -186,7 +186,10 @@ const registrarResultado = async (req, res) => {
 
             const nuevoResultado = {
                 idMuestra: id,
-                cliente: muestra.cliente,
+                cliente: {
+                    nombre: muestra.cliente.nombre,
+                    documento: muestra.cliente.documento
+                },
                 tipoDeAgua: muestra.tipoDeAgua,
                 lugarMuestreo: muestra.lugarMuestreo,
                 fechaHoraMuestreo: muestra.fechaHoraMuestreo,
@@ -224,13 +227,25 @@ const registrarResultado = async (req, res) => {
             { estado: 'En análisis' }
         );
 
-        // Obtener el resultado actualizado
+        // Obtener el resultado actualizado y transformarlo
         const resultadoActualizado = await Resultado.findOne({ idMuestra: id });
+        
+        // Transformar el resultado antes de enviarlo
+        const resultadoTransformado = resultadoActualizado.toObject();
+        delete resultadoTransformado._id;
+        
+        // Asegurar que solo se incluyan nombre y documento del cliente
+        if (resultadoTransformado.cliente) {
+            resultadoTransformado.cliente = {
+                nombre: resultadoTransformado.cliente.nombre,
+                documento: resultadoTransformado.cliente.documento
+            };
+        }
 
         return res.status(200).json({
             success: true,
             message: 'Resultados registrados exitosamente',
-            data: resultadoActualizado
+            data: resultadoTransformado
         });
     } catch (error) {
         console.error('Error al registrar resultados:', error);

@@ -12,9 +12,7 @@ const axios = require('axios');
 const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
 
 // URL base para las peticiones a la API de usuarios
-const BASE_URL = process.env.NODE_ENV === 'production' 
-    ? 'https://backend-sena-lab-1-qpzp.onrender.com'
-    : 'http://localhost:5000';
+const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
 
 //Funciones de Utilidad 
 const obtenerDatosUsuario = (req) => {
@@ -410,26 +408,57 @@ const registrarMuestra = async (req, res, next) => {
             throw new ValidationError('Usuario no autenticado o ID no disponible');
         }
 
-        // Obtener datos del administrador
-        let datosAdministrador;
-        try {
-            datosAdministrador = await obtenerDatosUsuarioExterno(req.usuario.documento);
-            if (!datosAdministrador || !datosAdministrador.nombre) {
-                throw new Error('No se pudieron obtener los datos del administrador');
-            }
-            console.log('Datos del administrador:', datosAdministrador);
-        } catch (error) {
-            console.error('Error al obtener datos del administrador:', error);
-            throw new ValidationError(`Error al obtener datos del administrador: ${error.message}`);
-        }
+        // Obtener datos del administrador directamente del token
+        const datosAdministrador = {
+            nombre: req.usuario.nombre || 'Usuario no identificado',
+            documento: req.usuario.documento,
+            email: req.usuario.email,
+            telefono: req.usuario.telefono,
+            direccion: req.usuario.direccion
+        };
+        
+        console.log('Datos del administrador desde token:', datosAdministrador);
 
-        // Obtener datos del cliente
+        // Obtener datos del cliente desde la API de usuarios
         let datosCliente;
         try {
-            datosCliente = await obtenerDatosUsuarioExterno(datos.documento);
-            console.log('Datos del cliente:', datosCliente);
+            console.log('Consultando datos del cliente con documento:', datos.documento);
+            
+            const response = await axios.get(`${BASE_URL}/api/usuarios/buscar`, {
+                params: { documento: datos.documento },
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log('Respuesta de la API de usuarios:', response.data);
+            
+            if (response.data && response.data.nombre) {
+                datosCliente = {
+                    nombre: response.data.nombre,
+                    documento: response.data.documento,
+                    email: response.data.email,
+                    telefono: response.data.telefono,
+                    direccion: response.data.direccion
+                };
+                console.log('Datos del cliente encontrados:', datosCliente);
+            } else {
+                console.log('No se encontraron datos del cliente, usando valores por defecto');
+                datosCliente = {
+                    nombre: 'Cliente no identificado',
+                    documento: datos.documento
+                };
+            }
         } catch (error) {
-            console.error('Error al obtener datos del cliente:', error);
+            console.error('Error al obtener datos del cliente:', error.response?.data || error.message);
+            datosCliente = {
+                nombre: 'Cliente no identificado',
+                documento: datos.documento
+            };
+        }
+
+        if (!datosCliente) {
             datosCliente = {
                 documento: datos.documento,
                 nombre: 'Cliente no identificado'
@@ -462,12 +491,16 @@ const registrarMuestra = async (req, res, next) => {
             cliente: datosCliente,
             estado: 'Recibida',
             firmas: {
-                administrador: datosAdministrador,
-                cliente: datosCliente,
-                firmaAdministrador: datos.firmas?.firmaAdministrador?.firma || '',
-                fechaFirmaAdministrador: datos.firmas?.firmaAdministrador?.fecha || new Date(),
-                firmaCliente: datos.firmas?.firmaCliente?.firma || '',
-                fechaFirmaCliente: datos.firmas?.firmaCliente?.fecha || new Date()
+                administrador: {
+                    nombre: datosAdministrador.nombre,
+                    documento: datosAdministrador.documento,
+                    firmaAdministrador: datos.firmas?.firmaAdministrador?.firma || ''
+                },
+                cliente: {
+                    nombre: datosCliente.nombre,
+                    documento: datosCliente.documento,
+                    firmaCliente: datos.firmas?.firmaCliente?.firma || ''
+                }
             },
             creadoPor: datosAdministrador,
             historial: [{
@@ -488,29 +521,65 @@ const registrarMuestra = async (req, res, next) => {
         // Guardar la muestra
         const muestraGuardada = await muestra.save();
 
-        // Formatear las fechas para la respuesta
-        const formatearFecha = (fecha) => {
-            return {
-                fecha: fecha.toLocaleDateString('es-CO'),
-                hora: fecha.toLocaleTimeString('es-CO', { hour: 'numeric', minute: 'numeric', hour12: true })
-            };
-        };
-
-        // Preparar la respuesta
+        // Preparar la respuesta simplificada
         const respuesta = {
-            ...muestraGuardada.toObject(),
-            createdAt: formatearFecha(muestraGuardada.createdAt),
-            updatedAt: formatearFecha(muestraGuardada.updatedAt),
-            fechaHoraMuestreo: formatearFecha(muestraGuardada.fechaHoraMuestreo),
-            historial: muestraGuardada.historial.map(h => ({
-                ...h,
-                fechaCambio: formatearFecha(h.fechaCambio)
-            })),
+            id_muestra: muestraGuardada.id_muestra,
+            cliente: {
+                nombre: muestraGuardada.cliente.nombre,
+                documento: muestraGuardada.cliente.documento
+            },
+            tipoDeAgua: {
+                tipo: muestraGuardada.tipoDeAgua.tipo,
+                codigo: muestraGuardada.tipoDeAgua.codigo,
+                descripcion: muestraGuardada.tipoDeAgua.descripcion
+            },
+            tipoMuestreo: muestraGuardada.tipoMuestreo,
+            lugarMuestreo: muestraGuardada.lugarMuestreo,
+            fechaHoraMuestreo: muestraGuardada.fechaHoraMuestreo,
+            tipoAnalisis: muestraGuardada.tipoAnalisis,
+            identificacionMuestra: muestraGuardada.identificacionMuestra,
+            planMuestreo: muestraGuardada.planMuestreo,
+            condicionesAmbientales: muestraGuardada.condicionesAmbientales,
+            preservacionMuestra: muestraGuardada.preservacionMuestra,
+            analisisSeleccionados: muestraGuardada.analisisSeleccionados,
+            estado: muestraGuardada.estado,
+            rechazoMuestra: {
+                rechazada: muestraGuardada.rechazoMuestra.rechazada
+            },
+            observaciones: muestraGuardada.observaciones,
             firmas: {
-                ...muestraGuardada.firmas,
-                fechaFirmaAdministrador: formatearFecha(muestraGuardada.firmas.fechaFirmaAdministrador),
-                fechaFirmaCliente: formatearFecha(muestraGuardada.firmas.fechaFirmaCliente)
-            }
+                administrador: {
+                    nombre: muestraGuardada.firmas.administrador.nombre,
+                    documento: muestraGuardada.firmas.administrador.documento,
+                    firmaAdministrador: muestraGuardada.firmas.administrador.firmaAdministrador
+                },
+                cliente: {
+                    nombre: muestraGuardada.firmas.cliente.nombre,
+                    documento: muestraGuardada.firmas.cliente.documento,
+                    firmaCliente: muestraGuardada.firmas.cliente.firmaCliente
+                }
+            },
+            historial: muestraGuardada.historial.map(h => ({
+                estado: h.estado,
+                administrador: {
+                    nombre: h.administrador.nombre,
+                    documento: h.administrador.documento
+                },
+                fechaCambio: h.fechaCambio,
+                observaciones: h.observaciones
+            })),
+            creadoPor: {
+                nombre: muestraGuardada.creadoPor.nombre,
+                documento: muestraGuardada.creadoPor.documento
+            },
+            actualizadoPor: muestraGuardada.actualizadoPor.map(a => ({
+                nombre: a.nombre,
+                documento: a.documento,
+                fecha: a.fecha,
+                accion: a.accion
+            })),
+            createdAt: muestraGuardada.createdAt,
+            updatedAt: muestraGuardada.updatedAt
         };
 
         return res.status(201).json({

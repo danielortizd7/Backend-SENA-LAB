@@ -35,10 +35,7 @@ const datosUsuarioSchema = new mongoose.Schema({
     nombre: {
         type: String,
         required: true
-    },
-    email: String,
-    telefono: String,
-    direccion: String
+    }
 }, { _id: false });
 
 const historialCambioSchema = new mongoose.Schema({
@@ -64,7 +61,7 @@ const historialCambioSchema = new mongoose.Schema({
             of: cambioResultadoSchema
         }
     }
-}, { _id: true });
+}, { _id: false });
 
 const resultadoSchema = new mongoose.Schema(
     {
@@ -173,6 +170,18 @@ resultadoSchema.set('toObject', {
             ret.idMuestra = ret.idMuestra;
             delete ret.idMuestra;
         }
+        // Eliminar _id y __v de la respuesta principal
+        delete ret._id;
+        delete ret.__v;
+
+        // Eliminar _id de cada elemento del historial
+        if (ret.historialCambios) {
+            ret.historialCambios = ret.historialCambios.map(cambio => {
+                const cambioObj = cambio.toObject ? cambio.toObject() : cambio;
+                delete cambioObj._id;
+                return cambioObj;
+            });
+        }
         return ret;
     }
 });
@@ -182,6 +191,18 @@ resultadoSchema.set('toJSON', {
         if (ret.idMuestra) {
             ret.idMuestra = ret.idMuestra;
             delete ret.idMuestra;
+        }
+        // Eliminar _id y __v de la respuesta principal
+        delete ret._id;
+        delete ret.__v;
+
+        // Eliminar _id de cada elemento del historial
+        if (ret.historialCambios) {
+            ret.historialCambios = ret.historialCambios.map(cambio => {
+                const cambioObj = cambio.toObject ? cambio.toObject() : cambio;
+                delete cambioObj._id;
+                return cambioObj;
+            });
         }
         return ret;
     }

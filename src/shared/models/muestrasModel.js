@@ -82,28 +82,36 @@ const datosUsuarioSchema = new mongoose.Schema({
 // Esquema para las firmas
 const firmasSchema = new mongoose.Schema({
     administrador: {
-        type: datosUsuarioSchema,
-        required: true
+        nombre: {
+            type: String,
+            required: true,
+            default: 'Usuario no identificado'
+        },
+        documento: {
+            type: String,
+            required: true
+        },
+        firmaAdministrador: {
+            type: String,
+            required: false,
+            default: ''
+        }
     },
     cliente: {
-        type: datosUsuarioSchema,
-        required: true
-    },
-    fechaFirmaAdministrador: {
-        type: Date,
-        required: true
-    },
-    firmaAdministrador: {
-        type: String,
-        required: true
-    },
-    fechaFirmaCliente: {
-        type: Date,
-        required: true
-    },
-    firmaCliente: {
-        type: String,
-        required: true
+        nombre: {
+            type: String,
+            required: true,
+            default: 'Usuario no identificado'
+        },
+        documento: {
+            type: String,
+            required: true
+        },
+        firmaCliente: {
+            type: String,
+            required: false,
+            default: ''
+        }
     }
 }, { _id: false });
 
