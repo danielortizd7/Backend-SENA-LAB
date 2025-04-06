@@ -17,8 +17,8 @@ const TIPOS_AGUA = {
 };
 
 const SUBTIPOS_RESIDUAL = {
-    DOMESTICA: 'domestica',
-    NO_DOMESTICA: 'no domestica'
+    DOMESTICA: 'Doméstica',
+    NO_DOMESTICA: 'No Doméstica'
 };
 
 const ESTADOS = {
