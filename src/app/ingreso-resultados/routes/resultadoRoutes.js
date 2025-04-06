@@ -1,39 +1,41 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { 
-    registrarResultado, 
-    editarResultado, 
-    obtenerResultados, 
-    obtenerResultado,
-    obtenerResultadoPorMuestra,
-    eliminarResultado 
-} = require('../controllers/resultadoController');
-const { verificarToken } = require('../../../shared/middleware/authMiddleware');
-const { verificarLaboratorista } = require('../../../shared/middleware/authMiddleware');
-const { paginationMiddleware } = require('../../../shared/middleware/paginationMiddleware');
-const { resultadoValidators } = require('../../../shared/validators');
+const resultadoController = require("../controllers/resultadoController");
+const { verificarLaboratorista, verificarRolAdministrador } = require("../../../shared/middleware/authMiddleware");
+const { resultadoValidators } = require("../../../shared/validators");
 
-// Rutas públicas (requieren token)
-router.get('/muestra/:id', verificarToken, obtenerResultadoPorMuestra);
-router.get('/', [verificarToken, paginationMiddleware], obtenerResultados);
-router.get('/:id', verificarToken, obtenerResultado);
+// Obtener resultados de una muestra específica
+router.get("/muestra/:idMuestra", 
+  resultadoController.obtenerResultadoPorMuestra
+);
 
-// Rutas que requieren rol de laboratorista
-router.post('/registrar/:id', [
-    verificarToken, 
-    verificarLaboratorista,
-    resultadoValidators.guardarResultado
-], registrarResultado);
+// Obtener todos los resultados
+router.get("/resultados",
+  resultadoController.obtenerTodosResultados
+);
 
-router.put('/editar/:id', [
-    verificarToken, 
-    verificarLaboratorista,
-    resultadoValidators.editarResultado
-], editarResultado);
+// Las siguientes rutas requieren ser laboratorista
+router.use([
+  "/registrar/:idMuestra",
+  "/editar/:idMuestra"
+], verificarLaboratorista);
 
-router.delete('/:id', [
-    verificarToken, 
-    verificarLaboratorista
-], eliminarResultado);
+// Registrar resultados de una muestra
+router.post("/registrar/:idMuestra", 
+  resultadoValidators.guardarResultado,
+  resultadoController.registrarResultado
+);
+
+// Editar resultados de una muestra
+router.put("/editar/:idMuestra",
+  resultadoValidators.editarResultado,
+  resultadoController.editarResultado
+);
+
+// Verificar resultados de una muestra (solo administrador)
+router.post("/verificar/:idMuestra",
+  verificarRolAdministrador,
+  resultadoController.verificarResultado
+);
 
 module.exports = router;

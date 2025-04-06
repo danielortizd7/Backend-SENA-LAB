@@ -35,6 +35,28 @@ const validarValoresNumericos = (datos) => {
   });
 };
 
+// Validar formato del valor numérico
+const validarFormatoNumerico = (valor) => {
+    if (typeof valor !== 'string' && typeof valor !== 'number') {
+        throw new ValidationError('El valor debe ser un número o una cadena numérica');
+    }
+
+    const valorStr = valor.toString();
+    
+    // Verificar si contiene coma
+    if (valorStr.includes(',')) {
+        throw new ValidationError('El valor debe usar punto decimal (.) en lugar de coma (,)');
+    }
+
+    // Verificar que sea un número válido
+    const numero = Number(valorStr);
+    if (isNaN(numero)) {
+        throw new ValidationError('El valor debe ser un número válido');
+    }
+
+    return true;
+};
+
 const procesarMedicion = (valorCompleto) => {
   if (!valorCompleto) return null;
 
@@ -84,7 +106,7 @@ const crearCambioMedicion = (campo, valorAnterior, valorNuevo) => {
 
 const registrarResultado = async (req, res) => {
     try {
-        const { id } = req.params;
+        const { idMuestra } = req.params;
         const { resultados, observaciones } = req.body;
         const usuario = req.usuario;
 
@@ -97,7 +119,7 @@ const registrarResultado = async (req, res) => {
             });
         }
 
-        if (!id) {
+        if (!idMuestra) {
             return res.status(400).json({
                 success: false,
                 message: 'El ID de la muestra es requerido',
@@ -105,8 +127,21 @@ const registrarResultado = async (req, res) => {
             });
         }
 
+        // Validar formato de valores numéricos
+        for (const [analisis, datos] of Object.entries(resultados)) {
+            try {
+                validarFormatoNumerico(datos.valor);
+            } catch (error) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Error en el análisis ${analisis}: ${error.message}`,
+                    errorCode: 'VALIDATION_ERROR'
+                });
+            }
+        }
+
         // Obtener la muestra primero
-        const muestra = await Muestra.findOne({ id_muestra: id });
+        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
         if (!muestra) {
             return res.status(404).json({
                 success: false,
@@ -137,7 +172,7 @@ const registrarResultado = async (req, res) => {
             });
         }
 
-        let resultado = await Resultado.findOne({ idMuestra: id });
+        let resultado = await Resultado.findOne({ idMuestra });
         
         if (resultado) {
             // Si existe, actualizar
@@ -194,7 +229,7 @@ const registrarResultado = async (req, res) => {
             });
 
             const nuevoResultado = {
-                idMuestra: id,
+                idMuestra,
                 cliente: {
                     nombre: muestra.cliente.nombre,
                     documento: muestra.cliente.documento
@@ -232,12 +267,12 @@ const registrarResultado = async (req, res) => {
 
         // Actualizar el estado de la muestra
         await Muestra.findOneAndUpdate(
-            { id_muestra: id },
+            { id_muestra: idMuestra },
             { estado: 'En análisis' }
         );
 
         // Obtener el resultado actualizado y transformarlo
-        const resultadoActualizado = await Resultado.findOne({ idMuestra: id });
+        const resultadoActualizado = await Resultado.findOne({ idMuestra });
         
         // Transformar el resultado antes de enviarlo
         const resultadoTransformado = resultadoActualizado.toObject();
@@ -268,7 +303,7 @@ const registrarResultado = async (req, res) => {
 
 const editarResultado = async (req, res) => {
     try {
-        const { id } = req.params;
+        const { idMuestra } = req.params;
         const { resultados, observaciones } = req.body;
         const usuario = req.usuario;
 
@@ -281,8 +316,21 @@ const editarResultado = async (req, res) => {
             });
         }
 
-        // Buscar el resultado usando idMuestra en lugar de id_muestra
-        const resultado = await Resultado.findOne({ idMuestra: id });
+        // Validar formato de valores numéricos
+        for (const [analisis, datos] of Object.entries(resultados)) {
+            try {
+                validarFormatoNumerico(datos.valor);
+            } catch (error) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Error en el análisis ${analisis}: ${error.message}`,
+                    errorCode: 'VALIDATION_ERROR'
+                });
+            }
+        }
+
+        // Buscar el resultado usando idMuestra
+        const resultado = await Resultado.findOne({ idMuestra });
         if (!resultado) {
             return res.status(404).json({
                 success: false,
@@ -340,10 +388,13 @@ const editarResultado = async (req, res) => {
         
         resultado.historialCambios.push(cambio);
 
+        // Guardar los cambios
         await resultado.save();
 
-        // Obtener el resultado actualizado con la muestra relacionada
-        const resultadoActualizado = await Resultado.findWithMuestra(id);
+        // Obtener el resultado actualizado
+        const resultadoActualizado = await Resultado.findOne({ idMuestra })
+            .select('-__v')
+            .lean();
 
         return res.status(200).json({
             success: true,
@@ -423,10 +474,10 @@ const obtenerResultado = async (req, res) => {
 
 const obtenerResultadoPorMuestra = async (req, res) => {
     try {
-        const { id } = req.params;
-        const resultado = await Resultado.findOne({ idMuestra: id })
-            .select('-__v') // Excluir el campo __v
-            .lean(); // Convertir a objeto plano
+        const { idMuestra } = req.params;
+        const resultado = await Resultado.findOne({ idMuestra })
+            .select('-__v')
+            .lean();
 
         if (!resultado) {
             return res.status(404).json({
@@ -440,37 +491,24 @@ const obtenerResultadoPorMuestra = async (req, res) => {
         const resultadoTransformado = {
             _id: resultado._id,
             idMuestra: resultado.idMuestra,
-            cliente: {
-                nombre: resultado.cliente?.nombre,
-                documento: resultado.cliente?.documento
-            },
+            cliente: resultado.cliente || {},
             tipoDeAgua: resultado.tipoDeAgua,
             lugarMuestreo: resultado.lugarMuestreo,
             fechaHoraMuestreo: resultado.fechaHoraMuestreo,
             tipoAnalisis: resultado.tipoAnalisis,
             estado: resultado.estado,
-            // Incluir todos los análisis
-            cloruros: resultado.cloruros,
-            fluoruros: resultado.fluoruros,
-            nitratos: resultado.nitratos,
-            nitritos: resultado.nitritos,
-            sulfatos: resultado.sulfatos,
-            fosfatos: resultado.fosfatos,
-            manganeso: resultado.manganeso,
+            resultados: resultado.resultados || {},
             observaciones: resultado.observaciones,
             verificado: resultado.verificado,
             cedulaLaboratorista: resultado.cedulaLaboratorista,
             nombreLaboratorista: resultado.nombreLaboratorista,
-            // Incluir el historial completo de cambios
-            historialCambios: resultado.historialCambios.map(cambio => ({
+            historialCambios: resultado.historialCambios?.map(cambio => ({
                 nombre: cambio.nombre,
                 cedula: cambio.cedula,
                 fecha: cambio.fecha,
                 observaciones: cambio.observaciones,
-                cambiosRealizados: {
-                    resultados: cambio.cambiosRealizados.resultados
-                }
-            })),
+                cambiosRealizados: cambio.cambiosRealizados || {}
+            })) || [],
             createdAt: resultado.createdAt,
             updatedAt: resultado.updatedAt
         };
@@ -484,6 +522,189 @@ const obtenerResultadoPorMuestra = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: 'Error al obtener el resultado',
+            error: error.message
+        });
+    }
+};
+
+const verificarResultado = async (req, res) => {
+    try {
+        const { idMuestra } = req.params;
+        const { observaciones } = req.body;
+        const usuario = req.usuario;
+
+        // Validar rol de administrador
+        if (usuario.rol !== 'administrador') {
+            return res.status(403).json({
+                success: false,
+                message: 'No tiene permisos para verificar resultados. Solo los administradores pueden realizar esta acción.',
+                errorCode: 'AUTHORIZATION_ERROR'
+            });
+        }
+
+        // Buscar el resultado
+        const resultado = await Resultado.findOne({ idMuestra }).lean();
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'Resultado no encontrado',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Verificar que no esté ya verificado
+        if (resultado.verificado) {
+            return res.status(400).json({
+                success: false,
+                message: 'Este resultado ya ha sido verificado',
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
+
+        // Obtener los últimos valores de cada análisis
+        const ultimoCambio = resultado.historialCambios[resultado.historialCambios.length - 1];
+        const valoresActuales = {};
+        const resultadosFinales = {};
+
+        Object.entries(ultimoCambio.cambiosRealizados.resultados).forEach(([analisis, datos]) => {
+            if (analisis !== 'verificacion' && analisis !== 'resumenValores') {
+                valoresActuales[analisis] = datos.valorNuevo;
+                // Extraer valor numérico y unidad
+                const match = datos.valorNuevo.match(/^([\d.]+)\s*(.*)$/);
+                if (match) {
+                    resultadosFinales[analisis] = {
+                        valor: match[1],
+                        unidad: match[2].trim()
+                    };
+                }
+            }
+        });
+
+        // Crear resumen de la verificación
+        const resumenVerificacion = Object.entries(valoresActuales)
+            .map(([analisis, valor]) => `${analisis}: ${valor}`)
+            .join(', ');
+
+        // Crear observación detallada si no se proporciona una
+        const observacionFinal = observaciones || 
+            `Verificación completada. Valores finales verificados: ${resumenVerificacion}. ` +
+            `Todos los parámetros han sido revisados y cumplen con los estándares establecidos.`;
+
+        // Actualizar el resultado
+        const resultadoActualizado = await Resultado.findOneAndUpdate(
+            { idMuestra },
+            {
+                $set: {
+                    verificado: true,
+                    estado: 'Finalizada',
+                    resultados: resultadosFinales,
+                    observaciones: observacionFinal
+                },
+                $push: {
+                    historialCambios: {
+                        nombre: usuario.nombre,
+                        cedula: usuario.documento,
+                        fecha: new Date(),
+                        observaciones: observacionFinal,
+                        cambiosRealizados: {
+                            resultados: {
+                                verificacion: {
+                                    valorAnterior: "No verificado",
+                                    valorNuevo: "Verificado",
+                                    unidad: "Estado"
+                                },
+                                resumenValores: Object.entries(valoresActuales).reduce((acc, [analisis, valor]) => {
+                                    acc[analisis] = {
+                                        valorVerificado: valor,
+                                        estado: "Aprobado"
+                                    };
+                                    return acc;
+                                }, {})
+                            }
+                        }
+                    }
+                }
+            },
+            { new: true }
+        ).lean();
+
+        // Actualizar el estado de la muestra
+        await Muestra.findOneAndUpdate(
+            { id_muestra: idMuestra },
+            { 
+                estado: 'Finalizada',
+                fechaFinalizacion: new Date()
+            }
+        );
+
+        // Transformar el resultado antes de enviarlo
+        const resultadoCompleto = {
+            success: true,
+            message: 'Resultado verificado exitosamente',
+            data: {
+                _id: resultadoActualizado._id,
+                idMuestra: resultadoActualizado.idMuestra,
+                cliente: resultadoActualizado.cliente,
+                tipoDeAgua: resultadoActualizado.tipoDeAgua,
+                lugarMuestreo: resultadoActualizado.lugarMuestreo,
+                fechaHoraMuestreo: resultadoActualizado.fechaHoraMuestreo,
+                tipoAnalisis: resultadoActualizado.tipoAnalisis,
+                estado: resultadoActualizado.estado,
+                resultados: resultadosFinales,
+                observaciones: observacionFinal,
+                verificado: resultadoActualizado.verificado,
+                cedulaLaboratorista: resultadoActualizado.cedulaLaboratorista,
+                nombreLaboratorista: resultadoActualizado.nombreLaboratorista,
+                historialCambios: resultadoActualizado.historialCambios,
+                createdAt: resultadoActualizado.createdAt,
+                updatedAt: resultadoActualizado.updatedAt,
+                resumenVerificacion: valoresActuales,
+                fechaVerificacion: new Date()
+            }
+        };
+
+        return res.status(200).json(resultadoCompleto);
+    } catch (error) {
+        console.error('Error al verificar resultado:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al verificar el resultado',
+            error: error.message
+        });
+    }
+};
+
+const obtenerTodosResultados = async (req, res) => {
+    try {
+        const { page = 1, limit = 10 } = req.query;
+        const options = {
+            skip: (page - 1) * limit,
+            limit: parseInt(limit),
+            sort: { createdAt: -1 }
+        };
+
+        const [resultados, total] = await Promise.all([
+            Resultado.find()
+                .select('-__v')
+                .skip(options.skip)
+                .limit(options.limit)
+                .sort(options.sort)
+                .lean(),
+            Resultado.countDocuments()
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            data: resultados,
+            total,
+            page: parseInt(page),
+            totalPages: Math.ceil(total / limit)
+        });
+    } catch (error) {
+        console.error('Error al obtener todos los resultados:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener los resultados',
             error: error.message
         });
     }
@@ -522,5 +743,7 @@ module.exports = {
     obtenerResultados,
     obtenerResultado,
     obtenerResultadoPorMuestra,
+    obtenerTodosResultados,
+    verificarResultado,
     eliminarResultado
 };
