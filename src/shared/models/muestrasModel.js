@@ -242,12 +242,12 @@ const muestraSchema = new mongoose.Schema({
     preservacionMuestra: {
         type: String,
         required: true,
-        enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otra']
+        enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otro']
     },
-    preservacionOtra: {
+    descripcion: {
         type: String,
         required: function() {
-            return this.preservacionMuestra === 'Otra';
+            return this.preservacionMuestra === 'Otro';
         }
     },
     

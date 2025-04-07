@@ -108,8 +108,8 @@ const validarDatosMuestra = (datos) => {
     // 9. Preservación de la Muestra
     if (!datos.preservacionMuestra) {
         errores.push('El método de preservación es requerido');
-    } else if (datos.preservacionMuestra === 'Otra' && !datos.preservacionOtra) {
-        errores.push('Debe especificar el método de preservación cuando selecciona "Otra"');
+    } else if (datos.preservacionMuestra === 'Otro' && !datos.descripcion) {
+        errores.push('Debe especificar el método de preservación cuando selecciona "Otro"');
     }
     
     // 10. Análisis Seleccionados
@@ -490,6 +490,8 @@ const registrarMuestra = async (req, res, next) => {
             id_muestra,
             cliente: datosCliente,
             estado: 'Recibida',
+            preservacionMuestra: datos.preservacionMuestra,
+            descripcion: datos.descripcion,
             firmas: {
                 administrador: {
                     nombre: datosAdministrador.nombre,
@@ -526,7 +528,10 @@ const registrarMuestra = async (req, res, next) => {
             id_muestra: muestraGuardada.id_muestra,
             cliente: {
                 nombre: muestraGuardada.cliente.nombre,
-                documento: muestraGuardada.cliente.documento
+                documento: muestraGuardada.cliente.documento,
+                email: muestraGuardada.cliente.email,
+                telefono: muestraGuardada.cliente.telefono,
+                direccion: muestraGuardada.cliente.direccion
             },
             tipoDeAgua: {
                 tipo: muestraGuardada.tipoDeAgua.tipo,
@@ -541,6 +546,7 @@ const registrarMuestra = async (req, res, next) => {
             planMuestreo: muestraGuardada.planMuestreo,
             condicionesAmbientales: muestraGuardada.condicionesAmbientales,
             preservacionMuestra: muestraGuardada.preservacionMuestra,
+            descripcion: muestraGuardada.descripcion,
             analisisSeleccionados: muestraGuardada.analisisSeleccionados,
             estado: muestraGuardada.estado,
             rechazoMuestra: {
@@ -563,14 +569,16 @@ const registrarMuestra = async (req, res, next) => {
                 estado: h.estado,
                 administrador: {
                     nombre: h.administrador.nombre,
-                    documento: h.administrador.documento
+                    documento: h.administrador.documento,
+                    email: h.administrador.email
                 },
                 fechaCambio: h.fechaCambio,
                 observaciones: h.observaciones
             })),
             creadoPor: {
                 nombre: muestraGuardada.creadoPor.nombre,
-                documento: muestraGuardada.creadoPor.documento
+                documento: muestraGuardada.creadoPor.documento,
+                email: muestraGuardada.creadoPor.email
             },
             actualizadoPor: muestraGuardada.actualizadoPor.map(a => ({
                 nombre: a.nombre,
@@ -619,8 +627,8 @@ const actualizarMuestra = async (req, res, next) => {
             throw new ValidationError('Debe especificar el motivo del rechazo');
         }
 
-        if (datosActualizacion.preservacionMuestra === 'Otra' && !datosActualizacion.preservacionOtra) {
-            throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otra"');
+        if (datosActualizacion.preservacionMuestra === 'Otro' && !datosActualizacion.descripcion) {
+            throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otro"');
         }
 
         // Actualizar la muestra
