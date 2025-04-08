@@ -9,11 +9,10 @@ const muestrasService = require('../services/muestrasService');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
 
 // URL base para las peticiones a la API de usuarios
-const BASE_URL = process.env.NODE_ENV === 'production' 
-    ? 'https://backend-sena-lab-1-qpzp.onrender.com'
-    : 'http://localhost:5000';
+const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
 
 //Funciones de Utilidad 
 const obtenerDatosUsuario = (req) => {
@@ -64,7 +63,7 @@ const validarDatosMuestra = (datos) => {
         if (!datos.documento) errores.push('El documento es requerido');
         if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
         if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
-        if (!datos.motivoRechazo) errores.push('El motivo de rechazo es requerido');
+        if (!datos.observaciones) errores.push('El motivo de rechazo es requerido');
         
         if (errores.length > 0) {
             throw new ValidationError(errores.join('. '));
@@ -109,8 +108,8 @@ const validarDatosMuestra = (datos) => {
     // 9. Preservación de la Muestra
     if (!datos.preservacionMuestra) {
         errores.push('El método de preservación es requerido');
-    } else if (datos.preservacionMuestra === 'Otra' && !datos.preservacionOtra) {
-        errores.push('Debe especificar el método de preservación cuando selecciona "Otra"');
+    } else if (datos.preservacionMuestra === 'Otro' && !datos.descripcion) {
+        errores.push('Debe especificar el método de preservación cuando selecciona "Otro"');
     }
     
     // 10. Análisis Seleccionados
@@ -118,8 +117,8 @@ const validarDatosMuestra = (datos) => {
         errores.push('Debe seleccionar al menos un análisis');
     }
 
-    // Validar firmas
-    if (!datos.firmas?.firmaAdministrador?.firma || !datos.firmas?.firmaCliente?.firma) {
+    // Validar firmas solo si no es una muestra rechazada
+    if (datos.estado !== 'Rechazada' && (!datos.firmas?.firmaAdministrador?.firma || !datos.firmas?.firmaCliente?.firma)) {
         errores.push('Se requieren las firmas del administrador y del cliente');
     }
 
@@ -235,117 +234,70 @@ const formatearFechaHora = (fecha) => {
 const obtenerMuestras = async (req, res, next) => {
     try {
         const { 
-            tipo, 
-            estado, 
-            fechaInicio, 
+            id_muestra,
+            tipo,
+            estado,
+            fechaInicio,
             fechaFin,
-            page = 1,
-            limit = 10,
-            sortBy = 'fechaHoraMuestreo',
-            sortOrder = 'desc'
+            cliente
         } = req.query;
 
         let filtro = {};
 
         // Aplicar filtros si se proporcionan
+        if (id_muestra) filtro.id_muestra = id_muestra;
         if (tipo) filtro['tipoDeAgua.tipo'] = tipo;
         if (estado) filtro.estado = estado;
+        if (cliente) filtro['cliente.documento'] = cliente;
         if (fechaInicio || fechaFin) {
             filtro.fechaHoraMuestreo = {};
             if (fechaInicio) filtro.fechaHoraMuestreo.$gte = new Date(fechaInicio);
             if (fechaFin) filtro.fechaHoraMuestreo.$lte = new Date(fechaFin);
         }
 
-        // Calcular skip para paginación
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-        const limitInt = parseInt(limit);
-
         // Configurar el ordenamiento
         const sort = {};
-        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+        sort[req.pagination.sortBy] = req.pagination.sortOrder === 'desc' ? -1 : 1;
 
         // Ejecutar las consultas en paralelo
         const [muestras, total] = await Promise.all([
             Muestra.find(filtro)
-                .select('id_muestra documento tipoDeAgua lugarMuestreo fechaHoraMuestreo estado')
-                .populate('creadoPor', 'nombre email documento')
+                .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente')
                 .sort(sort)
-                .skip(skip)
-                .limit(limitInt)
-                .lean(), // Usar lean() para obtener objetos JavaScript planos
+                .skip(req.pagination.skip)
+                .limit(req.pagination.limit)
+                .lean(),
             Muestra.countDocuments(filtro)
         ]);
 
-        // Formatear las fechas en las muestras
+        // Formatear las fechas en los resultados
         const muestrasFormateadas = muestras.map(muestra => ({
             ...muestra,
             fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo)
         }));
 
-        // Calcular información de paginación
-        const totalPages = Math.ceil(total / limitInt);
-        const hasNextPage = page < totalPages;
-        const hasPrevPage = page > 1;
+        // Formatear la respuesta con paginación
+        const respuesta = formatPaginationResponse(
+            muestrasFormateadas,
+            total,
+            req.pagination
+        );
 
-        ResponseHandler.success(res, {
-            muestras: muestrasFormateadas,
-            pagination: {
-                total,
-                totalPages,
-                currentPage: parseInt(page),
-                limit: limitInt,
-                hasNextPage,
-                hasPrevPage
-            }
-        }, 'Muestras obtenidas correctamente');
-    } catch (error) {
-        next(error);
-    }
-};
-
-const obtenerMuestra = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const muestra = await Muestra.findOne({ id_muestra: id })
-            .populate('creadoPor', 'nombre email documento')
-            .lean();
-
-        if (!muestra) {
-            throw new NotFoundError('Muestra no encontrada');
-        }
-
-        // Obtener datos actualizados de los usuarios
-        const [datosCliente, datosAdministrador] = await Promise.all([
-            obtenerDatosUsuarioExterno(muestra.firmas.documentoCliente),
-            obtenerDatosUsuarioExterno(muestra.firmas.documentoAdministrador)
-        ]);
-
-        // Formatear la fecha y actualizar datos de usuarios
-        const muestraFormateada = {
-            ...muestra,
-            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
-            firmas: {
-                ...muestra.firmas,
-                fechaFirmaAdministrador: formatearFechaHora(muestra.firmas.fechaFirmaAdministrador),
-                fechaFirmaCliente: formatearFechaHora(muestra.firmas.fechaFirmaCliente),
-                datosAdministrador,
-                datosCliente
-            },
-            historial: muestra.historial.map(h => ({
-                ...h,
-                fechaCambio: formatearFechaHora(h.fechaCambio)
-            })),
-            createdAt: formatearFechaHora(muestra.createdAt),
-            updatedAt: formatearFechaHora(muestra.updatedAt)
-        };
-
-        ResponseHandler.success(res, { muestra: muestraFormateada }, 'Muestra obtenida correctamente');
+        ResponseHandler.success(res, respuesta, 'Muestras obtenidas correctamente');
     } catch (error) {
         next(error);
     }
 };
 
 const obtenerDatosUsuarioExterno = async (documento) => {
+    if (!documento) {
+        console.log('No se proporcionó documento para obtener datos de usuario');
+        return {
+            nombre: 'Usuario no identificado',
+            documento: 'No disponible'
+        };
+    }
+
     try {
         console.log(`Consultando API externa para documento: ${documento}`);
         let userData;
@@ -363,14 +315,18 @@ const obtenerDatosUsuarioExterno = async (documento) => {
 
         // Si no se encontró en roles, intentar con la ruta general
         if (!userData) {
-            const response = await axios.get(`${BASE_URL}/api/usuarios`, {
-                params: { documento }
-            });
-            console.log('Respuesta de la API general:', response.data);
+            try {
+                const response = await axios.get(`${BASE_URL}/api/usuarios`, {
+                    params: { documento }
+                });
+                console.log('Respuesta de la API general:', response.data);
 
-            if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-                userData = response.data[0];
-                console.log('Usuario encontrado en API general:', userData);
+                if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+                    userData = response.data[0];
+                    console.log('Usuario encontrado en API general:', userData);
+                }
+            } catch (apiError) {
+                console.log('Error al consultar API general:', apiError.message);
             }
         }
 
@@ -389,9 +345,9 @@ const obtenerDatosUsuarioExterno = async (documento) => {
             return {
                 nombre: userData.nombre || 'Usuario no identificado',
                 documento: userData.documento,
-                email: userData.email,
-                telefono: userData.telefono,
-                direccion: userData.direccion
+                email: userData.email || '',
+                telefono: userData.telefono || '',
+                direccion: userData.direccion || ''
             };
         }
 
@@ -410,6 +366,40 @@ const obtenerDatosUsuarioExterno = async (documento) => {
     }
 };
 
+const obtenerMuestra = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const muestra = await Muestra.findOne({ id_muestra: id })
+            .populate('creadoPor', 'nombre email documento')
+            .lean();
+
+        if (!muestra) {
+            throw new NotFoundError('Muestra no encontrada');
+        }
+
+        // Formatear la fecha y actualizar datos de usuarios
+        const muestraFormateada = {
+            ...muestra,
+            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
+            historial: muestra.historial.map(h => ({
+                ...h,
+                fechaCambio: formatearFechaHora(h.fechaCambio)
+            })),
+            createdAt: formatearFechaHora(muestra.createdAt),
+            updatedAt: formatearFechaHora(muestra.updatedAt)
+        };
+
+        // Eliminar el campo firmas si la muestra está rechazada
+        if (muestra.estado === 'Rechazada') {
+            delete muestraFormateada.firmas;
+        }
+
+        ResponseHandler.success(res, { muestra: muestraFormateada }, 'Muestra obtenida correctamente');
+    } catch (error) {
+        next(error);
+    }
+};
+
 const registrarMuestra = async (req, res, next) => {
     try {
         const datos = req.body;
@@ -422,30 +412,60 @@ const registrarMuestra = async (req, res, next) => {
             throw new ValidationError('Usuario no autenticado o ID no disponible');
         }
 
-        // Obtener datos del administrador
-        let datosAdministrador;
-        try {
-            datosAdministrador = await obtenerDatosUsuarioExterno(req.usuario.documento);
-            if (!datosAdministrador || !datosAdministrador.nombre) {
-                throw new Error('No se pudieron obtener los datos del administrador');
-            }
-            console.log('Datos del administrador:', datosAdministrador);
-        } catch (error) {
-            console.error('Error al obtener datos del administrador:', error);
-            throw new ValidationError(`Error al obtener datos del administrador: ${error.message}`);
-        }
+        // Obtener datos del administrador directamente del token
+        const datosAdministrador = {
+            nombre: req.usuario.nombre || 'Usuario no identificado',
+            documento: req.usuario.documento,
+            email: req.usuario.email,
+            telefono: req.usuario.telefono,
+            direccion: req.usuario.direccion
+        };
+        
+        console.log('Datos del administrador desde token:', datosAdministrador);
 
-        // Obtener datos del cliente
+        // Obtener datos del cliente desde la API de usuarios
         let datosCliente;
         try {
-            datosCliente = await obtenerDatosUsuarioExterno(datos.documento);
-            console.log('Datos del cliente:', datosCliente);
+            console.log('Consultando datos del cliente con documento:', datos.documento);
+            
+            const response = await axios.get(`${BASE_URL}/api/usuarios/buscar`, {
+                params: { documento: datos.documento },
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log('Respuesta de la API de usuarios:', response.data);
+            
+            if (response.data && response.data.nombre) {
+                datosCliente = {
+                    nombre: response.data.nombre,
+                    documento: response.data.documento,
+                    email: response.data.email,
+                    telefono: response.data.telefono,
+                    direccion: response.data.direccion
+                };
+                console.log('Datos del cliente encontrados:', datosCliente);
+            } else {
+                console.log('No se encontraron datos del cliente, usando valores por defecto');
+                datosCliente = {
+                    nombre: 'Cliente no identificado',
+                    documento: datos.documento
+                };
+            }
         } catch (error) {
-            console.error('Error al obtener datos del cliente:', error);
+            console.error('Error al obtener datos del cliente:', error.response?.data || error.message);
+            datosCliente = {
+                nombre: 'Cliente no identificado',
+                documento: datos.documento
+            };
+        }
+
+        if (!datosCliente) {
             datosCliente = {
                 documento: datos.documento,
-                nombre: 'Cliente no identificado',
-                rol: 'cliente'
+                nombre: 'Cliente no identificado'
             };
         }
 
@@ -468,26 +488,41 @@ const registrarMuestra = async (req, res, next) => {
         
         const id_muestra = `${datos.tipoDeAgua.codigo}${datos.tipoAnalisis.charAt(0)}${año}${mes}${dia}${consecutivo}`;
 
+        // Determinar si la muestra está siendo rechazada
+        const esRechazada = datos.estado === 'Rechazada';
+        const motivoRechazo = esRechazada ? datos.observaciones : '';
+
         // Crear la muestra con los datos formateados correctamente
         const muestra = new Muestra({
             ...datos,
             id_muestra,
             cliente: datosCliente,
-            estado: 'Recibida',
+            estado: esRechazada ? 'Rechazada' : 'Recibida',
+            preservacionMuestra: datos.preservacionMuestra,
+            descripcion: datos.descripcion,
+            rechazoMuestra: {
+                rechazada: esRechazada,
+                motivo: motivoRechazo,
+                fechaRechazo: esRechazada ? new Date() : null
+            },
             firmas: {
-                administrador: datosAdministrador,
-                cliente: datosCliente,
-                firmaAdministrador: datos.firmas?.firmaAdministrador?.firma || '',
-                fechaFirmaAdministrador: datos.firmas?.firmaAdministrador?.fecha || new Date(),
-                firmaCliente: datos.firmas?.firmaCliente?.firma || '',
-                fechaFirmaCliente: datos.firmas?.firmaCliente?.fecha || new Date()
+                administrador: {
+                    nombre: datosAdministrador.nombre,
+                    documento: datosAdministrador.documento,
+                    firmaAdministrador: esRechazada ? '' : (datos.firmas?.firmaAdministrador?.firma || '')
+                },
+                cliente: {
+                    nombre: datosCliente.nombre,
+                    documento: datosCliente.documento,
+                    firmaCliente: esRechazada ? '' : (datos.firmas?.firmaCliente?.firma || '')
+                }
             },
             creadoPor: datosAdministrador,
             historial: [{
-                estado: 'Recibida',
+                estado: esRechazada ? 'Rechazada' : 'Recibida',
                 administrador: datosAdministrador,
                 fechaCambio: new Date(),
-                observaciones: datos.observaciones || 'Registro inicial de muestra'
+                observaciones: esRechazada ? motivoRechazo : (datos.observaciones || 'Registro inicial de muestra')
             }],
             actualizadoPor: []
         });
@@ -495,40 +530,89 @@ const registrarMuestra = async (req, res, next) => {
         console.log('Datos de la muestra antes de guardar:', {
             cliente: muestra.cliente,
             creadoPor: muestra.creadoPor,
-            firmas: muestra.firmas
+            firmas: muestra.firmas,
+            estado: muestra.estado,
+            rechazoMuestra: muestra.rechazoMuestra
         });
 
         // Guardar la muestra
         const muestraGuardada = await muestra.save();
 
-        // Formatear las fechas para la respuesta
-        const formatearFecha = (fecha) => {
-            return {
-                fecha: fecha.toLocaleDateString('es-CO'),
-                hora: fecha.toLocaleTimeString('es-CO', { hour: 'numeric', minute: 'numeric', hour12: true })
-            };
+        // Preparar la respuesta simplificada
+        const respuesta = {
+            id_muestra: muestraGuardada.id_muestra,
+            cliente: {
+                nombre: muestraGuardada.cliente.nombre,
+                documento: muestraGuardada.cliente.documento,
+                email: muestraGuardada.cliente.email,
+                telefono: muestraGuardada.cliente.telefono,
+                direccion: muestraGuardada.cliente.direccion
+            },
+            tipoDeAgua: {
+                tipo: muestraGuardada.tipoDeAgua.tipo,
+                codigo: muestraGuardada.tipoDeAgua.codigo,
+                descripcion: muestraGuardada.tipoDeAgua.descripcion
+            },
+            tipoMuestreo: muestraGuardada.tipoMuestreo,
+            lugarMuestreo: muestraGuardada.lugarMuestreo,
+            fechaHoraMuestreo: muestraGuardada.fechaHoraMuestreo,
+            tipoAnalisis: muestraGuardada.tipoAnalisis,
+            identificacionMuestra: muestraGuardada.identificacionMuestra,
+            planMuestreo: muestraGuardada.planMuestreo,
+            condicionesAmbientales: muestraGuardada.condicionesAmbientales,
+            preservacionMuestra: muestraGuardada.preservacionMuestra,
+            descripcion: muestraGuardada.descripcion,
+            analisisSeleccionados: muestraGuardada.analisisSeleccionados,
+            estado: muestraGuardada.estado,
+            rechazoMuestra: {
+                rechazada: muestraGuardada.rechazoMuestra.rechazada,
+                motivo: muestraGuardada.rechazoMuestra.motivo
+            },
+            observaciones: muestraGuardada.observaciones,
+            historial: muestraGuardada.historial.map(h => ({
+                estado: h.estado,
+                administrador: {
+                    nombre: h.administrador.nombre,
+                    documento: h.administrador.documento,
+                    email: h.administrador.email
+                },
+                fechaCambio: h.fechaCambio,
+                observaciones: h.observaciones
+            })),
+            creadoPor: {
+                nombre: muestraGuardada.creadoPor.nombre,
+                documento: muestraGuardada.creadoPor.documento,
+                email: muestraGuardada.creadoPor.email
+            },
+            actualizadoPor: muestraGuardada.actualizadoPor.map(a => ({
+                nombre: a.nombre,
+                documento: a.documento,
+                fecha: a.fecha,
+                accion: a.accion
+            })),
+            createdAt: muestraGuardada.createdAt,
+            updatedAt: muestraGuardada.updatedAt
         };
 
-        // Preparar la respuesta
-        const respuesta = {
-            ...muestraGuardada.toObject(),
-            createdAt: formatearFecha(muestraGuardada.createdAt),
-            updatedAt: formatearFecha(muestraGuardada.updatedAt),
-            fechaHoraMuestreo: formatearFecha(muestraGuardada.fechaHoraMuestreo),
-            historial: muestraGuardada.historial.map(h => ({
-                ...h,
-                fechaCambio: formatearFecha(h.fechaCambio)
-            })),
-            firmas: {
-                ...muestraGuardada.firmas,
-                fechaFirmaAdministrador: formatearFecha(muestraGuardada.firmas.fechaFirmaAdministrador),
-                fechaFirmaCliente: formatearFecha(muestraGuardada.firmas.fechaFirmaCliente)
-            }
-        };
+        // Solo incluir firmas en la respuesta si la muestra no está rechazada
+        if (!esRechazada) {
+            respuesta.firmas = {
+                administrador: {
+                    nombre: muestraGuardada.firmas.administrador.nombre,
+                    documento: muestraGuardada.firmas.administrador.documento,
+                    firmaAdministrador: muestraGuardada.firmas.administrador.firmaAdministrador
+                },
+                cliente: {
+                    nombre: muestraGuardada.firmas.cliente.nombre,
+                    documento: muestraGuardada.firmas.cliente.documento,
+                    firmaCliente: muestraGuardada.firmas.cliente.firmaCliente
+                }
+            };
+        }
 
         return res.status(201).json({
             success: true,
-            message: 'Muestra registrada exitosamente',
+            message: esRechazada ? 'Muestra rechazada exitosamente' : 'Muestra registrada exitosamente',
             data: {
                 muestra: respuesta
             }
@@ -559,20 +643,48 @@ const actualizarMuestra = async (req, res, next) => {
         }
 
         // Validaciones específicas
-        if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.motivoRechazo) {
-            throw new ValidationError('Debe especificar el motivo del rechazo');
+        if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.observaciones) {
+            throw new ValidationError('Debe especificar el motivo del rechazo en las observaciones');
         }
 
-        if (datosActualizacion.preservacionMuestra === 'Otra' && !datosActualizacion.preservacionOtra) {
-            throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otra"');
+        if (datosActualizacion.preservacionMuestra === 'Otro' && !datosActualizacion.descripcion) {
+            throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otro"');
+        }
+
+        // Preparar datos para actualizar
+        const datosParaActualizar = { ...datosActualizacion };
+        
+        // Si se está rechazando la muestra, actualizar el campo rechazoMuestra
+        if (datosActualizacion.estado === 'Rechazada') {
+            datosParaActualizar.rechazoMuestra = {
+                rechazada: true,
+                motivo: datosActualizacion.observaciones,
+                fechaRechazo: new Date()
+            };
+            
+            // Agregar al historial
+            datosParaActualizar.$push = {
+                ...datosParaActualizar.$push,
+                historial: {
+                    estado: 'Rechazada',
+                    administrador: {
+                        documento: usuario.documento,
+                        nombre: usuario.nombre,
+                        email: usuario.email
+                    },
+                    fechaCambio: new Date(),
+                    observaciones: datosActualizacion.observaciones
+                }
+            };
         }
 
         // Actualizar la muestra
         const muestra = await Muestra.findOneAndUpdate(
             { id_muestra: id },
             {
-                ...datosActualizacion,
+                ...datosParaActualizar,
                 $push: {
+                    ...datosParaActualizar.$push,
                     actualizadoPor: {
                         documento: usuario.documento,
                         nombre: usuario.nombre,
@@ -608,8 +720,8 @@ const actualizarMuestra = async (req, res, next) => {
             })),
             firmas: {
                 ...muestra.firmas,
-                fechaFirmaAdministrador: formatearFecha(muestra.firmas.fechaFirmaAdministrador),
-                fechaFirmaCliente: formatearFecha(muestra.firmas.fechaFirmaCliente)
+                fechaFirmaAdministrador: muestra.firmas.fechaFirmaAdministrador ? formatearFecha(muestra.firmas.fechaFirmaAdministrador) : null,
+                fechaFirmaCliente: muestra.firmas.fechaFirmaCliente ? formatearFecha(muestra.firmas.fechaFirmaCliente) : null
             }
         };
 

@@ -6,7 +6,12 @@ const { resultadoValidators } = require("../../../shared/validators");
 
 // Obtener resultados de una muestra específica
 router.get("/muestra/:idMuestra", 
-  resultadoController.obtenerResultados
+  resultadoController.obtenerResultadoPorMuestra
+);
+
+// Obtener todos los resultados
+router.get("/resultados",
+  resultadoController.obtenerTodosResultados
 );
 
 // Las siguientes rutas requieren ser laboratorista

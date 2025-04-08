@@ -17,8 +17,8 @@ const TIPOS_AGUA = {
 };
 
 const SUBTIPOS_RESIDUAL = {
-    DOMESTICA: 'domestica',
-    NO_DOMESTICA: 'no domestica'
+    DOMESTICA: 'Doméstica',
+    NO_DOMESTICA: 'No Doméstica'
 };
 
 const ESTADOS = {
@@ -82,28 +82,36 @@ const datosUsuarioSchema = new mongoose.Schema({
 // Esquema para las firmas
 const firmasSchema = new mongoose.Schema({
     administrador: {
-        type: datosUsuarioSchema,
-        required: true
+        nombre: {
+            type: String,
+            required: true,
+            default: 'Usuario no identificado'
+        },
+        documento: {
+            type: String,
+            required: true
+        },
+        firmaAdministrador: {
+            type: String,
+            required: false,
+            default: ''
+        }
     },
     cliente: {
-        type: datosUsuarioSchema,
-        required: true
-    },
-    fechaFirmaAdministrador: {
-        type: Date,
-        required: true
-    },
-    firmaAdministrador: {
-        type: String,
-        required: true
-    },
-    fechaFirmaCliente: {
-        type: Date,
-        required: true
-    },
-    firmaCliente: {
-        type: String,
-        required: true
+        nombre: {
+            type: String,
+            required: true,
+            default: 'Usuario no identificado'
+        },
+        documento: {
+            type: String,
+            required: true
+        },
+        firmaCliente: {
+            type: String,
+            required: false,
+            default: ''
+        }
     }
 }, { _id: false });
 
@@ -234,12 +242,12 @@ const muestraSchema = new mongoose.Schema({
     preservacionMuestra: {
         type: String,
         required: true,
-        enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otra']
+        enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otro']
     },
-    preservacionOtra: {
+    descripcion: {
         type: String,
         required: function() {
-            return this.preservacionMuestra === 'Otra';
+            return this.preservacionMuestra === 'Otro';
         }
     },
     
