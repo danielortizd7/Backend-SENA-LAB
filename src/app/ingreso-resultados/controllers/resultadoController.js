@@ -197,17 +197,17 @@ const registrarResultado = async (req, res) => {
                     valorAnterior: valorAnterior ? `${valorAnterior.valor} ${valorAnterior.unidad}`.trim() : "No registrado",
                     valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
                     unidad: datos.unidad
-                };
-            });
-            
+            };
+        });
+
             resultado.observaciones = observaciones;
             resultado.verificado = false;
             
             // Agregar al historial de cambios
             const cambio = {
-                nombre: usuario.nombre,
-                cedula: usuario.documento,
-                fecha: new Date(),
+            nombre: usuario.nombre,
+            cedula: usuario.documento,
+            fecha: new Date(),
                 observaciones: observaciones || "Sin observaciones",
                 cambiosRealizados: {
                     resultados: cambiosRealizados
@@ -239,10 +239,10 @@ const registrarResultado = async (req, res) => {
                 fechaHoraMuestreo: muestra.fechaHoraMuestreo,
                 tipoAnalisis: muestra.tipoAnalisis,
                 estado: 'En análisis',
-                observaciones,
-                verificado: false,
-                cedulaLaboratorista: usuario.documento,
-                nombreLaboratorista: usuario.nombre,
+            observaciones,
+            verificado: false,
+            cedulaLaboratorista: usuario.documento,
+            nombreLaboratorista: usuario.nombre,
                 historialCambios: [{
                     nombre: usuario.nombre,
                     cedula: usuario.documento,
@@ -377,9 +377,9 @@ const editarResultado = async (req, res) => {
         
         // Agregar al historial de cambios
         const cambio = {
-            nombre: usuario.nombre,
-            cedula: usuario.documento,
-            fecha: new Date(),
+                nombre: usuario.nombre,
+                cedula: usuario.documento,
+                fecha: new Date(),
             observaciones: observaciones || "Sin observaciones",
             cambiosRealizados: {
                 resultados: cambiosRealizados
@@ -595,7 +595,7 @@ const verificarResultado = async (req, res) => {
             { idMuestra },
             {
                 $set: {
-                    verificado: true,
+                verificado: true,
                     estado: 'Finalizada',
                     resultados: resultadosFinales,
                     observaciones: observacionFinal
@@ -608,7 +608,7 @@ const verificarResultado = async (req, res) => {
                         observaciones: observacionFinal,
                         cambiosRealizados: {
                             resultados: {
-                                verificacion: {
+                            verificacion: {
                                     valorAnterior: "No verificado",
                                     valorNuevo: "Verificado",
                                     unidad: "Estado"
