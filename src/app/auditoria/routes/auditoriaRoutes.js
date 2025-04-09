@@ -7,7 +7,14 @@ const { verificarToken, verificarPermiso, PERMISOS } = require("../../../shared/
 // Rutas protegidas
 router.use(verificarToken);
 
-// Obtener registros de auditoría
+// Obtener un registro específico por ID
+router.get(
+    "/registros/:id",
+    verificarPermiso(PERMISOS.VER_AUDITORIA),
+    auditoriaController.obtenerRegistroPorId
+);
+
+// Obtener múltiples registros de auditoría
 router.get(
     "/registros",
     verificarPermiso(PERMISOS.VER_AUDITORIA),

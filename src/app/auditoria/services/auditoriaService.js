@@ -1,4 +1,5 @@
-const { Auditoria } = require('../../../shared/models/auditoriaModel');
+const mongoose = require('mongoose');
+const Auditoria = require('../models/auditoriaModel');
 const { ResponseHandler } = require('../../../shared/utils/responseHandler');
 
 class AuditoriaService {
@@ -7,7 +8,10 @@ class AuditoriaService {
             const registro = new Auditoria({
                 usuario: datosAuditoria.usuario,
                 accion: datosAuditoria.accion,
-                detalles: datosAuditoria.detalles,
+                detalles: {
+                    ...datosAuditoria.detalles,
+                    idMuestra: datosAuditoria.detalles.idMuestra || null
+                },
                 fecha: datosAuditoria.fecha
             });
 
@@ -26,6 +30,48 @@ class AuditoriaService {
                 .lean();
         } catch (error) {
             console.error('Error obteniendo registros de auditoría:', error);
+            throw error;
+        }
+    }
+
+    static async obtenerRegistroAuditoria(id) {
+        try {
+            if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+                throw new Error(`ID de auditoría inválido: ${id}. Debe ser un ObjectId válido de 24 caracteres hexadecimales`);
+            }
+            return await Auditoria.findById(id).lean();
+        } catch (error) {
+            console.error('Error obteniendo registro de auditoría:', error);
+            throw error;
+        }
+    }
+
+    static async filtrarRegistros(filtros = {}) {
+        // Limpiar objeto de filtros de valores undefined
+        const filtrosLimpios = Object.fromEntries(
+            Object.entries(filtros).filter(([_, v]) => v !== undefined)
+        );
+        try {
+            const query = {};
+            
+            if (filtros.fechaInicio && filtros.fechaFin) {
+                query.fecha = {
+                    $gte: new Date(filtros.fechaInicio),
+                    $lte: new Date(filtros.fechaFin)
+                };
+            }
+
+            if (filtros.usuario) {
+                query['usuario.documento'] = filtros.usuario;
+            }
+
+            if (filtros.accion) {
+                query['accion.tipo'] = filtros.accion;
+            }
+
+            return await this.obtenerRegistros(query);
+        } catch (error) {
+            console.error('Error filtrando registros de auditoría:', error);
             throw error;
         }
     }

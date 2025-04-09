@@ -39,7 +39,8 @@ const registrarAccion = async (req, res, next) => {
                 userAgent: req.headers['user-agent'],
                 parametros: req.params,
                 query: req.query,
-                body: req.method === 'GET' ? null : req.body
+                body: req.method === 'GET' ? null : req.body,
+                idMuestra: req.body.id || req.params.id || null
             },
             fecha: new Date()
         };
