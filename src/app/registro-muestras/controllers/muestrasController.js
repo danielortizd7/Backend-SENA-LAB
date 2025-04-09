@@ -780,6 +780,25 @@ const eliminarMuestra = async (req, res, next) => {
     }
 };
 
+const obtenerAnalisisDisponibles = async (req, res, next) => {
+    try {
+        const { tipoAgua, subtipoResidual } = req.query;
+        
+        if (!tipoAgua) {
+            throw new ValidationError('El tipo de agua es requerido');
+        }
+
+        const analisis = await getAnalisisPorTipoAgua(tipoAgua.toLowerCase(), subtipoResidual);
+        
+        ResponseHandler.success(res, {
+            fisicoquimico: analisis.fisicoquimico,
+            microbiologico: analisis.microbiologico
+        }, 'Análisis disponibles obtenidos correctamente');
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     // Controladores de Usuario
     validarUsuarioController,
