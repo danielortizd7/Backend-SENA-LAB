@@ -3,6 +3,7 @@ const router = express.Router();
 const resultadoController = require("../controllers/resultadoController");
 const { verificarLaboratorista, verificarRolAdministrador } = require("../../../shared/middleware/authMiddleware");
 const { resultadoValidators } = require("../../../shared/validators");
+const { paginationMiddleware } = require("../../../shared/middleware/paginationMiddleware");
 
 // Obtener resultados de una muestra específica
 router.get("/muestra/:idMuestra", 
@@ -11,6 +12,13 @@ router.get("/muestra/:idMuestra",
 
 // Obtener todos los resultados
 router.get("/resultados",
+  paginationMiddleware,
+  resultadoController.obtenerResultados
+);
+
+// Obtener todos los resultados (sin filtros)
+router.get("/todos",
+  paginationMiddleware,
   resultadoController.obtenerTodosResultados
 );
 
