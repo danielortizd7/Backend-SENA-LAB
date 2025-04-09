@@ -262,7 +262,7 @@ const obtenerMuestras = async (req, res, next) => {
         // Ejecutar las consultas en paralelo
         const [muestras, total] = await Promise.all([
             Muestra.find(filtro)
-                .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente')
+                .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente tipoMuestreo tipoAnalisis identificacionMuestra planMuestreo condicionesAmbientales preservacionMuestra analisisSeleccionados rechazoMuestra observaciones firmas historial creadoPor actualizadoPor createdAt updatedAt')
                 .sort(sort)
                 .skip(req.pagination.skip)
                 .limit(req.pagination.limit)
@@ -271,10 +271,25 @@ const obtenerMuestras = async (req, res, next) => {
         ]);
 
         // Formatear las fechas en los resultados
-        const muestrasFormateadas = muestras.map(muestra => ({
-            ...muestra,
-            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo)
-        }));
+        const muestrasFormateadas = muestras.map(muestra => {
+            const muestraFormateada = {
+                ...muestra,
+                fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
+                historial: muestra.historial.map(h => ({
+                    ...h,
+                    fechaCambio: formatearFechaHora(h.fechaCambio)
+                })),
+                createdAt: formatearFechaHora(muestra.createdAt),
+                updatedAt: formatearFechaHora(muestra.updatedAt)
+            };
+
+            // Eliminar el campo firmas si la muestra está rechazada
+            if (muestra.estado === 'Rechazada') {
+                delete muestraFormateada.firmas;
+            }
+
+            return muestraFormateada;
+        });
 
         // Formatear la respuesta con paginación
         const respuesta = formatPaginationResponse(
