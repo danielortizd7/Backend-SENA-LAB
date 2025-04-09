@@ -411,37 +411,53 @@ const editarResultado = async (req, res) => {
     }
 };
 
-const obtenerResultados = async (req, res) => {
+const obtenerResultados = async (req, res, next) => {
     try {
-        const { page = 1, limit = 10, ...filters } = req.query;
-        const options = {
-            skip: (page - 1) * limit,
-            limit: parseInt(limit),
-            sort: { fechaHoraMuestreo: -1 }
-        };
+        const { 
+            id_muestra,
+            estado,
+            verificado,
+            fechaInicio,
+            fechaFin
+        } = req.query;
 
-        const query = {};
-        if (filters.id_muestra) query.id_muestra = filters.id_muestra;
-        if (filters.estado) query.estado = filters.estado;
-        if (filters.verificado !== undefined) query.verificado = filters.verificado === 'true';
+        let filtro = {};
 
-        const resultados = await Resultado.findAllWithMuestras(query, options);
-        const total = await Resultado.countDocuments(query);
+        // Aplicar filtros si se proporcionan
+        if (id_muestra) filtro.id_muestra = id_muestra;
+        if (estado) filtro.estado = estado;
+        if (verificado !== undefined) filtro.verificado = verificado === 'true';
+        if (fechaInicio || fechaFin) {
+            filtro.fechaHoraMuestreo = {};
+            if (fechaInicio) filtro.fechaHoraMuestreo.$gte = new Date(fechaInicio);
+            if (fechaFin) filtro.fechaHoraMuestreo.$lte = new Date(fechaFin);
+        }
 
-        return res.status(200).json({
-            success: true,
-            data: resultados,
+        // Configurar el ordenamiento
+        const sort = {};
+        sort[req.pagination.sortBy] = req.pagination.sortOrder === 'desc' ? -1 : 1;
+
+        // Ejecutar las consultas en paralelo
+        const [resultados, total] = await Promise.all([
+            Resultado.find(filtro)
+                .select('-__v')
+                .sort(sort)
+                .skip(req.pagination.skip)
+                .limit(req.pagination.limit)
+                .lean(),
+            Resultado.countDocuments(filtro)
+        ]);
+
+        // Formatear la respuesta con paginación
+        const respuesta = formatPaginationResponse(
+            resultados,
             total,
-            page: parseInt(page),
-            totalPages: Math.ceil(total / limit)
-        });
+            req.pagination
+        );
+
+        ResponseHandler.success(res, respuesta, 'Resultados obtenidos correctamente');
     } catch (error) {
-        console.error('Error al obtener resultados:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error al obtener los resultados',
-            error: error.message
-        });
+        next(error);
     }
 };
 
