@@ -1,30 +1,30 @@
 const express = require('express');
 const router = express.Router();
+const { verificarDocumento, verificarToken, verificarRolAdministrador, verificarLaboratorista } = require('../../../shared/middleware/authMiddleware');
+const { senaLabValidators } = require('../../../shared/validators');
 const muestrasController = require('../controllers/muestrasController');
-const { verificarDocumento } = require('../../../shared/middleware/authMiddleware');
+const { paginationMiddleware } = require('../../../shared/middleware/paginationMiddleware');
 
-// Ruta para obtener análisis disponibles
-router.get('/analisis', verificarDocumento, muestrasController.obtenerAnalisisDisponibles);
+// ===== RUTAS PÚBLICAS (verificarDocumento) =====
+// Ruta para validar usuario
+router.get('/public/validar-usuario', verificarDocumento, muestrasController.validarUsuarioController);
 
-// Ruta para crear una nueva muestra
-router.post('/', verificarDocumento, muestrasController.crearMuestra);
+// ===== RUTAS PROTEGIDAS (verificarToken) =====
+// Rutas de Tipos de Agua (solo administradores)
+router.get('/tipos-agua', verificarToken, verificarRolAdministrador, muestrasController.obtenerTiposAgua);
+router.post('/tipos-agua', verificarToken, verificarRolAdministrador, muestrasController.crearTipoAgua);
+router.put('/tipos-agua/:id', verificarToken, verificarRolAdministrador, muestrasController.actualizarTipoAgua);
 
-// Ruta para obtener todas las muestras
-router.get('/', verificarDocumento, muestrasController.obtenerMuestras);
+// Rutas de Muestras
+router.post('/', verificarToken, muestrasController.registrarMuestra);
+router.get('/', paginationMiddleware, muestrasController.obtenerMuestras);
+router.get('/:id', muestrasController.obtenerMuestra);
+router.put('/:id', verificarToken, muestrasController.actualizarMuestra);
+router.delete('/:id', verificarToken, verificarRolAdministrador, muestrasController.eliminarMuestra);
 
-// Ruta para obtener muestras por tipo
-router.get('/tipo/:tipo', verificarDocumento, muestrasController.obtenerMuestrasPorTipo);
-
-// Ruta para obtener muestras por estado
-router.get('/estado/:estado', verificarDocumento, muestrasController.obtenerMuestrasPorEstado);
-
-// Ruta para obtener una muestra específica por ID
-router.get('/:id', verificarDocumento, muestrasController.obtenerMuestra);
-
-// Ruta para actualizar una muestra
-router.put('/:id', verificarDocumento, muestrasController.actualizarMuestra);
-
-// Ruta para registrar firma en una muestra
-router.post('/:idMuestra/firma', verificarDocumento, muestrasController.registrarFirma);
+// ===== RUTAS DE LABORATORIO (verificarLaboratorista) =====
+// Rutas específicas para laboratoristas
+router.get('/lab', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestras);
+router.get('/lab/:id', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestra);
 
 module.exports = router;
