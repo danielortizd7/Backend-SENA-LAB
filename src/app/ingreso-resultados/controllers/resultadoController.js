@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const { ResponseHandler } = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError, AuthorizationError } = require("../../../shared/errors/AppError");
 const { Muestra } = require("../../../shared/models/muestrasModel");
+const { formatPaginationResponse } = require("../../../shared/middleware/paginationMiddleware");
 
 // Validar que los valores numéricos sean válidos
 const validarValoresNumericos = (datos) => {
