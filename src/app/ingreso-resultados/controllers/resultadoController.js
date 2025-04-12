@@ -6,6 +6,34 @@ const { NotFoundError, ValidationError, AuthorizationError } = require("../../..
 const { Muestra } = require("../../../shared/models/muestrasModel");
 const { formatPaginationResponse } = require("../../../shared/middleware/paginationMiddleware");
 
+// Función para formatear fechas en zona horaria colombiana
+const formatearFechaHora = (fecha) => {
+    if (!fecha) return null;
+    
+    try {
+        // Convertir a zona horaria de Colombia (America/Bogota)
+        const fechaObj = new Date(fecha);
+        
+        // Formatear fecha
+        const dia = fechaObj.getDate().toString().padStart(2, '0');
+        const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+        const año = fechaObj.getFullYear();
+        
+        // Formatear hora en formato 24 horas
+        const horas = fechaObj.getHours().toString().padStart(2, '0');
+        const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
+        const segundos = fechaObj.getSeconds().toString().padStart(2, '0');
+        
+        return {
+            fecha: `${dia}/${mes}/${año}`,
+            hora: `${horas}:${minutos}:${segundos}`
+        };
+    } catch (error) {
+        console.error('Error al formatear fecha:', error);
+        return null;
+    }
+};
+
 // Validar que los valores numéricos sean válidos
 const validarValoresNumericos = (datos) => {
   const campos = ['pH', 'turbidez', 'oxigenoDisuelto', 'nitratos', 'solidosSuspendidos', 'fosfatos'];
@@ -198,17 +226,17 @@ const registrarResultado = async (req, res) => {
                     valorAnterior: valorAnterior ? `${valorAnterior.valor} ${valorAnterior.unidad}`.trim() : "No registrado",
                     valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
                     unidad: datos.unidad
-            };
-        });
+                };
+            });
 
             resultado.observaciones = observaciones;
             resultado.verificado = false;
             
             // Agregar al historial de cambios
             const cambio = {
-            nombre: usuario.nombre,
-            cedula: usuario.documento,
-            fecha: new Date(),
+                nombre: usuario.nombre,
+                cedula: usuario.documento,
+                fecha: new Date(),
                 observaciones: observaciones || "Sin observaciones",
                 cambiosRealizados: {
                     resultados: cambiosRealizados
@@ -240,10 +268,10 @@ const registrarResultado = async (req, res) => {
                 fechaHoraMuestreo: muestra.fechaHoraMuestreo,
                 tipoAnalisis: muestra.tipoAnalisis,
                 estado: 'En análisis',
-            observaciones,
-            verificado: false,
-            cedulaLaboratorista: usuario.documento,
-            nombreLaboratorista: usuario.nombre,
+                observaciones,
+                verificado: false,
+                cedulaLaboratorista: usuario.documento,
+                nombreLaboratorista: usuario.nombre,
                 historialCambios: [{
                     nombre: usuario.nombre,
                     cedula: usuario.documento,
@@ -286,6 +314,15 @@ const registrarResultado = async (req, res) => {
                 documento: resultadoTransformado.cliente.documento
             };
         }
+
+        // Formatear todas las fechas en la respuesta
+        resultadoTransformado.fechaHoraMuestreo = formatearFechaHora(resultadoTransformado.fechaHoraMuestreo);
+        resultadoTransformado.createdAt = formatearFechaHora(resultadoTransformado.createdAt);
+        resultadoTransformado.updatedAt = formatearFechaHora(resultadoTransformado.updatedAt);
+        resultadoTransformado.historialCambios = resultadoTransformado.historialCambios.map(cambio => ({
+            ...cambio,
+            fecha: formatearFechaHora(cambio.fecha)
+        }));
 
         return res.status(200).json({
             success: true,
@@ -378,9 +415,9 @@ const editarResultado = async (req, res) => {
         
         // Agregar al historial de cambios
         const cambio = {
-                nombre: usuario.nombre,
-                cedula: usuario.documento,
-                fecha: new Date(),
+            nombre: usuario.nombre,
+            cedula: usuario.documento,
+            fecha: new Date(),
             observaciones: observaciones || "Sin observaciones",
             cambiosRealizados: {
                 resultados: cambiosRealizados
@@ -392,15 +429,27 @@ const editarResultado = async (req, res) => {
         // Guardar los cambios
         await resultado.save();
 
-        // Obtener el resultado actualizado
+        // Obtener el resultado actualizado y transformarlo
         const resultadoActualizado = await Resultado.findOne({ idMuestra })
             .select('-__v')
             .lean();
 
+        // Formatear todas las fechas en la respuesta
+        const resultadoFormateado = {
+            ...resultadoActualizado,
+            fechaHoraMuestreo: formatearFechaHora(resultadoActualizado.fechaHoraMuestreo),
+            createdAt: formatearFechaHora(resultadoActualizado.createdAt),
+            updatedAt: formatearFechaHora(resultadoActualizado.updatedAt),
+            historialCambios: resultadoActualizado.historialCambios.map(cambio => ({
+                ...cambio,
+                fecha: formatearFechaHora(cambio.fecha)
+            }))
+        };
+
         return res.status(200).json({
             success: true,
             message: 'Resultado actualizado exitosamente',
-            data: resultadoActualizado
+            data: resultadoFormateado
         });
     } catch (error) {
         console.error('Error al editar resultado:', error);
@@ -412,60 +461,62 @@ const editarResultado = async (req, res) => {
     }
 };
 
-const obtenerResultados = async (req, res, next) => {
+const obtenerResultados = async (req, res) => {
     try {
-        const { 
-            id_muestra,
-            estado,
-            verificado,
-            fechaInicio,
-            fechaFin
-        } = req.query;
-
-        let filtro = {};
-
-        // Aplicar filtros si se proporcionan
-        if (id_muestra) filtro.id_muestra = id_muestra;
-        if (estado) filtro.estado = estado;
-        if (verificado !== undefined) filtro.verificado = verificado === 'true';
-        if (fechaInicio || fechaFin) {
-            filtro.fechaHoraMuestreo = {};
-            if (fechaInicio) filtro.fechaHoraMuestreo.$gte = new Date(fechaInicio);
-            if (fechaFin) filtro.fechaHoraMuestreo.$lte = new Date(fechaFin);
-        }
-
         // Configurar el ordenamiento
         const sort = {};
         sort[req.pagination.sortBy] = req.pagination.sortOrder === 'desc' ? -1 : 1;
 
         // Ejecutar las consultas en paralelo
         const [resultados, total] = await Promise.all([
-            Resultado.find(filtro)
+            Resultado.find()
                 .select('-__v')
                 .sort(sort)
                 .skip(req.pagination.skip)
                 .limit(req.pagination.limit)
                 .lean(),
-            Resultado.countDocuments(filtro)
+            Resultado.countDocuments()
         ]);
+
+        // Formatear las fechas en cada resultado
+        const resultadosFormateados = resultados.map(resultado => {
+            return {
+                ...resultado,
+                fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+                createdAt: formatearFechaHora(resultado.createdAt),
+                updatedAt: formatearFechaHora(resultado.updatedAt),
+                historialCambios: resultado.historialCambios?.map(cambio => ({
+                    ...cambio,
+                    fecha: formatearFechaHora(cambio.fecha)
+                })) || []
+            };
+        });
 
         // Formatear la respuesta con paginación
         const respuesta = formatPaginationResponse(
-            resultados,
+            resultadosFormateados,
             total,
             req.pagination
         );
 
-        ResponseHandler.success(res, respuesta, 'Resultados obtenidos correctamente');
+        return res.status(200).json({
+            success: true,
+            data: respuesta
+        });
     } catch (error) {
-        next(error);
+        console.error('Error al obtener resultados:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener los resultados',
+            error: error.message
+        });
     }
 };
 
 const obtenerResultado = async (req, res) => {
     try {
-        const { id } = req.params;
-        const resultado = await Resultado.findWithMuestra(id);
+        const { idMuestra } = req.params;
+        const resultado = await Resultado.findOne({ idMuestra });
 
         if (!resultado) {
             return res.status(404).json({
@@ -475,9 +526,21 @@ const obtenerResultado = async (req, res) => {
             });
         }
 
+        // Formatear las fechas en la respuesta
+        const resultadoFormateado = {
+            ...resultado.toObject(),
+            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+            createdAt: formatearFechaHora(resultado.createdAt),
+            updatedAt: formatearFechaHora(resultado.updatedAt),
+            historialCambios: resultado.historialCambios.map(cambio => ({
+                ...cambio,
+                fecha: formatearFechaHora(cambio.fecha)
+            }))
+        };
+
         return res.status(200).json({
             success: true,
-            data: resultado
+            data: resultadoFormateado
         });
     } catch (error) {
         console.error('Error al obtener resultado:', error);
@@ -504,35 +567,21 @@ const obtenerResultadoPorMuestra = async (req, res) => {
             });
         }
 
-        // Transformar el resultado antes de enviarlo
-        const resultadoTransformado = {
-            _id: resultado._id,
-            idMuestra: resultado.idMuestra,
-            cliente: resultado.cliente || {},
-            tipoDeAgua: resultado.tipoDeAgua,
-            lugarMuestreo: resultado.lugarMuestreo,
-            fechaHoraMuestreo: resultado.fechaHoraMuestreo,
-            tipoAnalisis: resultado.tipoAnalisis,
-            estado: resultado.estado,
-            resultados: resultado.resultados || {},
-            observaciones: resultado.observaciones,
-            verificado: resultado.verificado,
-            cedulaLaboratorista: resultado.cedulaLaboratorista,
-            nombreLaboratorista: resultado.nombreLaboratorista,
+        // Formatear todas las fechas en el resultado
+        const resultadoFormateado = {
+            ...resultado,
+            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+            createdAt: formatearFechaHora(resultado.createdAt),
+            updatedAt: formatearFechaHora(resultado.updatedAt),
             historialCambios: resultado.historialCambios?.map(cambio => ({
-                nombre: cambio.nombre,
-                cedula: cambio.cedula,
-                fecha: cambio.fecha,
-                observaciones: cambio.observaciones,
-                cambiosRealizados: cambio.cambiosRealizados || {}
-            })) || [],
-            createdAt: resultado.createdAt,
-            updatedAt: resultado.updatedAt
+                ...cambio,
+                fecha: formatearFechaHora(cambio.fecha)
+            })) || []
         };
 
         return res.status(200).json({
             success: true,
-            data: resultadoTransformado
+            data: resultadoFormateado
         });
     } catch (error) {
         console.error('Error al obtener resultado por muestra:', error);
@@ -664,7 +713,7 @@ const verificarResultado = async (req, res) => {
                 cliente: resultadoActualizado.cliente,
                 tipoDeAgua: resultadoActualizado.tipoDeAgua,
                 lugarMuestreo: resultadoActualizado.lugarMuestreo,
-                fechaHoraMuestreo: resultadoActualizado.fechaHoraMuestreo,
+                fechaHoraMuestreo: formatearFechaHora(resultadoActualizado.fechaHoraMuestreo),
                 tipoAnalisis: resultadoActualizado.tipoAnalisis,
                 estado: resultadoActualizado.estado,
                 resultados: resultadosFinales,
@@ -672,11 +721,14 @@ const verificarResultado = async (req, res) => {
                 verificado: resultadoActualizado.verificado,
                 cedulaLaboratorista: resultadoActualizado.cedulaLaboratorista,
                 nombreLaboratorista: resultadoActualizado.nombreLaboratorista,
-                historialCambios: resultadoActualizado.historialCambios,
-                createdAt: resultadoActualizado.createdAt,
-                updatedAt: resultadoActualizado.updatedAt,
+                historialCambios: resultadoActualizado.historialCambios.map(cambio => ({
+                    ...cambio,
+                    fecha: formatearFechaHora(cambio.fecha)
+                })),
+                createdAt: formatearFechaHora(resultadoActualizado.createdAt),
+                updatedAt: formatearFechaHora(resultadoActualizado.updatedAt),
                 resumenVerificacion: valoresActuales,
-                fechaVerificacion: new Date()
+                fechaVerificacion: formatearFechaHora(new Date())
             }
         };
 
@@ -710,9 +762,23 @@ const obtenerTodosResultados = async (req, res) => {
             Resultado.countDocuments()
         ]);
 
+        // Formatear las fechas en cada resultado
+        const resultadosFormateados = resultados.map(resultado => {
+            return {
+                ...resultado,
+                fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+                createdAt: formatearFechaHora(resultado.createdAt),
+                updatedAt: formatearFechaHora(resultado.updatedAt),
+                historialCambios: resultado.historialCambios?.map(cambio => ({
+                    ...cambio,
+                    fecha: formatearFechaHora(cambio.fecha)
+                })) || []
+            };
+        });
+
         return res.status(200).json({
             success: true,
-            data: resultados,
+            data: resultadosFormateados,
             total,
             page: parseInt(page),
             totalPages: Math.ceil(total / limit)
@@ -754,6 +820,42 @@ const eliminarResultado = async (req, res) => {
     }
 };
 
+const obtenerResultadosPorMuestra = async (req, res) => {
+    try {
+        const { idMuestra } = req.params;
+        const resultados = await Resultado.find({ idMuestra })
+            .select('-__v')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        // Formatear las fechas en cada resultado
+        const resultadosFormateados = resultados.map(resultado => {
+            return {
+                ...resultado,
+                fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+                createdAt: formatearFechaHora(resultado.createdAt),
+                updatedAt: formatearFechaHora(resultado.updatedAt),
+                historialCambios: resultado.historialCambios?.map(cambio => ({
+                    ...cambio,
+                    fecha: formatearFechaHora(cambio.fecha)
+                })) || []
+            };
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: resultadosFormateados
+        });
+    } catch (error) {
+        console.error('Error al obtener resultados por muestra:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener los resultados de la muestra',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     registrarResultado,
     editarResultado,
@@ -762,5 +864,6 @@ module.exports = {
     obtenerResultadoPorMuestra,
     obtenerTodosResultados,
     verificarResultado,
-    eliminarResultado
+    eliminarResultado,
+    obtenerResultadosPorMuestra
 };
