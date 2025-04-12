@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
 const Usuario = require('../models/usuarioModel');
-const { PERMISOS, ROLES_PERMISOS } = require('../config/rolesConfig');
+const { PERMISOS, ROLES_PERMISOS } = require('../../config/rolesConfig');
 
 // Función para obtener el payload del token sin verificar la firma
 const decodeToken = (token) => {

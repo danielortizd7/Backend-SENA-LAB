@@ -437,6 +437,11 @@ const registrarMuestra = async (req, res, next) => {
     try {
         const datos = req.body;
         
+        // Verificar que el usuario sea administrador
+        if (!req.usuario || req.usuario.rol !== 'administrador') {
+            throw new ValidationError('No tiene permisos para registrar muestras. Se requiere rol de administrador');
+        }
+        
         // Validar los datos de la muestra
         validarDatosMuestra(datos);
 
