@@ -6,6 +6,7 @@ const emailService = require('../service/emailService');
 const config = require('../config/database');
 const EmailService = require('../service/emailService');
 const Role = require('../models/Role');
+const Perfil = require('../models/perfilModel')
 
 class UsuarioController {
     constructor(usuarioModel) {
@@ -164,6 +165,14 @@ class UsuarioController {
           console.log(nuevoUsuario);
 
           const resultado = await this.usuarioModel.crear(nuevoUsuario);
+
+          if(perfil){
+            perfil.usuarioId = resultado.insertedId;
+            await Perfil.create(perfil);
+          }else {
+            await Perfil.create({usuarioId: resultado.insertedId});
+          }
+
 
           const respuesta = {
             mensaje: 'Usuario creado exitosamente',
