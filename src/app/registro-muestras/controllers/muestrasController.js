@@ -220,14 +220,20 @@ const formatearFechaHora = (fecha) => {
         const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
         const año = fechaObj.getFullYear();
         
-        // Formatear hora en formato 24 horas
-        const horas = fechaObj.getHours().toString().padStart(2, '0');
+        // Formatear hora en formato AM/PM
+        let horas = fechaObj.getHours();
         const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
         const segundos = fechaObj.getSeconds().toString().padStart(2, '0');
+        const ampm = horas >= 12 ? 'PM' : 'AM';
+        
+        // Convertir a formato 12 horas
+        horas = horas % 12;
+        horas = horas ? horas : 12; // si es 0, convertir a 12
+        horas = horas.toString().padStart(2, '0');
         
         return {
             fecha: `${dia}/${mes}/${año}`,
-            hora: `${horas}:${minutos}:${segundos}`
+            hora: `${horas}:${minutos}:${segundos} ${ampm}`
         };
     } catch (error) {
         console.error('Error al formatear fecha:', error);
