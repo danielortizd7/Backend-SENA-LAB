@@ -7,6 +7,7 @@ const config = require('../config/database');
 const EmailService = require('../service/emailService');
 const Role = require('../models/Role');
 const Perfil = require('../models/perfilModel')
+const perfilService = require('../service/perfilService')
 
 class UsuarioController {
     constructor(usuarioModel) {
@@ -167,7 +168,7 @@ class UsuarioController {
           const resultado = await this.usuarioModel.crear(nuevoUsuario);
 
          await perfilService.crearPerfil({
-            usuarioId: resultado.insertedId,
+            usuarioId: resultado._id,
             nombre,
             email,
             telefono,
