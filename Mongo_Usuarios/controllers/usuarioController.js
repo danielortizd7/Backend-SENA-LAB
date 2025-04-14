@@ -166,16 +166,18 @@ class UsuarioController {
 
           const resultado = await this.usuarioModel.crear(nuevoUsuario);
 
-          if(perfil){
-            perfil.usuarioId = resultado.insertedId;
-            await Perfil.create(perfil);
-          }else {
-            await Perfil.create({usuarioId: resultado.insertedId});
-          }
+         await perfilService.crearPerfil({
+            usuarioId: resultado.insertedId,
+            nombre,
+            email,
+            telefono,
+            direccion,
+            fotoPerfil:''
+         })
 
 
           const respuesta = {
-            mensaje: 'Usuario creado exitosamente',
+            mensaje: 'Usuario y perfil creado exitosamente',
             usuario: {
                 _id: resultado.insertedId,
                 email,

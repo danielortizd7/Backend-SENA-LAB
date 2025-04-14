@@ -1,5 +1,14 @@
 const perfilService = require('../service/perfilService');
 
+const crearPerfil = async (req, res) => {
+  try {
+    const perfil = await perfilService.crearPerfil(req.body);
+    res.status(201).json(perfil);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 const obtenerPerfil = async (req, res) => {
   try {
     const perfil = await perfilService.obtenerPerfilPorUsuario(req.params.idUsuario);
@@ -21,6 +30,7 @@ const actualizarPerfil = async (req, res) => {
 };
 
 module.exports = {
+  crearPerfil,
   obtenerPerfil,
   actualizarPerfil
 };
