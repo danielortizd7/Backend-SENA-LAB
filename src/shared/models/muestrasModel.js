@@ -2,6 +2,32 @@ const mongoose = require("mongoose");
 
 const estadosValidos = ["Recibida", "En análisis", "Finalizada", "Rechazada"];
 
+// Constantes para tipos de muestreo
+const TIPOS_MUESTREO = {
+    SIMPLE: "Simple",
+    COMPUESTO: "Compuesto"
+};
+
+// Constantes para validación
+const TIPOS_AGUA = {
+    POTABLE: 'potable',
+    NATURAL: 'natural',
+    RESIDUAL: 'residual',
+    OTRA: 'otra'
+};
+
+const SUBTIPOS_RESIDUAL = {
+    DOMESTICA: 'Doméstica',
+    NO_DOMESTICA: 'No Doméstica'
+};
+
+const ESTADOS = {
+    RECIBIDA: 'Recibida',
+    EN_PROCESO: 'En proceso',
+    COMPLETADA: 'Completada',
+    RECHAZADA: 'Rechazada'
+};
+
 // Esquema para resultados de análisis
 const resultadoAnalisisSchema = new mongoose.Schema({
     valor: {
@@ -19,7 +45,7 @@ const tipoAguaSchema = new mongoose.Schema({
     tipo: {
         type: String,
         required: true,
-        enum: ['potable', 'natural', 'residual', 'otra']
+        enum: Object.values(TIPOS_AGUA)
     },
     codigo: {
         type: String,
@@ -28,20 +54,67 @@ const tipoAguaSchema = new mongoose.Schema({
     descripcion: {
         type: String,
         required: true
+    },
+    subtipoResidual: {
+        type: String,
+        enum: Object.values(SUBTIPOS_RESIDUAL),
+        required: function() {
+            return this.tipo === TIPOS_AGUA.RESIDUAL;
+        }
     }
 });
 
-// Esquema para firmas
-const firmaSchema = new mongoose.Schema({
-    firma: {
+// Esquema para datos de usuario
+const datosUsuarioSchema = new mongoose.Schema({
+    documento: {
         type: String,
         required: true
     },
-    fecha: {
-        type: Date,
+    nombre: {
+        type: String,
         required: true
+    },
+    email: String,
+    telefono: String,
+    direccion: String,
+    fechaCreacion: {
+        type: Object,
+        fecha: String,
+        hora: String
     }
-});
+}, { _id: false });
+
+// Esquema para las firmas
+const firmasSchema = new mongoose.Schema({
+    administrador: {
+        nombre: {
+            type: String,
+            required: true,
+        },
+        documento: {
+            type: String,
+            required: true
+        },
+        firmaAdministrador: {
+            type: String,
+            required: false,
+        }
+    },
+    cliente: {
+        nombre: {
+            type: String,
+            required: true,
+        },
+        documento: {
+            type: String,
+            required: true
+        },
+        firmaCliente: {
+            type: String,
+            required: false,
+        }
+    }
+}, { _id: false });
 
 // Esquema para historial de estados
 const historialEstadoSchema = new mongoose.Schema({
@@ -50,12 +123,8 @@ const historialEstadoSchema = new mongoose.Schema({
         required: true,
         enum: ['Recibida', 'En análisis','Finalizada', 'Rechazada']
     },
-    cedulaadministrador: {
-        type: String,
-        required: true
-    },
-    nombreadministrador: {
-        type: String,
+    administrador: {
+        type: datosUsuarioSchema,
         required: true
     },
     fechaCambio: {
@@ -111,9 +180,9 @@ const muestraSchema = new mongoose.Schema({
         unique: true
     },
 
-    // . Documento del cliente
-    documento: {
-        type: String,
+    // 2. Datos del cliente
+    cliente: {
+        type: datosUsuarioSchema,
         required: true
     },
     
@@ -123,26 +192,34 @@ const muestraSchema = new mongoose.Schema({
         required: true
     },
     
-    // 4. Lugar de Muestreo
+    // 4. Tipo de Muestreo
+    tipoMuestreo: {
+        type: String,
+        required: true,
+        enum: Object.values(TIPOS_MUESTREO),
+        default: TIPOS_MUESTREO.SIMPLE
+    },
+
+    // 5. Lugar de Muestreo
     lugarMuestreo: {
         type: String,
         required: true
     },
     
-    // 5. Fecha y Hora de Muestreo
+    // 6. Fecha y Hora de Muestreo
     fechaHoraMuestreo: {
         type: Date,
         required: true
     },
     
-    // 6. Tipo de Análisis
+    // 7. Tipo de Análisis
     tipoAnalisis: {
         type: String,
         required: true,
         enum: ['Fisicoquímico', 'Microbiológico']
     },
     
-    // 7. Identificación proporcionada por el cliente
+    // 8. Identificación proporcionada por el cliente
     identificacionMuestra: {
         type: String,
         required: true
@@ -150,38 +227,38 @@ const muestraSchema = new mongoose.Schema({
 
     
     
-    // 8. Plan de muestreo
+    // 9. Plan de muestreo
     planMuestreo: {
         type: String,
         required: true
     },
     
-    // 9. Condiciones ambientales
+    // 10. Condiciones ambientales
     condicionesAmbientales: {
         type: String,
         required: true
     },
     
-    // 10. Preservación de la muestra
+    // 11. Preservación de la muestra
     preservacionMuestra: {
         type: String,
         required: true,
-        enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otra']
+        enum: ['Refrigeración', 'Congelación', 'Acidificación', 'Otro']
     },
-    preservacionOtra: {
+    descripcion: {
         type: String,
         required: function() {
-            return this.preservacionMuestra === 'Otra';
+            return this.preservacionMuestra === 'Otro';
         }
     },
     
-    // 11. Análisis seleccionados
+    // 12. Análisis seleccionados
     analisisSeleccionados: [{
         type: String,
         required: true
     }],
     
-    // 12. Estado y rechazo
+    // 13. Estado y rechazo
     estado: {
         type: String,
         required: true,
@@ -202,38 +279,31 @@ const muestraSchema = new mongoose.Schema({
         type: String
     },
     firmas: {
-        cedulaAdministrador: {
-            type: String,
-            required: true
-        },
-        firmaAdministrador: {
-            type: String,
-            required: true
-        },
-        cedulaCliente: {
-            type: String,
-            required: true
-        },
-        firmaCliente: {
-            type: String,
-            required: true
-        },
-        fechaFirmaAdministrador: {
-            type: Date,
-            required: true
-        },
-        fechaFirmaCliente: {
-            type: Date,
-            required: true
-        }
+        type: firmasSchema,
+        required: true
     },
     historial: [historialEstadoSchema],
     creadoPor: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Usuario',
+        type: datosUsuarioSchema,
         required: true
     },
-    actualizadoPor: [actualizacionSchema]
+    actualizadoPor: [{
+        usuario: {
+            type: datosUsuarioSchema,
+            required: true
+        },
+        fecha: {
+            type: Date,
+            required: true
+        },
+        accion: {
+            type: String,
+            required: true
+        }
+    }],
+    laboratorista: {
+        type: datosUsuarioSchema
+    }
 }, {
     timestamps: true
 });
@@ -245,5 +315,9 @@ const TipoAgua = mongoose.models.TipoAgua || mongoose.model('TipoAgua', tipoAgua
 module.exports = {
     Muestra,
     TipoAgua,
-    estadosValidos
+    TIPOS_AGUA,
+    SUBTIPOS_RESIDUAL,
+    ESTADOS,
+    estadosValidos,
+    TIPOS_MUESTREO
 };

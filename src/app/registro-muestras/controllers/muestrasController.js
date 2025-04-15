@@ -1,17 +1,18 @@
 const { validationResult } = require('express-validator');
 const { ResponseHandler } = require('../../../shared/utils/responseHandler');
 const { ValidationError, NotFoundError } = require('../../../shared/errors/AppError');
-const { Muestra, estadosValidos, TipoAgua } = require('../../../shared/models/muestrasModel');
-const { analisisDisponibles, matrizMap, getAnalisisPorTipoAgua } = require('../../../shared/models/analisisModel');
+const { Muestra, estadosValidos, TipoAgua, TIPOS_AGUA, SUBTIPOS_RESIDUAL } = require('../../../shared/models/muestrasModel');
+const { getAnalisisPorTipoAgua } = require('../../../shared/models/analisisModel');
 const Usuario = require('../../../shared/models/usuarioModel');
 const { validarUsuario } = require('../services/usuariosService');
 const muestrasService = require('../services/muestrasService');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
+const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
 
-const USUARIOS_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
-const BUSCAR_USUARIO_API = 'https://back-usuarios-f.onrender.com/api/usuarios';
+// URL base para las peticiones a la API de usuarios
+const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
 
 //Funciones de Utilidad 
 const obtenerDatosUsuario = (req) => {
@@ -62,7 +63,7 @@ const validarDatosMuestra = (datos) => {
         if (!datos.documento) errores.push('El documento es requerido');
         if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
         if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
-        if (!datos.motivoRechazo) errores.push('El motivo de rechazo es requerido');
+        if (!datos.observaciones) errores.push('El motivo de rechazo es requerido');
         
         if (errores.length > 0) {
             throw new ValidationError(errores.join('. '));
@@ -77,6 +78,15 @@ const validarDatosMuestra = (datos) => {
     if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
     if (!datos.tipoDeAgua?.codigo) errores.push('El código del tipo de agua es requerido');
     if (!datos.tipoDeAgua?.descripcion) errores.push('La descripción del tipo de agua es requerida');
+    
+    // Validación específica para agua residual
+    if (datos.tipoDeAgua?.tipo === TIPOS_AGUA.RESIDUAL) {
+        if (!datos.tipoDeAgua?.subtipoResidual) {
+            errores.push('Para agua residual debe especificar si es doméstica o no doméstica');
+        } else if (!Object.values(SUBTIPOS_RESIDUAL).includes(datos.tipoDeAgua.subtipoResidual)) {
+            errores.push('El subtipo de agua residual debe ser "domestica" o "no_domestica"');
+        }
+    }
     
     // 3. Lugar de Muestreo
     if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
@@ -98,27 +108,17 @@ const validarDatosMuestra = (datos) => {
     // 9. Preservación de la Muestra
     if (!datos.preservacionMuestra) {
         errores.push('El método de preservación es requerido');
-    } else if (datos.preservacionMuestra === 'Otra' && !datos.preservacionOtra) {
-        errores.push('Debe especificar el método de preservación cuando selecciona "Otra"');
+    } else if (datos.preservacionMuestra === 'Otro' && !datos.descripcion) {
+        errores.push('Debe especificar el método de preservación cuando selecciona "Otro"');
     }
     
     // 10. Análisis Seleccionados
     if (!Array.isArray(datos.analisisSeleccionados) || datos.analisisSeleccionados.length === 0) {
         errores.push('Debe seleccionar al menos un análisis');
-    } else {
-        // Validar que los análisis seleccionados existan y correspondan al tipo de agua
-        const analisisDisponibles = getAnalisisPorTipoAgua(datos.tipoDeAgua.tipo);
-        const todosLosAnalisis = [...analisisDisponibles.fisicoquimico, ...analisisDisponibles.microbiologico];
-        const analisisInvalidos = datos.analisisSeleccionados.filter(
-            analisis => !todosLosAnalisis.some(a => a.nombre === analisis)
-        );
-        if (analisisInvalidos.length > 0) {
-            errores.push(`Los siguientes análisis no son válidos para el tipo de agua seleccionado: ${analisisInvalidos.join(', ')}`);
-        }
     }
 
-    // Validar firmas
-    if (!datos.firmas?.firmaAdministrador?.firma || !datos.firmas?.firmaCliente?.firma) {
+    // Validar firmas solo si no es una muestra rechazada
+    if (datos.estado !== 'Rechazada' && (!datos.firmas?.firmaAdministrador?.firma || !datos.firmas?.firmaCliente?.firma)) {
         errores.push('Se requieren las firmas del administrador y del cliente');
     }
 
@@ -136,39 +136,6 @@ const validarRolAdministrador = (usuario) => {
         throw new ValidationError('Se requieren permisos de administrador');
     }
 
-    return true;
-};
-
-// Función de validación de análisis según tipo de agua
-const validarAnalisisParaTipoAgua = (analisisSeleccionados, tipoAgua, subtipoResidual = null) => {
-
-    // Determinar matriz permitida según tipo de agua
-    let matrizPermitida;
-    switch (tipoAgua) {
-        case 'potable':
-            matrizPermitida = 'AP';
-            break;
-        case 'natural':
-            matrizPermitida = 'AS';
-            break;
-        case 'residual':
-            matrizPermitida = subtipoResidual === 'doméstica' ? 'ARD' : 'ARnD';
-            break;
-        default:
-            throw new ValidationError('Tipo de agua no válido');
-    }
-
-    // Verificar cada análisis seleccionado
-    for (const analisis of analisisSeleccionados) {
-        const analisisInfo = analisisDisponibles.find(a => a.nombre === analisis);
-        if (!analisisInfo) {
-            throw new ValidationError(`El análisis "${analisis}" no existe en el catálogo`);
-        }
-
-        if (!analisisInfo.matriz.includes(matrizPermitida)) {
-            throw new ValidationError(`El análisis "${analisis}" no es válido para ${tipoAgua}${subtipoResidual ? ` ${subtipoResidual}` : ''}`);
-        }
-    }
     return true;
 };
 
@@ -240,56 +207,191 @@ const actualizarTipoAgua = async (req, res, next) => {
     }
 };
 
-// Análisis 
-const obtenerAnalisis = async (req, res) => {
-    try {
-        ResponseHandler.success(res, { 
-            analisis: analisisDisponibles,
-            matrices: matrizMap
-        }, 'Análisis obtenidos correctamente');
-    } catch (error) {
-        ResponseHandler.error(res, error);
-    }
-};
-
-const obtenerAnalisisPorTipoAgua = async (req, res) => {
-    try {
-        const { tipo, subtipo } = req.query;
-        const analisis = getAnalisisPorTipoAgua(tipo, subtipo);
-        ResponseHandler.success(res, { 
-            analisis,
-            tipo,
-            subtipo,
-            matriz: matrizMap[tipo === 'residual' ? (subtipo === 'domestica' ? 'ARD' : 'ARnD') : tipo === 'potable' ? 'AP' : 'AS']
-        }, 'Análisis filtrados correctamente');
-    } catch (error) {
-        ResponseHandler.error(res, error);
-    }
-};
-
 //Controladores de Muestras
+const formatearFechaHora = (fecha) => {
+    if (!fecha) return null;
+    
+    try {
+        // Convertir a zona horaria de Colombia (America/Bogota)
+        const fechaObj = new Date(fecha);
+        
+        // Formatear fecha
+        const dia = fechaObj.getDate().toString().padStart(2, '0');
+        const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+        const año = fechaObj.getFullYear();
+        
+        // Formatear hora en formato AM/PM
+        let horas = fechaObj.getHours();
+        const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
+        const segundos = fechaObj.getSeconds().toString().padStart(2, '0');
+        const ampm = horas >= 12 ? 'PM' : 'AM';
+        
+        // Convertir a formato 12 horas
+        horas = horas % 12;
+        horas = horas ? horas : 12; // si es 0, convertir a 12
+        horas = horas.toString().padStart(2, '0');
+        
+        return {
+            fecha: `${dia}/${mes}/${año}`,
+            hora: `${horas}:${minutos}:${segundos} ${ampm}`
+        };
+    } catch (error) {
+        console.error('Error al formatear fecha:', error);
+        return null;
+    }
+};
+
 const obtenerMuestras = async (req, res, next) => {
     try {
-        const { tipo, estado, fechaInicio, fechaFin } = req.query;
+        const { 
+            id_muestra,
+            tipo,
+            estado,
+            fechaInicio,
+            fechaFin,
+            cliente
+        } = req.query;
+
         let filtro = {};
 
         // Aplicar filtros si se proporcionan
+        if (id_muestra) filtro.id_muestra = id_muestra;
         if (tipo) filtro['tipoDeAgua.tipo'] = tipo;
         if (estado) filtro.estado = estado;
+        if (cliente) filtro['cliente.documento'] = cliente;
         if (fechaInicio || fechaFin) {
             filtro.fechaHoraMuestreo = {};
             if (fechaInicio) filtro.fechaHoraMuestreo.$gte = new Date(fechaInicio);
             if (fechaFin) filtro.fechaHoraMuestreo.$lte = new Date(fechaFin);
         }
 
-        const muestras = await Muestra.find(filtro)
-            .populate('creadoPor', 'nombre email documento')
-            .populate('actualizadoPor.usuario', 'nombre email documento')
-            .sort({ fechaHoraMuestreo: -1 });
+        // Configurar el ordenamiento
+        const sort = {};
+        sort[req.pagination.sortBy] = req.pagination.sortOrder === 'desc' ? -1 : 1;
 
-        ResponseHandler.success(res, { muestras }, 'Muestras obtenidas correctamente');
+        // Ejecutar las consultas en paralelo
+        const [muestras, total] = await Promise.all([
+            Muestra.find(filtro)
+                .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente tipoMuestreo tipoAnalisis identificacionMuestra planMuestreo condicionesAmbientales preservacionMuestra analisisSeleccionados rechazoMuestra observaciones firmas historial creadoPor actualizadoPor createdAt updatedAt')
+                .sort(sort)
+                .skip(req.pagination.skip)
+                .limit(req.pagination.limit)
+                .lean(),
+            Muestra.countDocuments(filtro)
+        ]);
+
+        // Formatear las fechas en los resultados
+        const muestrasFormateadas = muestras.map(muestra => {
+            const muestraFormateada = {
+                ...muestra,
+                fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
+                historial: muestra.historial.map(h => ({
+                    ...h,
+                    fechaCambio: formatearFechaHora(h.fechaCambio)
+                })),
+                createdAt: formatearFechaHora(muestra.createdAt),
+                updatedAt: formatearFechaHora(muestra.updatedAt),
+                creadoPor: {
+                    ...muestra.creadoPor,
+                    fechaCreacion: formatearFechaHora(muestra.createdAt)
+                }
+            };
+
+            // Eliminar el campo firmas si la muestra está rechazada
+            if (muestra.estado === 'Rechazada') {
+                delete muestraFormateada.firmas;
+            }
+
+            return muestraFormateada;
+        });
+
+        // Formatear la respuesta con paginación
+        const respuesta = formatPaginationResponse(
+            muestrasFormateadas,
+            total,
+            req.pagination
+        );
+
+        ResponseHandler.success(res, respuesta, 'Muestras obtenidas correctamente');
     } catch (error) {
         next(error);
+    }
+};
+
+const obtenerDatosUsuarioExterno = async (documento) => {
+    if (!documento) {
+        console.log('No se proporcionó documento para obtener datos de usuario');
+        return {
+            nombre: 'Usuario no identificado',
+            documento: 'No disponible'
+        };
+    }
+
+    try {
+        console.log(`Consultando API externa para documento: ${documento}`);
+        let userData;
+
+        // Primero intentar con la ruta específica de roles
+        try {
+            const responseRoles = await axios.get(`${BASE_URL}/api/usuarios/roles/${documento}`);
+            if (responseRoles.data && responseRoles.data.nombre) {
+                userData = responseRoles.data;
+                console.log('Usuario encontrado en API (roles):', userData);
+            }
+        } catch (rolesError) {
+            console.log('No se encontró en roles, intentando ruta general');
+        }
+
+        // Si no se encontró en roles, intentar con la ruta general
+        if (!userData) {
+            try {
+                const response = await axios.get(`${BASE_URL}/api/usuarios`, {
+                    params: { documento }
+                });
+                console.log('Respuesta de la API general:', response.data);
+
+                if (response.data && Array.isArray(response.data) && response.data.length > 0) {
+                    userData = response.data[0];
+                    console.log('Usuario encontrado en API general:', userData);
+                }
+            } catch (apiError) {
+                console.log('Error al consultar API general:', apiError.message);
+            }
+        }
+
+        // Si aún no tenemos datos, buscar en la base de datos local
+        if (!userData) {
+            console.log('Buscando en base de datos local');
+            const usuarioLocal = await Usuario.findOne({ documento }).lean();
+            if (usuarioLocal) {
+                userData = usuarioLocal;
+                console.log('Usuario encontrado en base de datos local:', userData);
+            }
+        }
+
+        // Si encontramos datos del usuario, devolverlos
+        if (userData) {
+            return {
+                nombre: userData.nombre || 'Usuario no identificado',
+                documento: userData.documento,
+                email: userData.email || '',
+                telefono: userData.telefono || '',
+                direccion: userData.direccion || ''
+            };
+        }
+
+        // Si no se encontró el usuario en ninguna fuente
+        console.log(`No se encontró usuario para documento: ${documento}, usando valor por defecto`);
+        return {
+            nombre: 'Usuario no identificado',
+            documento: documento
+        };
+    } catch (error) {
+        console.error('Error al obtener datos del usuario:', error.message);
+        return {
+            nombre: 'Usuario no identificado',
+            documento: documento
+        };
     }
 };
 
@@ -298,13 +400,34 @@ const obtenerMuestra = async (req, res, next) => {
         const { id } = req.params;
         const muestra = await Muestra.findOne({ id_muestra: id })
             .populate('creadoPor', 'nombre email documento')
-            .populate('actualizadoPor.usuario', 'nombre email documento');
+            .lean();
 
         if (!muestra) {
             throw new NotFoundError('Muestra no encontrada');
         }
 
-        ResponseHandler.success(res, { muestra }, 'Muestra obtenida correctamente');
+        // Formatear la fecha y actualizar datos de usuarios
+        const muestraFormateada = {
+            ...muestra,
+            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
+            historial: muestra.historial.map(h => ({
+                ...h,
+                fechaCambio: formatearFechaHora(h.fechaCambio)
+            })),
+            createdAt: formatearFechaHora(muestra.createdAt),
+            updatedAt: formatearFechaHora(muestra.updatedAt),
+            creadoPor: {
+                ...muestra.creadoPor,
+                fechaCreacion: formatearFechaHora(muestra.createdAt)
+            }
+        };
+
+        // Eliminar el campo firmas si la muestra está rechazada
+        if (muestra.estado === 'Rechazada') {
+            delete muestraFormateada.firmas;
+        }
+
+        ResponseHandler.success(res, { muestra: muestraFormateada }, 'Muestra obtenida correctamente');
     } catch (error) {
         next(error);
     }
@@ -314,8 +437,75 @@ const registrarMuestra = async (req, res, next) => {
     try {
         const datos = req.body;
         
+        // Verificar que el usuario sea administrador
+        if (!req.usuario || req.usuario.rol !== 'administrador') {
+            throw new ValidationError('No tiene permisos para registrar muestras. Se requiere rol de administrador');
+        }
+        
         // Validar los datos de la muestra
         validarDatosMuestra(datos);
+
+        // Verificar que tenemos el ID del usuario
+        if (!req.usuario || !req.usuario.id) {
+            throw new ValidationError('Usuario no autenticado o ID no disponible');
+        }
+
+        // Obtener datos del administrador directamente del token
+        const datosAdministrador = {
+            nombre: req.usuario.nombre || 'Usuario no identificado',
+            documento: req.usuario.documento,
+            email: req.usuario.email,
+            telefono: req.usuario.telefono,
+            direccion: req.usuario.direccion
+        };
+        
+        console.log('Datos del administrador desde token:', datosAdministrador);
+
+        // Obtener datos del cliente desde la API de usuarios
+        let datosCliente;
+        try {
+            console.log('Consultando datos del cliente con documento:', datos.documento);
+            
+            const response = await axios.get(`${BASE_URL}/api/usuarios/buscar`, {
+                params: { documento: datos.documento },
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log('Respuesta de la API de usuarios:', response.data);
+            
+            if (response.data && response.data.nombre) {
+                datosCliente = {
+                    nombre: response.data.nombre,
+                    documento: response.data.documento,
+                    email: response.data.email,
+                    telefono: response.data.telefono,
+                    direccion: response.data.direccion
+                };
+                console.log('Datos del cliente encontrados:', datosCliente);
+            } else {
+                console.log('No se encontraron datos del cliente, usando valores por defecto');
+                datosCliente = {
+                    nombre: 'Cliente no identificado',
+                    documento: datos.documento
+                };
+            }
+        } catch (error) {
+            console.error('Error al obtener datos del cliente:', error.response?.data || error.message);
+            datosCliente = {
+                nombre: 'Cliente no identificado',
+                documento: datos.documento
+            };
+        }
+
+        if (!datosCliente) {
+            datosCliente = {
+                documento: datos.documento,
+                nombre: 'Cliente no identificado'
+            };
+        }
 
         // Generar ID único de muestra
         const fecha = new Date();
@@ -336,46 +526,148 @@ const registrarMuestra = async (req, res, next) => {
         
         const id_muestra = `${datos.tipoDeAgua.codigo}${datos.tipoAnalisis.charAt(0)}${año}${mes}${dia}${consecutivo}`;
 
-        // Verificar que tenemos el ID del usuario
-        if (!req.usuario || !req.usuario.id) {
-            throw new ValidationError('Usuario no autenticado o ID no disponible');
-        }
-
-        // Convertir el ID a ObjectId
-        const usuarioId = new mongoose.Types.ObjectId(req.usuario.id);
-
-        // Preparar las firmas en el formato correcto
-        const firmas = {
-            cedulaAdministrador: req.usuario.documento || datos.documento,
-            firmaAdministrador: datos.firmas?.firmaAdministrador?.firma || '',
-            fechaFirmaAdministrador: datos.firmas?.firmaAdministrador?.fecha || new Date(),
-            cedulaCliente: datos.documento,
-            firmaCliente: datos.firmas?.firmaCliente?.firma || '',
-            fechaFirmaCliente: datos.firmas?.firmaCliente?.fecha || new Date()
-        };
+        // Determinar si la muestra está siendo rechazada
+        const esRechazada = datos.estado === 'Rechazada';
+        const motivoRechazo = esRechazada ? datos.observaciones : '';
 
         // Crear la muestra con los datos formateados correctamente
         const muestra = new Muestra({
             ...datos,
             id_muestra,
-            estado: 'Recibida',
-            firmas,
-            creadoPor: usuarioId, // Usar el ID convertido a ObjectId
+            cliente: datosCliente,
+            estado: esRechazada ? 'Rechazada' : 'Recibida',
+            preservacionMuestra: datos.preservacionMuestra,
+            descripcion: datos.descripcion,
+            rechazoMuestra: {
+                rechazada: esRechazada,
+                motivo: motivoRechazo,
+                fechaRechazo: esRechazada ? new Date() : null
+            },
+            firmas: {
+                administrador: {
+                    nombre: datosAdministrador.nombre,
+                    documento: datosAdministrador.documento,
+                    firmaAdministrador: esRechazada ? '' : (datos.firmas?.firmaAdministrador?.firma || '')
+                },
+                cliente: {
+                    nombre: datosCliente.nombre,
+                    documento: datosCliente.documento,
+                    firmaCliente: esRechazada ? '' : (datos.firmas?.firmaCliente?.firma || '')
+                }
+            },
+            creadoPor: {
+                nombre: datosAdministrador.nombre,
+                documento: datosAdministrador.documento,
+                email: datosAdministrador.email,
+                fechaCreacion: formatearFechaHora(fecha)
+            },
             historial: [{
-                estado: 'Recibida',
-                cedulaadministrador: req.usuario.documento || datos.documento,
-                nombreadministrador: req.usuario.nombre || 'Sistema',
+                estado: esRechazada ? 'Rechazada' : 'Recibida',
+                administrador: datosAdministrador,
                 fechaCambio: new Date(),
-                observaciones: datos.observaciones || 'Registro inicial de muestra'
-            }]
+                observaciones: esRechazada ? motivoRechazo : (datos.observaciones || 'Registro inicial de muestra')
+            }],
+            actualizadoPor: []
         });
 
-        await muestra.save();
-        ResponseHandler.success(res, { muestra }, 'Muestra registrada exitosamente');
+        console.log('Datos de la muestra antes de guardar:', {
+            cliente: muestra.cliente,
+            creadoPor: muestra.creadoPor,
+            firmas: muestra.firmas,
+            estado: muestra.estado,
+            rechazoMuestra: muestra.rechazoMuestra
+        });
+
+        // Guardar la muestra
+        const muestraGuardada = await muestra.save();
+
+        // Preparar la respuesta simplificada
+        const respuesta = {
+            id_muestra: muestraGuardada.id_muestra,
+            cliente: {
+                nombre: muestraGuardada.cliente.nombre,
+                documento: muestraGuardada.cliente.documento,
+                email: muestraGuardada.cliente.email,
+                telefono: muestraGuardada.cliente.telefono,
+                direccion: muestraGuardada.cliente.direccion
+            },
+            tipoDeAgua: {
+                tipo: muestraGuardada.tipoDeAgua.tipo,
+                codigo: muestraGuardada.tipoDeAgua.codigo,
+                descripcion: muestraGuardada.tipoDeAgua.descripcion
+            },
+            tipoMuestreo: muestraGuardada.tipoMuestreo,
+            lugarMuestreo: muestraGuardada.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(muestraGuardada.fechaHoraMuestreo),
+            tipoAnalisis: muestraGuardada.tipoAnalisis,
+            identificacionMuestra: muestraGuardada.identificacionMuestra,
+            planMuestreo: muestraGuardada.planMuestreo,
+            condicionesAmbientales: muestraGuardada.condicionesAmbientales,
+            preservacionMuestra: muestraGuardada.preservacionMuestra,
+            descripcion: muestraGuardada.descripcion,
+            analisisSeleccionados: muestraGuardada.analisisSeleccionados,
+            estado: muestraGuardada.estado,
+            rechazoMuestra: {
+                rechazada: muestraGuardada.rechazoMuestra.rechazada,
+                motivo: muestraGuardada.rechazoMuestra.motivo
+            },
+            observaciones: muestraGuardada.observaciones,
+            historial: muestraGuardada.historial.map(h => ({
+                estado: h.estado,
+                administrador: {
+                    nombre: h.administrador.nombre,
+                    documento: h.administrador.documento,
+                    email: h.administrador.email
+                },
+                fechaCambio: formatearFechaHora(h.fechaCambio),
+                observaciones: h.observaciones
+            })),
+            creadoPor: {
+                nombre: muestraGuardada.creadoPor.nombre,
+                documento: muestraGuardada.creadoPor.documento,
+                email: muestraGuardada.creadoPor.email,
+                fechaCreacion: formatearFechaHora(muestraGuardada.createdAt)
+            },
+            actualizadoPor: muestraGuardada.actualizadoPor.map(a => ({
+                nombre: a.nombre,
+                documento: a.documento,
+                fecha: formatearFechaHora(a.fecha),
+                accion: a.accion
+            })),
+            createdAt: formatearFechaHora(muestraGuardada.createdAt),
+            updatedAt: formatearFechaHora(muestraGuardada.updatedAt)
+        };
+
+        // Solo incluir firmas en la respuesta si la muestra no está rechazada
+        if (!esRechazada) {
+            respuesta.firmas = {
+                administrador: {
+                    nombre: muestraGuardada.firmas.administrador.nombre,
+                    documento: muestraGuardada.firmas.administrador.documento,
+                    firmaAdministrador: muestraGuardada.firmas.administrador.firmaAdministrador
+                },
+                cliente: {
+                    nombre: muestraGuardada.firmas.cliente.nombre,
+                    documento: muestraGuardada.firmas.cliente.documento,
+                    firmaCliente: muestraGuardada.firmas.cliente.firmaCliente
+                }
+            };
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: esRechazada ? 'Muestra rechazada exitosamente' : 'Muestra registrada exitosamente',
+            data: {
+                muestra: respuesta
+            }
+        });
 
     } catch (error) {
         console.error('Error al registrar muestra:', error);
-        return ResponseHandler.error(res, error);
+        if (error instanceof ValidationError) {
+            return ResponseHandler.error(res, error);
+        }
+        return ResponseHandler.error(res, new Error('Error interno al registrar la muestra'));
     }
 };
 
@@ -395,22 +687,50 @@ const actualizarMuestra = async (req, res, next) => {
         }
 
         // Validaciones específicas
-        if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.motivoRechazo) {
-            throw new ValidationError('Debe especificar el motivo del rechazo');
+        if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.observaciones) {
+            throw new ValidationError('Debe especificar el motivo del rechazo en las observaciones');
         }
 
-        if (datosActualizacion.preservacionMuestra === 'Otra' && !datosActualizacion.preservacionOtra) {
-            throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otra"');
+        if (datosActualizacion.preservacionMuestra === 'Otro' && !datosActualizacion.descripcion) {
+            throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otro"');
+        }
+
+        // Preparar datos para actualizar
+        const datosParaActualizar = { ...datosActualizacion };
+        
+        // Si se está rechazando la muestra, actualizar el campo rechazoMuestra
+        if (datosActualizacion.estado === 'Rechazada') {
+            datosParaActualizar.rechazoMuestra = {
+                rechazada: true,
+                motivo: datosActualizacion.observaciones,
+                fechaRechazo: new Date()
+            };
+            
+            // Agregar al historial
+            datosParaActualizar.$push = {
+                ...datosParaActualizar.$push,
+                historial: {
+                    estado: 'Rechazada',
+                    administrador: {
+                        documento: usuario.documento,
+                        nombre: usuario.nombre,
+                        email: usuario.email
+                    },
+                    fechaCambio: new Date(),
+                    observaciones: datosActualizacion.observaciones
+                }
+            };
         }
 
         // Actualizar la muestra
         const muestra = await Muestra.findOneAndUpdate(
             { id_muestra: id },
             {
-                ...datosActualizacion,
+                ...datosParaActualizar,
                 $push: {
+                    ...datosParaActualizar.$push,
                     actualizadoPor: {
-                        usuario: usuario.id,
+                        documento: usuario.documento,
                         nombre: usuario.nombre,
                         fecha: new Date(),
                         accion: 'Actualización de muestra'
@@ -424,7 +744,50 @@ const actualizarMuestra = async (req, res, next) => {
             throw new NotFoundError('Muestra no encontrada');
         }
 
-        ResponseHandler.success(res, { muestra }, 'Muestra actualizada exitosamente');
+        // Formatear fechas para la respuesta
+        const formatearFecha = (fecha) => {
+            // Convertir a zona horaria de Colombia (America/Bogota)
+            const fechaObj = new Date(fecha);
+            const fechaColombiana = new Date(fechaObj.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+            
+            // Formatear fecha
+            const dia = fechaColombiana.getDate().toString().padStart(2, '0');
+            const mes = (fechaColombiana.getMonth() + 1).toString().padStart(2, '0');
+            const año = fechaColombiana.getFullYear();
+            
+            // Formatear hora en formato 24 horas
+            const horas = fechaColombiana.getHours().toString().padStart(2, '0');
+            const minutos = fechaColombiana.getMinutes().toString().padStart(2, '0');
+            const segundos = fechaColombiana.getSeconds().toString().padStart(2, '0');
+            
+            return {
+                fecha: `${dia}/${mes}/${año}`,
+                hora: `${horas}:${minutos}:${segundos}`
+            };
+        };
+
+        // Preparar la respuesta
+        const respuesta = {
+            ...muestra.toObject(),
+            createdAt: formatearFecha(muestra.createdAt),
+            updatedAt: formatearFecha(muestra.updatedAt),
+            fechaHoraMuestreo: formatearFecha(muestra.fechaHoraMuestreo),
+            historial: muestra.historial.map(h => ({
+                ...h,
+                fechaCambio: formatearFecha(h.fechaCambio)
+            })),
+            creadoPor: {
+                ...muestra.creadoPor,
+                fechaCreacion: formatearFecha(muestra.createdAt)
+            },
+            firmas: {
+                ...muestra.firmas,
+                fechaFirmaAdministrador: muestra.firmas.fechaFirmaAdministrador ? formatearFecha(muestra.firmas.fechaFirmaAdministrador) : null,
+                fechaFirmaCliente: muestra.firmas.fechaFirmaCliente ? formatearFecha(muestra.firmas.fechaFirmaCliente) : null
+            }
+        };
+
+        ResponseHandler.success(res, { muestra: respuesta }, 'Muestra actualizada exitosamente');
     } catch (error) {
         if (error instanceof ValidationError || error instanceof NotFoundError) {
             return ResponseHandler.error(res, error);
@@ -471,10 +834,6 @@ module.exports = {
     obtenerTiposAgua,
     crearTipoAgua,
     actualizarTipoAgua,
-    
-    // Controladores de Análisis
-    obtenerAnalisis,
-    obtenerAnalisisPorTipoAgua,
     
     // Controladores de Muestras
     obtenerMuestras,
