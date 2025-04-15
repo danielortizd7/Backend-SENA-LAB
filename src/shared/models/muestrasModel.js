@@ -76,7 +76,12 @@ const datosUsuarioSchema = new mongoose.Schema({
     },
     email: String,
     telefono: String,
-    direccion: String
+    direccion: String,
+    fechaCreacion: {
+        type: Object,
+        fecha: String,
+        hora: String
+    }
 }, { _id: false });
 
 // Esquema para las firmas
@@ -85,7 +90,6 @@ const firmasSchema = new mongoose.Schema({
         nombre: {
             type: String,
             required: true,
-            default: 'Usuario no identificado'
         },
         documento: {
             type: String,
@@ -94,14 +98,12 @@ const firmasSchema = new mongoose.Schema({
         firmaAdministrador: {
             type: String,
             required: false,
-            default: ''
         }
     },
     cliente: {
         nombre: {
             type: String,
             required: true,
-            default: 'Usuario no identificado'
         },
         documento: {
             type: String,
@@ -110,7 +112,6 @@ const firmasSchema = new mongoose.Schema({
         firmaCliente: {
             type: String,
             required: false,
-            default: ''
         }
     }
 }, { _id: false });

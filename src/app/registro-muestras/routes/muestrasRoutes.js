@@ -16,7 +16,7 @@ router.post('/tipos-agua', verificarToken, verificarRolAdministrador, muestrasCo
 router.put('/tipos-agua/:id', verificarToken, verificarRolAdministrador, muestrasController.actualizarTipoAgua);
 
 // Rutas de Muestras
-router.post('/', verificarToken, muestrasController.registrarMuestra);
+router.post('/', verificarToken, verificarRolAdministrador, muestrasController.registrarMuestra);
 router.get('/', paginationMiddleware, muestrasController.obtenerMuestras);
 router.get('/:id', muestrasController.obtenerMuestra);
 router.put('/:id', verificarToken, muestrasController.actualizarMuestra);

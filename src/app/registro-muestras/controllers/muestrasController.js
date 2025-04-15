@@ -211,24 +211,34 @@ const actualizarTipoAgua = async (req, res, next) => {
 const formatearFechaHora = (fecha) => {
     if (!fecha) return null;
     
-    const fechaObj = new Date(fecha);
-    
-    // Formatear fecha
-    const dia = fechaObj.getDate().toString().padStart(2, '0');
-    const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
-    const año = fechaObj.getFullYear();
-    
-    // Formatear hora en formato 12 horas
-    let horas = fechaObj.getHours();
-    const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
-    const ampm = horas >= 12 ? 'PM' : 'AM';
-    horas = horas % 12;
-    horas = horas ? horas : 12; // la hora '0' debe ser '12'
-    
-    return {
-        fecha: `${dia}/${mes}/${año}`,
-        hora: `${horas}:${minutos} ${ampm}`
-    };
+    try {
+        // Convertir a zona horaria de Colombia (America/Bogota)
+        const fechaObj = new Date(fecha);
+        
+        // Formatear fecha
+        const dia = fechaObj.getDate().toString().padStart(2, '0');
+        const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+        const año = fechaObj.getFullYear();
+        
+        // Formatear hora en formato AM/PM
+        let horas = fechaObj.getHours();
+        const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
+        const segundos = fechaObj.getSeconds().toString().padStart(2, '0');
+        const ampm = horas >= 12 ? 'PM' : 'AM';
+        
+        // Convertir a formato 12 horas
+        horas = horas % 12;
+        horas = horas ? horas : 12; // si es 0, convertir a 12
+        horas = horas.toString().padStart(2, '0');
+        
+        return {
+            fecha: `${dia}/${mes}/${año}`,
+            hora: `${horas}:${minutos}:${segundos} ${ampm}`
+        };
+    } catch (error) {
+        console.error('Error al formatear fecha:', error);
+        return null;
+    }
 };
 
 const obtenerMuestras = async (req, res, next) => {
@@ -280,7 +290,11 @@ const obtenerMuestras = async (req, res, next) => {
                     fechaCambio: formatearFechaHora(h.fechaCambio)
                 })),
                 createdAt: formatearFechaHora(muestra.createdAt),
-                updatedAt: formatearFechaHora(muestra.updatedAt)
+                updatedAt: formatearFechaHora(muestra.updatedAt),
+                creadoPor: {
+                    ...muestra.creadoPor,
+                    fechaCreacion: formatearFechaHora(muestra.createdAt)
+                }
             };
 
             // Eliminar el campo firmas si la muestra está rechazada
@@ -401,7 +415,11 @@ const obtenerMuestra = async (req, res, next) => {
                 fechaCambio: formatearFechaHora(h.fechaCambio)
             })),
             createdAt: formatearFechaHora(muestra.createdAt),
-            updatedAt: formatearFechaHora(muestra.updatedAt)
+            updatedAt: formatearFechaHora(muestra.updatedAt),
+            creadoPor: {
+                ...muestra.creadoPor,
+                fechaCreacion: formatearFechaHora(muestra.createdAt)
+            }
         };
 
         // Eliminar el campo firmas si la muestra está rechazada
@@ -418,6 +436,11 @@ const obtenerMuestra = async (req, res, next) => {
 const registrarMuestra = async (req, res, next) => {
     try {
         const datos = req.body;
+        
+        // Verificar que el usuario sea administrador
+        if (!req.usuario || req.usuario.rol !== 'administrador') {
+            throw new ValidationError('No tiene permisos para registrar muestras. Se requiere rol de administrador');
+        }
         
         // Validar los datos de la muestra
         validarDatosMuestra(datos);
@@ -532,7 +555,12 @@ const registrarMuestra = async (req, res, next) => {
                     firmaCliente: esRechazada ? '' : (datos.firmas?.firmaCliente?.firma || '')
                 }
             },
-            creadoPor: datosAdministrador,
+            creadoPor: {
+                nombre: datosAdministrador.nombre,
+                documento: datosAdministrador.documento,
+                email: datosAdministrador.email,
+                fechaCreacion: formatearFechaHora(fecha)
+            },
             historial: [{
                 estado: esRechazada ? 'Rechazada' : 'Recibida',
                 administrador: datosAdministrador,
@@ -570,7 +598,7 @@ const registrarMuestra = async (req, res, next) => {
             },
             tipoMuestreo: muestraGuardada.tipoMuestreo,
             lugarMuestreo: muestraGuardada.lugarMuestreo,
-            fechaHoraMuestreo: muestraGuardada.fechaHoraMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(muestraGuardada.fechaHoraMuestreo),
             tipoAnalisis: muestraGuardada.tipoAnalisis,
             identificacionMuestra: muestraGuardada.identificacionMuestra,
             planMuestreo: muestraGuardada.planMuestreo,
@@ -591,22 +619,23 @@ const registrarMuestra = async (req, res, next) => {
                     documento: h.administrador.documento,
                     email: h.administrador.email
                 },
-                fechaCambio: h.fechaCambio,
+                fechaCambio: formatearFechaHora(h.fechaCambio),
                 observaciones: h.observaciones
             })),
             creadoPor: {
                 nombre: muestraGuardada.creadoPor.nombre,
                 documento: muestraGuardada.creadoPor.documento,
-                email: muestraGuardada.creadoPor.email
+                email: muestraGuardada.creadoPor.email,
+                fechaCreacion: formatearFechaHora(muestraGuardada.createdAt)
             },
             actualizadoPor: muestraGuardada.actualizadoPor.map(a => ({
                 nombre: a.nombre,
                 documento: a.documento,
-                fecha: a.fecha,
+                fecha: formatearFechaHora(a.fecha),
                 accion: a.accion
             })),
-            createdAt: muestraGuardada.createdAt,
-            updatedAt: muestraGuardada.updatedAt
+            createdAt: formatearFechaHora(muestraGuardada.createdAt),
+            updatedAt: formatearFechaHora(muestraGuardada.updatedAt)
         };
 
         // Solo incluir firmas en la respuesta si la muestra no está rechazada
@@ -718,9 +747,23 @@ const actualizarMuestra = async (req, res, next) => {
 
         // Formatear fechas para la respuesta
         const formatearFecha = (fecha) => {
+            // Convertir a zona horaria de Colombia (America/Bogota)
+            const fechaObj = new Date(fecha);
+            const fechaColombiana = new Date(fechaObj.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+            
+            // Formatear fecha
+            const dia = fechaColombiana.getDate().toString().padStart(2, '0');
+            const mes = (fechaColombiana.getMonth() + 1).toString().padStart(2, '0');
+            const año = fechaColombiana.getFullYear();
+            
+            // Formatear hora en formato 24 horas
+            const horas = fechaColombiana.getHours().toString().padStart(2, '0');
+            const minutos = fechaColombiana.getMinutes().toString().padStart(2, '0');
+            const segundos = fechaColombiana.getSeconds().toString().padStart(2, '0');
+            
             return {
-                fecha: fecha.toLocaleDateString('es-CO'),
-                hora: fecha.toLocaleTimeString('es-CO', { hour: 'numeric', minute: 'numeric', hour12: true })
+                fecha: `${dia}/${mes}/${año}`,
+                hora: `${horas}:${minutos}:${segundos}`
             };
         };
 
@@ -734,6 +777,10 @@ const actualizarMuestra = async (req, res, next) => {
                 ...h,
                 fechaCambio: formatearFecha(h.fechaCambio)
             })),
+            creadoPor: {
+                ...muestra.creadoPor,
+                fechaCreacion: formatearFecha(muestra.createdAt)
+            },
             firmas: {
                 ...muestra.firmas,
                 fechaFirmaAdministrador: muestra.firmas.fechaFirmaAdministrador ? formatearFecha(muestra.firmas.fechaFirmaAdministrador) : null,

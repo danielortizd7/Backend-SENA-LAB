@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { PERMISOS } = require("../../../shared/config/rolesConfig");
+const { PERMISOS } = require("../../../config/rolesConfig");
 
 const auditoriaSchema = new mongoose.Schema(
   {
