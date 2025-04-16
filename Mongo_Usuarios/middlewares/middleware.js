@@ -31,6 +31,7 @@ const autenticar = (usuarioModel) => async (req, res, next) => {
         
         req.usuario = {
             ...usuario.toObject(),
+            userId: usuario._id.toString(), 
             permisos: usuario.rol?.permisos || []
         };
         

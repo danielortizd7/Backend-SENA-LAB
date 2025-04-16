@@ -2,11 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { autenticar,verificarPermisos,loggin,manejarErrores } = require('../middlewares/middleware');
 const Usuario = require('../models/Usuario');
-const UsuarioController=require("../controllers/usuarioController")
-const perfilControllers = require('../controllers/perfilController')
 const verificarPropietario = require('../middlewares/verificarPropietario')
 module.exports = (autenticarMiddleware, usuarioModel) => {
-
+    const PerfilController = require('../controllers/perfilController')
     const UsuarioController = require('../controllers/usuarioController');
     const controller = new UsuarioController(usuarioModel);
 
@@ -117,14 +115,14 @@ module.exports = (autenticarMiddleware, usuarioModel) => {
         });
     });
 
-    router.get('/usuarios/:idUsuario/perfil', autenticarMiddleware, verificarPropietario('idUsuario'), (req, res, next) => {
-        const perfilController = require('../controllers/perfilController');
-        perfilController.obtenerPerfil(req, res, next);
+    router.get('/:idUsuario/perfil', autenticarMiddleware, verificarPropietario('idUsuario'), (req, res, next) => {
+        const PerfilController = require('../controllers/perfilController');
+        PerfilController.obtenerPerfil(req, res, next);
     });
 
-    router.patch('/usuarios/:idUsuario/perfil', autenticarMiddleware, verificarPropietario('idUsuario'), (req, res, next) => {
-        const perfilController = require('../controllers/perfilController');
-        perfilController.actualizarPerfil(req, res, next);
+    router.patch('/:idUsuario/perfil', autenticarMiddleware, verificarPropietario('idUsuario'), (req, res, next) => {
+        const PerfilController = require('../controllers/perfilController');
+        PerfilController.actualizarPerfil(req, res, next);
     });
 
     return router;
