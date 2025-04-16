@@ -13,11 +13,13 @@ const obtenerPerfil = async (req, res) => {
   try {
     const perfil = await perfilService.obtenerPerfilPorUsuario(req.params.idUsuario);
     if (!perfil) return res.status(404).json({ mensaje: 'Perfil no encontrado' });
-    res.json(perfil);
+
+    res.json({ usuario: perfil.usuarioId });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 const actualizarPerfil = async (req, res) => {
   try {
