@@ -9,9 +9,11 @@ const usuarioRoutes = require('./routers/usuarioRoutes');
 const Usuario = require('./models/Usuario');
 const { autenticar } = require('./middlewares/middleware');
 const emailService = require('./service/emailService');
+const path = require('path');
 
 const app = express();
 
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(helmet({
     contentSecurityPolicy: {
         directives: {

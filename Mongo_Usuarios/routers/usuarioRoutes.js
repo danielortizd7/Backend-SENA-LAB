@@ -3,6 +3,7 @@ const router = express.Router();
 const { autenticar,verificarPermisos,loggin,manejarErrores } = require('../middlewares/middleware');
 const Usuario = require('../models/Usuario');
 const verificarPropietario = require('../middlewares/verificarPropietario')
+const upload = require('../middlewares/uploadMiddleware');
 module.exports = (autenticarMiddleware, usuarioModel) => {
     const PerfilController = require('../controllers/perfilController')
     const UsuarioController = require('../controllers/usuarioController');
@@ -115,15 +116,19 @@ module.exports = (autenticarMiddleware, usuarioModel) => {
         });
     });
 
-    router.get('/:idUsuario/perfil', autenticarMiddleware, verificarPropietario('idUsuario'), (req, res, next) => {
-        const PerfilController = require('../controllers/perfilController');
-        PerfilController.obtenerPerfil(req, res, next);
-    });
-
-    router.patch('/:idUsuario/perfil', autenticarMiddleware, verificarPropietario('idUsuario'), (req, res, next) => {
-        const PerfilController = require('../controllers/perfilController');
-        PerfilController.actualizarPerfil(req, res, next);
-    });
+router.get('/:idUsuario/perfil', 
+    autenticarMiddleware, 
+    verificarPropietario('idUsuario'), 
+    PerfilController.obtenerPerfil
+  );
+  
+  router.patch('/:idUsuario/perfil', 
+    autenticarMiddleware, 
+    verificarPropietario('idUsuario'),
+    upload.single('fotoPerfil'), 
+    PerfilController.actualizarPerfil
+  );
+  
 
     return router;
 };
