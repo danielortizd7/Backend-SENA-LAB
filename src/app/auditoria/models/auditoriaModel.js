@@ -8,11 +8,11 @@ const auditoriaSchema = new mongoose.Schema(
       nombre: String,
       rol: String,
       documento: String,
-      permisos: [{
+     /* permisos: [{
         type: String,
         // Permitir cualquier string para evitar errores de validación
-        // enum: Object.values(PERMISOS)
-      }]
+         enum: Object.values(PERMISOS)
+      }]*/
     },
     accion: {
       tipo: {
@@ -20,16 +20,16 @@ const auditoriaSchema = new mongoose.Schema(
         enum: ['GET', 'POST', 'PUT', 'DELETE'],
         required: true
       },
-      ruta: {
+     /* ruta: {
         type: String,
         required: true
-      },
+      },*/
       descripcion: String,
-      permisosRequeridos: [{
+     /* permisosRequeridos: [{
         type: String,
         // Permitir cualquier string para evitar errores de validación
-        // enum: Object.values(PERMISOS)
-      }]
+         enum: Object.values(PERMISOS)
+      }]*/
     },
     detalles: {
       idMuestra: String,
@@ -37,8 +37,8 @@ const auditoriaSchema = new mongoose.Schema(
         antes: Object,
         despues: Object
       },
-      ip: String,
-      userAgent: String,
+      /*ip: String,
+      userAgent: String,*/
       parametros: Object,
       query: Object
     },

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Auditoria = require('../models/auditoriaModel');
 const { ResponseHandler } = require('../../../shared/utils/responseHandler');
+const AuditoriaMuestras = require('../models/auditoriaModelMuestras');
 
 class AuditoriaService {
     static async registrarAccion(datosAuditoria) {
@@ -20,6 +21,39 @@ class AuditoriaService {
         } catch (error) {
             console.error('Error registrando auditoría:', error);
             throw error;
+        }
+    }
+
+    static async registrarAccionMuestra(datosAuditoria) {
+        try {
+            const auditoriaData = {
+                usuario: datosAuditoria.usuario,
+                accion: {
+                    tipo: datosAuditoria.metodo,
+                   // ruta: datosAuditoria.ruta,
+                    descripcion: datosAuditoria.descripcion
+                },
+                muestra: {
+                    id: datosAuditoria.idMuestra,
+                    tipo: datosAuditoria.tipoMuestra,
+                    estado: datosAuditoria.estadoMuestra,
+                    datosCompletos: datosAuditoria.datosCompletos
+                },
+               /* cambios: datosAuditoria.cambios,
+                metadata: {
+                    ip: datosAuditoria.ip,
+                    userAgent: datosAuditoria.userAgent
+                }*/
+            };
+
+            return await AuditoriaMuestras.create(auditoriaData);
+        } catch (error) {
+            console.error('Error registrando auditoría de muestra:', error);
+            // Fallback al sistema general si falla
+            return await Auditoria.create({
+                ...datosAuditoria,
+                tipo: 'MUESTRA_FALLBACK'
+            });
         }
     }
 

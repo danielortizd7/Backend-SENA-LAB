@@ -233,6 +233,7 @@ const registrarResultado = async (req, res) => {
                     valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
                     unidad: datos.unidad
                 };
+                req._cambiosResultados = cambiosRealizados;
             });
 
             resultado.observaciones = observaciones;
@@ -414,6 +415,7 @@ const editarResultado = async (req, res) => {
                 valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
                 unidad: datos.unidad
             };
+            req._cambiosResultados = cambiosRealizados;
         });
 
         resultado.observaciones = observaciones;

@@ -4,6 +4,7 @@ const resultadoController = require("../controllers/resultadoController");
 const { verificarLaboratorista, verificarRolAdministrador } = require("../../../shared/middleware/authMiddleware");
 const { resultadoValidators } = require("../../../shared/validators");
 const { paginationMiddleware } = require("../../../shared/middleware/paginationMiddleware");
+const { registrarAccionResultados } = require("../../../shared/middleware/auditoriaResultadosMiddleware");
 
 // Obtener resultados de una muestra específica
 router.get("/muestra/:idMuestra", 
@@ -31,18 +32,21 @@ router.use([
 // Registrar resultados de una muestra
 router.post("/registrar/:idMuestra", 
   resultadoValidators.guardarResultado,
+  registrarAccionResultados,
   resultadoController.registrarResultado
 );
 
 // Editar resultados de una muestra
 router.put("/editar/:idMuestra",
   resultadoValidators.editarResultado,
+  registrarAccionResultados,
   resultadoController.editarResultado
 );
 
 // Verificar resultados de una muestra (solo administrador)
 router.post("/verificar/:idMuestra",
   verificarRolAdministrador,
+  registrarAccionResultados,
   resultadoController.verificarResultado
 );
 

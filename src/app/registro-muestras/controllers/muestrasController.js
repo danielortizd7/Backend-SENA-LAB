@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const { ResponseHandler } = require('../../../shared/utils/responseHandler');
 const { ValidationError, NotFoundError } = require('../../../shared/errors/AppError');
 const { Muestra, estadosValidos, TipoAgua, TIPOS_AGUA, SUBTIPOS_RESIDUAL } = require('../../../shared/models/muestrasModel');
+const AuditoriaService = require('../../auditoria/services/auditoriaService');
 const { getAnalisisPorTipoAgua } = require('../../../shared/models/analisisModel');
 const Usuario = require('../../../shared/models/usuarioModel');
 const { validarUsuario } = require('../services/usuariosService');
@@ -581,6 +582,30 @@ const registrarMuestra = async (req, res, next) => {
         // Guardar la muestra
         const muestraGuardada = await muestra.save();
 
+        //AUDITORIAS
+        setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccionMuestra({
+                    usuario: req.usuario,
+                    metodo: req.method,
+                   /* ruta: req.originalUrl,*/
+                    descripcion: 'Registro de nueva muestra',
+                    idMuestra: muestraGuardada._id,
+                    tipoMuestra: muestraGuardada.tipoDeAgua.tipo,
+                    estadoMuestra: muestraGuardada.estado,
+                    datosCompletos: muestraGuardada.toObject(),
+                  /*  cambios: {
+                        anteriores: null,
+                        nuevos: nuevaMuestra.toObject()
+                    },
+                    ip: req.ip,
+                    userAgent: req.headers['user-agent']*/
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
+
         // Preparar la respuesta simplificada
         const respuesta = {
             id_muestra: muestraGuardada.id_muestra,
@@ -766,6 +791,27 @@ const actualizarMuestra = async (req, res, next) => {
                 hora: `${horas}:${minutos}:${segundos}`
             };
         };
+
+         // AUDITORÍA
+         setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccionMuestra({
+                    usuario,
+                    metodo: req.method,
+                    descripcion: 'Actualización de muestra',
+                    idMuestra: muestra._id,
+                    tipoMuestra: muestra.tipoDeAgua?.tipo,
+                    estadoMuestra: muestra.estado,
+                    datosCompletos: muestra.toObject(),
+                    cambios: {
+                        anteriores: muestraOriginal,
+                        nuevos: muestra.toObject()
+                    }
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         // Preparar la respuesta
         const respuesta = {

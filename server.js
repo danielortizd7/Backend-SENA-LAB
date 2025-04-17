@@ -99,7 +99,7 @@ app.use([
     "/api/firma-digital",
     "/api/auditoria",
     "/api/analisis"
-], verificarToken, registrarAccion);
+], verificarToken);
 
 // Rutas protegidas
 app.use("/api/muestras", muestrasRoutes);
