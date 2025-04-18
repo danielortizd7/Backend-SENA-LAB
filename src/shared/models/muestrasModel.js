@@ -86,32 +86,32 @@ const datosUsuarioSchema = new mongoose.Schema({
 
 // Esquema para las firmas
 const firmasSchema = new mongoose.Schema({
-    administrador: {
+    firmaAdministrador: {
         nombre: {
             type: String,
-            required: true,
+            required: true
         },
         documento: {
             type: String,
             required: true
         },
-        firmaAdministrador: {
+        firma: {
             type: String,
-            required: false,
+            required: true
         }
     },
-    cliente: {
+    firmaCliente: {
         nombre: {
             type: String,
-            required: true,
+            required: true
         },
         documento: {
             type: String,
             required: true
         },
-        firmaCliente: {
+        firma: {
             type: String,
-            required: false,
+            required: true
         }
     }
 }, { _id: false });
@@ -170,6 +170,30 @@ const actualizacionSchema = new mongoose.Schema({
         required: true
     }
 });
+
+// Esquema para análisis seleccionado
+const analisisSeleccionadoSchema = new mongoose.Schema({
+    nombre: {
+        type: String,
+        required: true
+    },
+    precio: {
+        type: Number,
+        required: true
+    },
+    unidad: {
+        type: String,
+        required: true
+    },
+    metodo: {
+        type: String,
+        required: true
+    },
+    rango: {
+        type: String,
+        required: true
+    }
+}, { _id: false });
 
 // Esquema principal de muestra
 const muestraSchema = new mongoose.Schema({
@@ -253,12 +277,25 @@ const muestraSchema = new mongoose.Schema({
     },
     
     // 12. Análisis seleccionados
-    analisisSeleccionados: [{
-        type: String,
-        required: true
-    }],
+    analisisSeleccionados: {
+        type: [analisisSeleccionadoSchema],
+        required: true,
+        validate: {
+            validator: function(v) {
+                return Array.isArray(v) && v.length > 0;
+            },
+            message: 'Debe seleccionar al menos un análisis'
+        }
+    },
     
-    // 13. Estado y rechazo
+    // 13. Precio total
+    precioTotal: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+    
+    // 14. Estado y rechazo
     estado: {
         type: String,
         required: true,
@@ -279,8 +316,26 @@ const muestraSchema = new mongoose.Schema({
         type: String
     },
     firmas: {
-        type: firmasSchema,
-        required: true
+        firmaAdministrador: {
+            nombre: String,
+            documento: String,
+            firma: {
+                type: String,
+                required: function() {
+                    return this.estado !== 'Rechazada';
+                }
+            }
+        },
+        firmaCliente: {
+            nombre: String,
+            documento: String,
+            firma: {
+                type: String,
+                required: function() {
+                    return this.estado !== 'Rechazada';
+                }
+            }
+        }
     },
     historial: [historialEstadoSchema],
     creadoPor: {
@@ -306,6 +361,16 @@ const muestraSchema = new mongoose.Schema({
     }
 }, {
     timestamps: true
+});
+
+// Middleware para calcular el precio total antes de guardar
+muestraSchema.pre('save', function(next) {
+    if (this.analisisSeleccionados && Array.isArray(this.analisisSeleccionados)) {
+        this.precioTotal = this.analisisSeleccionados.reduce((total, analisis) => {
+            return total + (analisis.precio || 0);
+        }, 0);
+    }
+    next();
 });
 
 // Modelos

@@ -3,11 +3,21 @@ const mongoose = require("mongoose");
 const valorMedicionSchema = new mongoose.Schema({
     valor: {
         type: String,
-        trim: true
+        trim: true,
+        required: true
     },
     unidad: {
         type: String,
         required: true
+    },
+    metodo: {
+        type: String,
+        required: true
+    },
+    tipo: {
+        type: String,
+        required: true,
+        enum: ['fisicoquimico', 'microbiologico']
     }
 }, { _id: false });
 
@@ -21,6 +31,10 @@ const cambioResultadoSchema = new mongoose.Schema({
         required: true
     },
     unidad: {
+        type: String,
+        required: true
+    },
+    metodo: {
         type: String,
         required: true
     }
@@ -99,24 +113,22 @@ const resultadoSchema = new mongoose.Schema(
             type: Date,
             required: true
         },
-        tipoAnalisis: {
+        tipoAnalisis: [{
             type: String,
-            required: true
-        },
+            required: true,
+            enum: ['Fisicoquímico', 'Microbiológico']
+        }],
         estado: {
             type: String,
             required: true,
             enum: ['Recibida', 'En análisis', 'Finalizada', 'Rechazada'],
             default: 'En análisis'
         },
-        // Campos de resultados dinámicos
-        cloruros: valorMedicionSchema,
-        fluoruros: valorMedicionSchema,
-        nitratos: valorMedicionSchema,
-        nitritos: valorMedicionSchema,
-        sulfatos: valorMedicionSchema,
-        fosfatos: valorMedicionSchema,
-        manganeso: valorMedicionSchema,
+        resultados: {
+            type: Map,
+            of: valorMedicionSchema,
+            default: {}
+        },
         observaciones: {
             type: String,
             default: ""

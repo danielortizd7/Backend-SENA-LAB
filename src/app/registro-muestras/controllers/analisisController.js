@@ -1,9 +1,16 @@
+const Analisis = require("../../../shared/models/analisisModel");
+const { handleError } = require("../../../shared/utils/errorHandler");
+const { ResponseHandler } = require("../../../shared/utils/responseHandler");
 const { 
-    getAnalisisPorTipoAgua, 
-    analisisDisponibles,
-    TIPOS_ANALISIS,
-    Analisis 
-} = require('../../../shared/models/analisisModel');
+    analisisDisponibles, 
+    getAnalisisPorTipoAgua 
+} = require("../../../shared/data/analisisData");
+const mongoose = require("mongoose");
+
+// Función para formatear precio con separadores de miles
+const formatearPrecio = (precio) => {
+    return precio.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
 
 // Obtener lista simplificada de análisis (solo nombre y unidad)
 const getAnalisisSimplificado = async (req, res) => {
@@ -11,18 +18,23 @@ const getAnalisisSimplificado = async (req, res) => {
         const { tipoAnalisis } = req.query;
         
         if (!tipoAnalisis || !analisisDisponibles[tipoAnalisis]) {
-            return res.status(400).json({ error: 'El tipo de análisis es requerido (fisicoquimico o microbiologico)' });
+            return ResponseHandler.error(res, {
+                statusCode: 400,
+                message: 'El tipo de análisis es requerido (fisicoquimico o microbiologico)',
+                errorCode: 'VALIDATION_ERROR'
+            });
         }
 
         // Solo devolver los análisis del tipo solicitado
         const analisisFiltrados = analisisDisponibles[tipoAnalisis].map(analisis => ({
             nombre: analisis.nombre,
-            unidad: analisis.unidad || obtenerUnidadPorDefecto(analisis.nombre)
+            unidad: analisis.unidad || obtenerUnidadPorDefecto(analisis.nombre),
+            precio: formatearPrecio(analisis.precio)
         }));
         
-        res.json(analisisFiltrados);
+        return ResponseHandler.success(res, analisisFiltrados);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        handleError(res, error);
     }
 };
 
@@ -38,12 +50,22 @@ const getDetalleAnalisis = async (req, res) => {
             analisisCompletos.microbiologico.find(a => a.nombre === nombre);
         
         if (!analisis) {
-            return res.status(404).json({ error: 'Análisis no encontrado' });
+            return ResponseHandler.error(res, {
+                statusCode: 404,
+                message: 'Análisis no encontrado',
+                errorCode: 'NOT_FOUND'
+            });
         }
         
-        res.json(analisis);
+        // Formatear el precio antes de enviar la respuesta
+        const analisisFormateado = {
+            ...analisis,
+            precio: formatearPrecio(analisis.precio)
+        };
+        
+        return ResponseHandler.success(res, analisisFormateado);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        handleError(res, error);
     }
 };
 
@@ -77,13 +99,226 @@ const obtenerUnidadPorDefecto = (nombreAnalisis) => {
         "Sólidos Sedimentables (SSED)": "mL/L",
         "Sólidos Suspendidos Totales (SST)": "mg/L",
         "Coliformes totales y E. coli (Cualitativa)": "Presencia/Ausencia",
-        "Coliformes totales y E. coli (Cuantitativa)": "UFC/100mL"
+        "Coliformes totales y E. coli (Cuantitativa)": "UFC/100mL",
+        "Níquel": "mg/L"
     };
     
     return unidadesPorDefecto[nombreAnalisis] || "N/A";
 };
 
+// Función para limpiar el precio (remover comas y convertir a número)
+const limpiarPrecio = (precio) => {
+    if (typeof precio === 'string') {
+        return parseInt(precio.replace(/,/g, ''), 10);
+    }
+    return precio;
+};
+
+// Crear un nuevo análisis
+const crearAnalisis = async (req, res) => {
+    try {
+        // Limpiar el precio antes de crear el análisis
+        const datosAnalisis = {
+            ...req.body,
+            precio: limpiarPrecio(req.body.precio)
+        };
+        
+        // Verificar si ya existe un análisis con el mismo nombre
+        const analisisExistente = await Analisis.findOne({ nombre: datosAnalisis.nombre });
+        if (analisisExistente) {
+            return ResponseHandler.error(res, {
+                statusCode: 409,
+                message: `Ya existe un análisis con el nombre "${datosAnalisis.nombre}"`,
+                errorCode: "DUPLICATE_ENTRY"
+            });
+        }
+        
+        const nuevoAnalisis = new Analisis(datosAnalisis);
+        const analisisGuardado = await nuevoAnalisis.save();
+        
+        // Formatear el precio para la respuesta
+        const respuesta = {
+            ...analisisGuardado.toObject(),
+            precio: formatearPrecio(analisisGuardado.precio)
+        };
+        
+        return ResponseHandler.created(res, respuesta, "Análisis creado exitosamente");
+    } catch (error) {
+        // Manejar específicamente el error de duplicado si la verificación previa falla
+        if (error.code === 11000) {
+            return ResponseHandler.error(res, {
+                statusCode: 409,
+                message: `Ya existe un análisis con el nombre "${req.body.nombre}"`,
+                errorCode: "DUPLICATE_ENTRY"
+            });
+        }
+        handleError(res, error);
+    }
+};
+
+// Obtener todos los análisis
+const obtenerAnalisis = async (req, res) => {
+    try {
+        const analisis = await Analisis.find();
+        return ResponseHandler.success(res, analisis, "Análisis obtenidos exitosamente");
+    } catch (error) {
+        handleError(res, error);
+    }
+};
+
+// Obtener un análisis por ID
+const obtenerAnalisisPorId = async (req, res) => {
+    try {
+        const analisis = await Analisis.findById(req.params.id);
+        if (!analisis) {
+            return ResponseHandler.error(res, {
+                statusCode: 404,
+                message: "Análisis no encontrado",
+                errorCode: "NOT_FOUND"
+            });
+        }
+        return ResponseHandler.success(res, analisis, "Análisis obtenido exitosamente");
+    } catch (error) {
+        handleError(res, error);
+    }
+};
+
+// Actualizar un análisis
+const actualizarAnalisis = async (req, res) => {
+    try {
+        // Limpiar el precio si está presente en la actualización
+        const datosActualizacion = {
+            ...req.body,
+            precio: req.body.precio ? limpiarPrecio(req.body.precio) : undefined
+        };
+        
+        const analisis = await Analisis.findByIdAndUpdate(
+            req.params.id,
+            datosActualizacion,
+            { new: true, runValidators: true }
+        );
+        
+        if (!analisis) {
+            return ResponseHandler.error(res, {
+                statusCode: 404,
+                message: "Análisis no encontrado",
+                errorCode: "NOT_FOUND"
+            });
+        }
+        
+        // Formatear el precio para la respuesta
+        const respuesta = {
+            ...analisis.toObject(),
+            precio: formatearPrecio(analisis.precio)
+        };
+        
+        return ResponseHandler.success(res, respuesta, "Análisis actualizado exitosamente");
+    } catch (error) {
+        handleError(res, error);
+    }
+};
+
+// Cambiar estado de un análisis (activar/desactivar)
+const cambiarEstadoAnalisis = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { activo } = req.body;
+
+        // Validar que se proporcione el estado
+        if (typeof activo !== 'boolean') {
+            return ResponseHandler.error(res, {
+                statusCode: 400,
+                message: "Debe especificar el estado 'activo' como true o false",
+                errorCode: "VALIDATION_ERROR"
+            });
+        }
+
+        const analisis = await Analisis.findByIdAndUpdate(
+            id,
+            { activo },
+            { new: true }
+        );
+
+        if (!analisis) {
+            return ResponseHandler.error(res, {
+                statusCode: 404,
+                message: "Análisis no encontrado",
+                errorCode: "NOT_FOUND"
+            });
+        }
+
+        const mensaje = activo ? "Análisis activado correctamente" : "Análisis desactivado correctamente";
+        return ResponseHandler.success(res, analisis, mensaje);
+    } catch (error) {
+        handleError(res, error);
+    }
+};
+
+// Obtener análisis por tipo (fisicoquimico o microbiologico)
+const obtenerAnalisisPorTipo = async (req, res) => {
+    try {
+        const { tipo } = req.params;
+        console.log('Tipo solicitado original:', tipo);
+
+        // Normalizar el tipo (quitar tildes, convertir a minúsculas)
+        const tipoNormalizado = tipo.toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/s$/, ''); // Remover 's' final si existe
+
+        console.log('Tipo normalizado:', tipoNormalizado);
+
+        // Validar el tipo de análisis normalizado
+        if (!['fisicoquimico', 'microbiologico'].includes(tipoNormalizado)) {
+            return ResponseHandler.error(res, {
+                statusCode: 400,
+                message: 'Tipo de análisis inválido. Debe ser "fisicoquimico" o "microbiologico"',
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
+
+        // Primero, buscar todos los documentos para debug
+        const todosLosAnalisis = await Analisis.find({}).lean();
+        console.log('Total de análisis en la BD:', todosLosAnalisis.length);
+        console.log('Tipos únicos encontrados:', [...new Set(todosLosAnalisis.map(a => a.tipo))]);
+        
+        // Construir el query con regex para hacer la búsqueda más flexible
+        const query = {
+            tipo: {
+                $regex: new RegExp(`^${tipoNormalizado}`, 'i') // Coincidencia insensible a mayúsculas/minúsculas
+            }
+        };
+
+        console.log('Query a ejecutar:', JSON.stringify(query));
+
+        // Obtener los análisis del tipo especificado
+        const analisis = await Analisis.find(query).lean();
+        console.log('Análisis encontrados:', analisis.length);
+
+        if (!analisis || analisis.length === 0) {
+            return ResponseHandler.success(res, [], `No se encontraron análisis de tipo ${tipo}`);
+        }
+
+        // Formatear los precios en la respuesta
+        const analisisFormateados = analisis.map(item => ({
+            ...item,
+            precio: item.precio ? item.precio.toString() : '0'
+        }));
+
+        return ResponseHandler.success(res, analisisFormateados, `Análisis ${tipo} obtenidos exitosamente`);
+    } catch (error) {
+        console.error('Error en obtenerAnalisisPorTipo:', error);
+        handleError(res, error);
+    }
+};
+
 module.exports = {
     getAnalisisSimplificado,
-    getDetalleAnalisis
+    getDetalleAnalisis,
+    crearAnalisis,
+    obtenerAnalisis,
+    obtenerAnalisisPorId,
+    actualizarAnalisis,
+    cambiarEstadoAnalisis,
+    obtenerAnalisisPorTipo
 }; 

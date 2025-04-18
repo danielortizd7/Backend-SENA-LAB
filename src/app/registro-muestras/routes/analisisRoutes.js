@@ -1,20 +1,35 @@
 const express = require('express');
 const router = express.Router();
-const { getAnalisisSimplificado, getDetalleAnalisis } = require('../controllers/analisisController');
-const { verificarToken } = require('../../../shared/middleware/authMiddleware');
+const { 
+    crearAnalisis, 
+    obtenerAnalisis, 
+    obtenerAnalisisPorId, 
+    actualizarAnalisis,
+    cambiarEstadoAnalisis,
+    obtenerAnalisisPorTipo
+} = require('../controllers/analisisController');
+const { verificarToken, verificarRol } = require('../../../shared/middleware/authMiddleware');
 
-// Rutas específicas para cada tipo de análisis
-router.get('/fisicoquimicos', verificarToken, (req, res) => {
-    req.query.tipoAnalisis = 'fisicoquimico';
-    getAnalisisSimplificado(req, res);
-});
+// Función auxiliar para manejar las variantes de las rutas
+const handleTipoAnalisis = (tipoBase) => (req, res) => {
+    req.params.tipo = tipoBase;
+    obtenerAnalisisPorTipo(req, res);
+};
 
-router.get('/microbiologicos', verificarToken, (req, res) => {
-    req.query.tipoAnalisis = 'microbiologico';
-    getAnalisisSimplificado(req, res);
-});
+// Rutas para análisis
+router.post('/', verificarToken, verificarRol(['administrador']), crearAnalisis);
+router.get('/', verificarToken, obtenerAnalisis);
 
-// Ruta para obtener los detalles completos de un análisis específico
-router.get('/detalle', verificarToken, getDetalleAnalisis);
+// Rutas para análisis fisicoquímicos (singular y plural)
+router.get('/fisicoquimico', verificarToken, handleTipoAnalisis('fisicoquimico'));
+router.get('/fisicoquimicos', verificarToken, handleTipoAnalisis('fisicoquimico'));
+
+// Rutas para análisis microbiológicos (singular y plural)
+router.get('/microbiologico', verificarToken, handleTipoAnalisis('microbiologico'));
+router.get('/microbiologicos', verificarToken, handleTipoAnalisis('microbiologico'));
+
+router.get('/:id', verificarToken, obtenerAnalisisPorId);
+router.put('/:id', verificarToken, verificarRol(['administrador']), actualizarAnalisis);
+router.put('/:id/estado', verificarToken, verificarRol(['administrador']), cambiarEstadoAnalisis);
 
 module.exports = router; 
