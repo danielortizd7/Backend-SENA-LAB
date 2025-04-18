@@ -316,9 +316,25 @@ const muestraSchema = new mongoose.Schema({
         type: String
     },
     firmas: {
-        type: firmasSchema,
-        required: function() {
-            return this.estado !== 'Rechazada' && !this.rechazoMuestra?.rechazada;
+        firmaAdministrador: {
+            nombre: String,
+            documento: String,
+            firma: {
+                type: String,
+                required: function() {
+                    return this.estado !== 'Rechazada';
+                }
+            }
+        },
+        firmaCliente: {
+            nombre: String,
+            documento: String,
+            firma: {
+                type: String,
+                required: function() {
+                    return this.estado !== 'Rechazada';
+                }
+            }
         }
     },
     historial: [historialEstadoSchema],

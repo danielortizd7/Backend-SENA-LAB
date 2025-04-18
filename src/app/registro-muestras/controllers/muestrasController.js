@@ -135,13 +135,11 @@ const validarDatosMuestra = (datos) => {
     }
 
     // Validar firmas solo si no es una muestra rechazada
-    if (datos.estado !== 'Rechazada') {
-        if (!datos.firmas?.firmaAdministrador?.firma) {
-            errores.push('La firma del administrador es requerida');
-        }
-        if (!datos.firmas?.firmaCliente?.firma) {
-            errores.push('La firma del cliente es requerida');
-        }
+    if (!datos.firmas?.firmaAdministrador?.firma) {
+        errores.push('La firma del administrador es requerida');
+    }
+    if (!datos.firmas?.firmaCliente?.firma) {
+        errores.push('La firma del cliente es requerida');
     }
 
     if (errores.length > 0) {
@@ -562,8 +560,8 @@ const registrarMuestra = async (req, res, next) => {
         const esRechazada = datos.estado === 'Rechazada';
         const motivoRechazo = esRechazada ? datos.observaciones : '';
 
-        // Preparar la estructura de firmas
-        const firmas = {
+        // Preparar la estructura de firmas solo si la muestra no está siendo rechazada
+        const firmas = esRechazada ? {} : {
             firmaAdministrador: {
                 nombre: datosAdministrador.nombre,
                 documento: datosAdministrador.documento,
@@ -600,7 +598,7 @@ const registrarMuestra = async (req, res, next) => {
                 motivo: motivoRechazo,
                 fechaRechazo: esRechazada ? new Date() : null
             },
-            firmas,
+            ...(esRechazada ? {} : { firmas }), // Solo incluir firmas si no está rechazada
             creadoPor: {
                 nombre: datosAdministrador.nombre,
                 documento: datosAdministrador.documento,
