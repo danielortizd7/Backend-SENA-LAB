@@ -57,7 +57,7 @@ type TipoMuestreo = typeof TIPOS_MUESTREO[number];
 const TIPOS_AGUA = ['potable', 'natural', 'residual', 'otra'] as const;
 type TipoAgua = typeof TIPOS_AGUA[number];
 
-const TIPOS_AGUA_RESIDUAL = ['domestica', 'no domestica'] as const;
+const TIPOS_AGUA_RESIDUAL = ['Doméstica', 'No Doméstica'] as const;
 type TipoAguaResidual = typeof TIPOS_AGUA_RESIDUAL[number];
 
 const SUBTIPOS_RESIDUAL = {
@@ -492,10 +492,10 @@ const RegistroMuestras: React.FC = () => {
     } else if (name === "tipoAguaResidual") {
       setFormData(prev => ({
         ...prev,
-        tipoDeAgua: {
-          ...prev.tipoDeAgua,
+        tipoDeAgua: { 
+          ...prev.tipoDeAgua, 
           subtipo: value,
-          descripcion: `Agua residual ${value}`
+          descripcion: `Agua residual ${value}` 
         }
       }));
     } else if (name === "preservacionMuestra") {
@@ -714,6 +714,94 @@ const RegistroMuestras: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Si la muestra está rechazada, validar y enviar directamente
+    if (isRejected) {
+        const erroresBasicos = Object.entries(validarFormulario(formData))
+            .filter(([key]) => !['firmaAdministrador', 'firmaCliente'].includes(key))
+            .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+        
+        if (Object.keys(erroresBasicos).length > 0) {
+            setError(Object.values(erroresBasicos).join(' - '));
+            return;
+        }
+        
+        setLoading(true);
+        setError('');
+        
+        try {
+            // Preparar los análisis seleccionados
+            const analisisSeleccionadosCompletos = formData.analisisSeleccionados.map(nombre => {
+                const analisisCompleto = formData.tipoAnalisis === TIPOS_ANALISIS_ENUM.FISICOQUIMICO
+                    ? analisisDisponibles?.fisicoquimico.find(a => a.nombre === nombre)
+                    : analisisDisponibles?.microbiologico.find(a => a.nombre === nombre);
+                
+                if (!analisisCompleto) {
+                    throw new Error(`No se encontró la información completa para el análisis: ${nombre}`);
+                }
+
+                const precioNumerico = analisisCompleto.precio 
+                    ? Number(analisisCompleto.precio.replace(/[^0-9]/g, ''))
+                    : 0;
+
+                return {
+                    nombre: analisisCompleto.nombre,
+                    precio: precioNumerico,
+                    unidad: analisisCompleto.unidad || '',
+                    metodo: analisisCompleto.metodo || '',
+                    rango: analisisCompleto.rango || ''
+                };
+            });
+
+            // Preparar datos de la muestra rechazada
+            const muestraData = {
+                documento: formData.documento,
+                tipoDeAgua: {
+                    tipo: formData.tipoDeAgua.tipo,
+                    codigo: formData.tipoDeAgua.codigo,
+                    descripcion: formData.tipoDeAgua.descripcion,
+                    subtipoResidual: formData.tipoDeAgua.subtipo
+                },
+                tipoMuestreo: formData.tipoMuestreo,
+                lugarMuestreo: formData.lugarMuestreo,
+                fechaHoraMuestreo: formData.fechaHoraMuestreo,
+                tipoAnalisis: formData.tipoAnalisis === TIPOS_ANALISIS_ENUM.FISICOQUIMICO ? 'Fisicoquímico' : 'Microbiológico',
+                identificacionMuestra: formData.identificacionMuestra,
+                planMuestreo: formData.planMuestreo,
+                condicionesAmbientales: formData.condicionesAmbientales,
+                preservacionMuestra: formData.preservacionMuestra,
+                preservacionMuestraOtra: formData.preservacionMuestraOtra,
+                analisisSeleccionados: analisisSeleccionadosCompletos,
+                estado: 'Rechazada',
+                observaciones: observacionRechazo
+            };
+
+            const token = localStorage.getItem('token');
+            if (!token) {
+                throw new Error('No se encontró el token de autenticación');
+            }
+
+            const headers = {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            };
+
+            await axios.post(API_URLS.MUESTRAS, muestraData, { headers });
+            setSuccess('Muestra rechazada exitosamente');
+            setTimeout(() => {
+                navigate('/muestras');
+            }, 2000);
+            return;
+        } catch (error: any) {
+            console.error('Error al registrar la muestra rechazada:', error);
+            const mensajeError = error.response?.data?.message || error.message || 'Error al registrar la muestra';
+            setError(mensajeError);
+            return;
+        } finally {
+            setLoading(false);
+        }
+    }
+    
+    // Código existente para muestras no rechazadas
     if (!mostrarFirmas) {
         const erroresBasicos = Object.entries(validarFormulario(formData))
             .filter(([key]) => !['firmaAdministrador', 'firmaCliente'].includes(key))
@@ -774,7 +862,7 @@ const RegistroMuestras: React.FC = () => {
                 tipo: formData.tipoDeAgua.tipo,
                 codigo: formData.tipoDeAgua.codigo,
                 descripcion: formData.tipoDeAgua.descripcion,
-                subtipo: formData.tipoDeAgua.subtipo
+                subtipoResidual: formData.tipoDeAgua.subtipo
             },
             tipoMuestreo: formData.tipoMuestreo,
             lugarMuestreo: formData.lugarMuestreo,
@@ -1437,7 +1525,7 @@ const RegistroMuestras: React.FC = () => {
             fullWidth
             sx={{ mt: 2 }}
           >
-            Continuar con las Firmas
+            {isRejected ? "Registrar Muestra Rechazada" : "Continuar con las Firmas"}
           </Button>
         )}
 

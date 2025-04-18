@@ -5,29 +5,27 @@ const { ResponseHandler } = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError, AuthorizationError } = require("../../../shared/errors/AppError");
 const { Muestra } = require("../../../shared/models/muestrasModel");
 const { formatPaginationResponse } = require("../../../shared/middleware/paginationMiddleware");
+const Analisis = require("../../../shared/models/analisisModel");
+const resultadoService = require("../services/resultadoService");
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
     if (!fecha) return null;
     
     try {
-        // Convertir a zona horaria de Colombia (America/Bogota)
         const fechaObj = new Date(fecha);
         
-        // Formatear fecha
         const dia = fechaObj.getDate().toString().padStart(2, '0');
         const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
         const año = fechaObj.getFullYear();
         
-        // Formatear hora en formato AM/PM
         let horas = fechaObj.getHours();
         const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
         const segundos = fechaObj.getSeconds().toString().padStart(2, '0');
         const ampm = horas >= 12 ? 'PM' : 'AM';
         
-        // Convertir a formato 12 horas
         horas = horas % 12;
-        horas = horas ? horas : 12; // si es 0, convertir a 12
+        horas = horas ? horas : 12;
         horas = horas.toString().padStart(2, '0');
         
         return {
@@ -38,105 +36,6 @@ const formatearFechaHora = (fecha) => {
         console.error('Error al formatear fecha:', error);
         return null;
     }
-};
-
-// Validar que los valores numéricos sean válidos
-const validarValoresNumericos = (datos) => {
-  const campos = ['pH', 'turbidez', 'oxigenoDisuelto', 'nitratos', 'solidosSuspendidos', 'fosfatos'];
-  campos.forEach(campo => {
-    if (datos[campo] !== undefined) {
-      const valor = Number(datos[campo]);
-      if (isNaN(valor)) {
-        throw new ValidationError(`El valor de ${campo} debe ser numérico`);
-      }
-      // Validaciones específicas para cada campo
-      switch (campo) {
-        case 'pH':
-          if (valor < 0 || valor > 14) {
-            throw new ValidationError('El pH debe estar entre 0 y 14');
-          }
-          break;
-        case 'turbidez':
-        case 'oxigenoDisuelto':
-        case 'nitratos':
-        case 'solidosSuspendidos':
-        case 'fosfatos':
-          if (valor < 0) {
-            throw new ValidationError(`El valor de ${campo} no puede ser negativo`);
-          }
-          break;
-      }
-    }
-  });
-};
-
-// Validar formato del valor numérico
-const validarFormatoNumerico = (valor) => {
-    if (typeof valor !== 'string' && typeof valor !== 'number') {
-        throw new ValidationError('El valor debe ser un número o una cadena numérica');
-    }
-
-    const valorStr = valor.toString();
-    
-    // Verificar si contiene coma
-    if (valorStr.includes(',')) {
-        throw new ValidationError('El valor debe usar punto decimal (.) en lugar de coma (,)');
-    }
-
-    // Verificar que sea un número válido
-    const numero = Number(valorStr);
-    if (isNaN(numero)) {
-        throw new ValidationError('El valor debe ser un número válido');
-    }
-
-    return true;
-};
-
-const procesarMedicion = (valorCompleto) => {
-  if (!valorCompleto) return null;
-
-  // Si es un string, procesamos el formato "valor unidad"
-  const valorStr = valorCompleto.toString().trim();
-  
-  // Si tiene formato "1.3mg/L" (sin espacio)
-  const matchSinEspacio = valorStr.match(/^([\d.]+)(.+)$/);
-  if (matchSinEspacio) {
-    return {
-      valor: matchSinEspacio[1],
-      unidad: matchSinEspacio[2].trim()
-    };
-  }
-
-  // Si tiene formato "7.5 mv" (con espacio)
-  const partes = valorStr.split(' ');
-  if (partes.length >= 2) {
-    return {
-      valor: partes[0],
-      unidad: partes.slice(1).join(' ').trim()
-    };
-  }
-
-  // Si no tiene unidad
-  return {
-    valor: valorStr,
-    unidad: ''
-  };
-};
-
-const formatearValorCompleto = (valor, unidad) => {
-  if (!valor) return '';
-  return unidad ? `${valor} ${unidad}` : valor;
-};
-
-const crearCambioMedicion = (campo, valorAnterior, valorNuevo) => {
-  const anterior = valorAnterior ? formatearValorCompleto(valorAnterior.valor, valorAnterior.unidad) : "No registrado";
-  const nuevo = formatearValorCompleto(valorNuevo.valor, valorNuevo.unidad);
-  
-  return {
-    valorAnterior: anterior,
-    valorNuevo: nuevo,
-    unidad: valorNuevo.unidad
-  };
 };
 
 const registrarResultado = async (req, res) => {
@@ -154,193 +53,59 @@ const registrarResultado = async (req, res) => {
             });
         }
 
-        if (!idMuestra) {
-            return res.status(400).json({
-                success: false,
-                message: 'El ID de la muestra es requerido',
-                errorCode: 'VALIDATION_ERROR'
-            });
-        }
-
-        // Validar formato de valores numéricos
-        for (const [analisis, datos] of Object.entries(resultados)) {
-            try {
-                validarFormatoNumerico(datos.valor);
-            } catch (error) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Error en el análisis ${analisis}: ${error.message}`,
-                    errorCode: 'VALIDATION_ERROR'
-                });
-            }
-        }
-
-        // Obtener la muestra primero
-        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
-        if (!muestra) {
-            return res.status(404).json({
-                success: false,
-                message: 'Muestra no encontrada',
-                errorCode: 'NOT_FOUND'
-            });
-        }
-
-        // Validar que hay resultados y que es un objeto
+        // Validar estructura básica de la petición
         if (!resultados || typeof resultados !== 'object' || Array.isArray(resultados)) {
             return res.status(400).json({
                 success: false,
-                message: 'Los resultados deben ser un objeto con al menos un análisis',
+                message: 'Los resultados deben ser un objeto con los análisis y sus valores',
                 errorCode: 'VALIDATION_ERROR'
             });
         }
 
-        // Validar que los análisis registrados correspondan a los seleccionados
-        const analisisNoSeleccionados = Object.keys(resultados).filter(
-            analisis => !muestra.analisisSeleccionados.includes(analisis)
-        );
+        // Preparar datos para el servicio
+        const datosResultado = {
+            idMuestra,
+            resultados,
+            observaciones,
+            cedulaLaboratorista: usuario.documento,
+            nombreLaboratorista: usuario.nombre
+        };
 
-        if (analisisNoSeleccionados.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: `Los siguientes análisis no fueron seleccionados originalmente: ${analisisNoSeleccionados.join(', ')}`,
-                errorCode: 'VALIDATION_ERROR'
-            });
-        }
+        // Usar el servicio para registrar el resultado
+        const resultado = await resultadoService.registrarResultado(datosResultado);
 
-        let resultado = await Resultado.findOne({ idMuestra });
-        
-        if (resultado) {
-            // Si existe, actualizar
-            const cambiosRealizados = {};
-            
-            Object.entries(resultados).forEach(([nombre, datos]) => {
-                const nombreLower = nombre.toLowerCase();
-                // Guardar el valor anterior antes de actualizarlo
-                const valorAnterior = resultado[nombreLower] ? {
-                    valor: resultado[nombreLower].valor,
-                    unidad: resultado[nombreLower].unidad
-                } : null;
-                
-                // Actualizar el valor
-                resultado[nombreLower] = {
-                    valor: datos.valor,
-                    unidad: datos.unidad
-                };
-                
-                // Registrar el cambio
-                cambiosRealizados[nombre] = {
-                    valorAnterior: valorAnterior ? `${valorAnterior.valor} ${valorAnterior.unidad}`.trim() : "No registrado",
-                    valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
-                    unidad: datos.unidad
-                };
-            });
+        // Formatear el resultado para la respuesta
+        const resultadoFormateado = {
+            ...resultado.toObject(),
+            resultados: Object.fromEntries(resultado.resultados),
+            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+            createdAt: formatearFechaHora(resultado.createdAt),
+            updatedAt: formatearFechaHora(resultado.updatedAt),
+            historialCambios: resultado.historialCambios.map(cambio => ({
+                nombre: cambio.nombre,
+                cedula: cambio.cedula,
+                fecha: formatearFechaHora(cambio.fecha),
+                observaciones: cambio.observaciones,
+                cambiosRealizados: cambio.cambiosRealizados
+            }))
+        };
 
-            resultado.observaciones = observaciones;
-            resultado.verificado = false;
-            
-            // Agregar al historial de cambios
-            const cambio = {
-                nombre: usuario.nombre,
-                cedula: usuario.documento,
-                fecha: new Date(),
-                observaciones: observaciones || "Sin observaciones",
-                cambiosRealizados: {
-                    resultados: cambiosRealizados
-                }
-            };
-            
-            resultado.historialCambios.push(cambio);
-            
-            await resultado.save();
-        } else {
-            // Si no existe, crear nuevo
-            const cambiosIniciales = {};
-            Object.entries(resultados).forEach(([nombre, datos]) => {
-                cambiosIniciales[nombre] = {
-                    valorAnterior: "No registrado",
-                    valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
-                    unidad: datos.unidad
-                };
-            });
-
-            const nuevoResultado = {
-                idMuestra,
-                cliente: {
-                    nombre: muestra.cliente.nombre,
-                    documento: muestra.cliente.documento
-                },
-                tipoDeAgua: muestra.tipoDeAgua,
-                lugarMuestreo: muestra.lugarMuestreo,
-                fechaHoraMuestreo: muestra.fechaHoraMuestreo,
-                tipoAnalisis: muestra.tipoAnalisis,
-                estado: 'En análisis',
-                observaciones,
-                verificado: false,
-                cedulaLaboratorista: usuario.documento,
-                nombreLaboratorista: usuario.nombre,
-                historialCambios: [{
-                    nombre: usuario.nombre,
-                    cedula: usuario.documento,
-                    fecha: new Date(),
-                    observaciones: observaciones || "Sin observaciones",
-                    cambiosRealizados: {
-                        resultados: cambiosIniciales
-                    }
-                }]
-            };
-
-            // Agregar los resultados
-            Object.entries(resultados).forEach(([nombre, datos]) => {
-                nuevoResultado[nombre.toLowerCase()] = {
-                    valor: datos.valor,
-                    unidad: datos.unidad
-                };
-            });
-
-            resultado = await Resultado.create(nuevoResultado);
-        }
-
-        // Actualizar el estado de la muestra
-        await Muestra.findOneAndUpdate(
-            { id_muestra: idMuestra },
-            { estado: 'En análisis' }
-        );
-
-        // Obtener el resultado actualizado y transformarlo
-        const resultadoActualizado = await Resultado.findOne({ idMuestra });
-        
-        // Transformar el resultado antes de enviarlo
-        const resultadoTransformado = resultadoActualizado.toObject();
-        delete resultadoTransformado._id;
-        
-        // Asegurar que solo se incluyan nombre y documento del cliente
-        if (resultadoTransformado.cliente) {
-            resultadoTransformado.cliente = {
-                nombre: resultadoTransformado.cliente.nombre,
-                documento: resultadoTransformado.cliente.documento
-            };
-        }
-
-        // Formatear todas las fechas en la respuesta
-        resultadoTransformado.fechaHoraMuestreo = formatearFechaHora(resultadoTransformado.fechaHoraMuestreo);
-        resultadoTransformado.createdAt = formatearFechaHora(resultadoTransformado.createdAt);
-        resultadoTransformado.updatedAt = formatearFechaHora(resultadoTransformado.updatedAt);
-        resultadoTransformado.historialCambios = resultadoTransformado.historialCambios.map(cambio => ({
-            ...cambio,
-            fecha: formatearFechaHora(cambio.fecha)
-        }));
+        // Eliminar campos internos de Mongoose
+        delete resultadoFormateado.__v;
+        delete resultadoFormateado._id;
 
         return res.status(200).json({
             success: true,
             message: 'Resultados registrados exitosamente',
-            data: resultadoTransformado
+            data: resultadoFormateado
         });
+
     } catch (error) {
         console.error('Error al registrar resultados:', error);
-        return res.status(500).json({
+        return res.status(error instanceof ValidationError ? 400 : 500).json({
             success: false,
-            message: 'Error interno al registrar resultados',
-            error: error.message
+            message: error.message,
+            errorCode: error instanceof ValidationError ? 'VALIDATION_ERROR' : 'SERVER_ERROR'
         });
     }
 };
@@ -360,67 +125,84 @@ const editarResultado = async (req, res) => {
             });
         }
 
-        // Validar formato de valores numéricos
-        for (const [analisis, datos] of Object.entries(resultados)) {
-            try {
-                validarFormatoNumerico(datos.valor);
-            } catch (error) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Error en el análisis ${analisis}: ${error.message}`,
-                    errorCode: 'VALIDATION_ERROR'
-                });
-            }
-        }
+        // Buscar el resultado y la muestra
+        const [resultado, muestra] = await Promise.all([
+            Resultado.findOne({ idMuestra }),
+            Muestra.findOne({ id_muestra: idMuestra })
+        ]);
 
-        // Buscar el resultado usando idMuestra
-        const resultado = await Resultado.findOne({ idMuestra });
-        if (!resultado) {
+        if (!resultado || !muestra) {
             return res.status(404).json({
                 success: false,
-                message: 'Resultado no encontrado',
+                message: 'Resultado o muestra no encontrada',
                 errorCode: 'NOT_FOUND'
             });
         }
 
-        // Validar que hay resultados y que es un objeto
-        if (!resultados || typeof resultados !== 'object' || Array.isArray(resultados)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Los resultados deben ser un objeto con al menos un análisis',
-                errorCode: 'VALIDATION_ERROR'
-            });
-        }
+        // Obtener información de los análisis
+        const analisisInfo = await Analisis.find({
+            nombre: { $in: Object.keys(resultados) }
+        });
 
-        // Registrar cambios
+        const analisisMap = analisisInfo.reduce((acc, analisis) => {
+            acc[analisis.nombre] = analisis;
+            return acc;
+        }, {});
+
+        // Validar y procesar los nuevos resultados
         const cambiosRealizados = {};
-        Object.entries(resultados).forEach(([nombre, datos]) => {
-            const nombreLower = nombre.toLowerCase();
-            // Guardar el valor anterior
-            const valorAnterior = resultado[nombreLower] ? {
-                valor: resultado[nombreLower].valor,
-                unidad: resultado[nombreLower].unidad
-            } : null;
-            
+        
+        for (const [nombre, datos] of Object.entries(resultados)) {
+            const analisis = analisisMap[nombre];
+            if (!analisis) {
+                return res.status(400).json({
+                    success: false,
+                    message: `El análisis ${nombre} no existe en la base de datos`,
+                    errorCode: 'VALIDATION_ERROR'
+                });
+            }
+
+            // Obtener el valor anterior
+            const valorAnteriorObj = resultado.resultados.get(nombre);
+            const valorAnterior = valorAnteriorObj ? 
+                `${valorAnteriorObj.valor} ${valorAnteriorObj.unidad}` : 
+                "No registrado";
+
+            // Validar el nuevo valor
+            if (analisis.rango && analisis.rango !== 'Ausencia/Presencia') {
+                const valor = Number(datos.valor);
+                
+                if (isNaN(valor)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `El valor para ${nombre} debe ser numérico`,
+                        errorCode: 'VALIDATION_ERROR'
+                    });
+                }
+            }
+
             // Actualizar el valor
-            resultado[nombreLower] = {
+            resultado.resultados.set(nombre, {
                 valor: datos.valor,
-                unidad: datos.unidad
-            };
-            
+                unidad: datos.unidad,
+                metodo: analisis.metodo,
+                tipo: analisis.tipo
+            });
+
             // Registrar el cambio
             cambiosRealizados[nombre] = {
-                valorAnterior: valorAnterior ? `${valorAnterior.valor} ${valorAnterior.unidad}`.trim() : "No registrado",
-                valorNuevo: `${datos.valor} ${datos.unidad}`.trim(),
-                unidad: datos.unidad
+                valorAnterior,
+                valorNuevo: `${datos.valor} ${datos.unidad}`,
+                unidad: datos.unidad,
+                metodo: analisis.metodo
             };
-        });
+        }
 
         resultado.observaciones = observaciones;
         resultado.verificado = false;
-        
+
         // Agregar al historial de cambios
-        const cambio = {
+        resultado.historialCambios.push({
             nombre: usuario.nombre,
             cedula: usuario.documento,
             fecha: new Date(),
@@ -428,28 +210,32 @@ const editarResultado = async (req, res) => {
             cambiosRealizados: {
                 resultados: cambiosRealizados
             }
-        };
-        
-        resultado.historialCambios.push(cambio);
+        });
 
-        // Guardar los cambios
         await resultado.save();
 
-        // Obtener el resultado actualizado y transformarlo
-        const resultadoActualizado = await Resultado.findOne({ idMuestra })
-            .select('-__v')
-            .lean();
-
-        // Formatear todas las fechas en la respuesta
+        // Formatear el resultado para la respuesta
         const resultadoFormateado = {
-            ...resultadoActualizado,
-            fechaHoraMuestreo: formatearFechaHora(resultadoActualizado.fechaHoraMuestreo),
-            createdAt: formatearFechaHora(resultadoActualizado.createdAt),
-            updatedAt: formatearFechaHora(resultadoActualizado.updatedAt),
-            historialCambios: resultadoActualizado.historialCambios.map(cambio => ({
-                ...cambio,
-                fecha: formatearFechaHora(cambio.fecha)
-            }))
+            tipoDeAgua: resultado.tipoDeAgua,
+            cliente: resultado.cliente,
+            lugarMuestreo: resultado.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+            tipoAnalisis: resultado.tipoAnalisis,
+            estado: resultado.estado,
+            resultados: Object.fromEntries(resultado.resultados),
+            observaciones: resultado.observaciones,
+            verificado: resultado.verificado,
+            cedulaLaboratorista: resultado.cedulaLaboratorista,
+            nombreLaboratorista: resultado.nombreLaboratorista,
+            historialCambios: resultado.historialCambios.map(cambio => ({
+                nombre: cambio.nombre,
+                cedula: cambio.cedula,
+                fecha: formatearFechaHora(cambio.fecha),
+                observaciones: cambio.observaciones,
+                cambiosRealizados: cambio.cambiosRealizados
+            })),
+            createdAt: formatearFechaHora(resultado.createdAt),
+            updatedAt: formatearFechaHora(resultado.updatedAt)
         };
 
         return res.status(200).json({
@@ -457,12 +243,13 @@ const editarResultado = async (req, res) => {
             message: 'Resultado actualizado exitosamente',
             data: resultadoFormateado
         });
+
     } catch (error) {
         console.error('Error al editar resultado:', error);
-        return res.status(500).json({
+        return res.status(error instanceof ValidationError ? 400 : 500).json({
             success: false,
-            message: 'Error al editar el resultado',
-            error: error.message
+            message: error.message,
+            errorCode: error instanceof ValidationError ? 'VALIDATION_ERROR' : 'SERVER_ERROR'
         });
     }
 };
