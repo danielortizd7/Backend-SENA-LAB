@@ -8,10 +8,33 @@ const { NotFoundError, ValidationError } = require("../../../shared/errors/AppEr
 
 // Función para limpiar Base64 y asegurarse de que tenga el prefijo correcto
 const formatearBase64 = (firma) => {
-    if (!firma.startsWith("data:image/png;base64,")) {
-        return `data:image/png;base64,${firma}`;
+    if (!firma) return '';
+    
+    try {
+        // Limpiar espacios en blanco y saltos de línea
+        let firmaLimpia = firma.trim().replace(/[\n\r]/g, '');
+        
+        // Si ya tiene el prefijo correcto, verificar que sea válido
+        if (firmaLimpia.startsWith('data:image/')) {
+            const [header, contenido] = firmaLimpia.split(',');
+            if (!contenido || !contenido.trim()) {
+                console.error('Base64 inválido: contenido vacío');
+                return '';
+            }
+            return firmaLimpia;
+        }
+        
+        // Verificar que el contenido sea base64 válido
+        if (!/^[A-Za-z0-9+/=]+$/.test(firmaLimpia)) {
+            console.error('Base64 inválido: caracteres no permitidos');
+            return '';
+        }
+        
+        return `data:image/png;base64,${firmaLimpia}`;
+    } catch (error) {
+        console.error('Error al formatear base64:', error);
+        return '';
     }
-    return firma;
 };
 
 // Buscar muestra por ID
@@ -44,129 +67,39 @@ const buscarMuestra = async (req, res) => {
 // Guardar firmas en la base de datos
 const guardarFirma = async (req, res) => {
     try {
-        const errors = validationResult(req);
-        if (!errors.isEmpty()) {
-            throw new ValidationError('Datos inválidos', errors.array());
-        }
+        const { idMuestra, firmaAdministrador, firmaCliente } = req.body;
 
-        console.log("Recibiendo datos de firma:", {
-            id_muestra: req.body.id_muestra,
-            firmas: req.body.firmas,
-            estructuraFirmaAdmin: req.body.firmas?.firmaAdministrador,
-            estructuraFirmaCliente: req.body.firmas?.firmaCliente
-        });
-
-        const { id_muestra, firmas } = req.body;
-
-        if (!firmas || !firmas.firmaAdministrador || !firmas.firmaCliente) {
-            throw new ValidationError('Estructura de firmas inválida', [{
-                msg: 'Se requieren las firmas del administrador y del cliente',
-                path: 'firmas'
-            }]);
-        }
-
-        const muestra = await Muestra.findOne({ id_muestra: id_muestra.trim() })
-            .collation({ locale: "es", strength: 2 });
-
+        const muestra = await Muestra.findById(idMuestra);
         if (!muestra) {
-            throw new NotFoundError(`Muestra no encontrada con ID: ${id_muestra}`);
+            return res.status(404).json({ error: 'Muestra no encontrada' });
         }
 
-        console.log("Muestra encontrada:", {
-            id_muestra: muestra.id_muestra,
-            historial: muestra.historial,
-            documento: muestra.documento
-        });
-
-        // Asegurar que existe el objeto firmas
-        const nuevasFirmas = { ...muestra.firmas || {} };
-        console.log("Firmas actuales:", nuevasFirmas);
-
-        // Guardar firma del administrador
-        if (firmas.firmaAdministrador.firma && firmas.firmaAdministrador.firma.trim() !== "") {
-            nuevasFirmas.cedulaAdministrador = muestra.historial[0]?.cedulaadministrador;
-            nuevasFirmas.firmaAdministrador = formatearBase64(firmas.firmaAdministrador.firma);
-            nuevasFirmas.fechaFirmaAdministrador = new Date();
-            console.log("Firma del administrador agregada:", {
-                cedula: nuevasFirmas.cedulaAdministrador,
-                firma: "Presente",
-                fecha: nuevasFirmas.fechaFirmaAdministrador
-            });
-        } else {
-            console.log("No se guardó la firma del administrador:", {
-                tieneFirmaAdmin: !!firmas.firmaAdministrador.firma,
-                firmaVacia: firmas.firmaAdministrador.firma ? firmas.firmaAdministrador.firma.trim() === "" : true
-            });
-            throw new ValidationError('La firma del administrador es requerida', [{
-                msg: 'La firma del administrador no puede estar vacía',
-                path: 'firmas.firmaAdministrador.firma'
-            }]);
+        // Actualizar las firmas
+        const firmas = {};
+        if (firmaAdministrador) {
+            firmas.firmaAdministrador = firmaAdministrador;
+        }
+        if (firmaCliente) {
+            firmas.firmaCliente = firmaCliente;
         }
 
-        // Guardar firma del cliente
-        if (firmas.firmaCliente.firma && firmas.firmaCliente.firma.trim() !== "") {
-            nuevasFirmas.cedulaCliente = muestra.documento;
-            nuevasFirmas.firmaCliente = formatearBase64(firmas.firmaCliente.firma);
-            nuevasFirmas.fechaFirmaCliente = new Date();
-            console.log("Firma del cliente agregada:", {
-                cedula: nuevasFirmas.cedulaCliente,
-                firma: "Presente",
-                fecha: nuevasFirmas.fechaFirmaCliente
-            });
-        } else {
-            console.log("No se guardó la firma del cliente:", {
-                tieneFirmaCliente: !!firmas.firmaCliente.firma,
-                firmaVacia: firmas.firmaCliente.firma ? firmas.firmaCliente.firma.trim() === "" : true
-            });
-            throw new ValidationError('La firma del cliente es requerida', [{
-                msg: 'La firma del cliente no puede estar vacía',
-                path: 'firmas.firmaCliente.firma'
-            }]);
-        }
-
-        // Actualizar la muestra en la base de datos
         const muestraActualizada = await Muestra.findByIdAndUpdate(
-            muestra._id,
-            { $set: { firmas: nuevasFirmas } },
+            idMuestra,
+            { firmas },
             { new: true }
         );
 
-        console.log("Muestra actualizada con las firmas:", {
-            firmas: muestraActualizada.firmas
-        });
+        console.log('Muestra actualizada:', muestraActualizada);
 
-        let rutaPDF = null;
-        if (nuevasFirmas.cedulaCliente && nuevasFirmas.firmaCliente && nuevasFirmas.cedulaAdministrador && nuevasFirmas.firmaAdministrador) {
-            console.log("Generando PDF...");
-            rutaPDF = await generarPDF(
-                muestraActualizada,
-                nuevasFirmas.cedulaCliente,
-                nuevasFirmas.firmaCliente,
-                nuevasFirmas.cedulaAdministrador,
-                nuevasFirmas.firmaAdministrador
-            );
-            console.log("PDF generado:", rutaPDF);
-        } else {
-            console.log("No se generó el PDF - Faltan firmas:", {
-                tieneCedulaCliente: !!nuevasFirmas.cedulaCliente,
-                tieneFirmaCliente: !!nuevasFirmas.firmaCliente,
-                tieneCedulaAdmin: !!nuevasFirmas.cedulaAdministrador,
-                tieneFirmaAdmin: !!nuevasFirmas.firmaAdministrador
-            });
+        // Generar PDF si ambas firmas están presentes
+        if (muestraActualizada.firmas?.firmaAdministrador && muestraActualizada.firmas?.firmaCliente) {
+            await generarPDF(muestraActualizada);
         }
 
-        return ResponseHandler.success(
-            res,
-            { 
-                muestra: muestraActualizada,
-                rutaPDF 
-            },
-            "Firmas guardadas correctamente"
-        );
-
+        res.json(muestraActualizada);
     } catch (error) {
-        console.error("Error al guardar las firmas:", error);
-        return ResponseHandler.error(res, error);
+        console.error('Error al guardar firma:', error);
+        res.status(500).json({ error: 'Error al guardar la firma' });
     }
 };
 

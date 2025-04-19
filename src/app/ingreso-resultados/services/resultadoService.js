@@ -1,91 +1,127 @@
 const Resultado = require("../models/resultadoModel");
+const Analisis = require("../../../shared/models/analisisModel");
+const { Muestra } = require("../../../shared/models/muestrasModel");
+const { ValidationError } = require("../../../shared/errors/AppError");
 
-const procesarValorUnidad = (dato) => {
-  if (typeof dato === 'string') {
-    // Si es string, separar el valor y la unidad
-    const partes = dato.split(' ');
-    return {
-      valor: partes[0],
-      unidad: partes[1] || ''
-    };
-  } else if (typeof dato === 'object' && dato !== null) {
-    // Si ya es un objeto, retornarlo como está
-    return dato;
-  }
-  return null;
-};
+const procesarValorUnidad = (valor, unidad, analisisInfo) => {
+    if (!valor) return null;
 
-const registrarResultado = async (datos) => {
-  try {
-    // Procesar los datos de entrada
-    const datosFormateados = {};
-    
-    // Procesar cada campo si existe
-    const campos = ['pH', 'turbidez', 'oxigenoDisuelto', 'nitratos', 'solidosSuspendidos', 'fosfatos'];
-    campos.forEach(campo => {
-      if (datos[campo]) {
-        const valorProcesado = procesarValorUnidad(datos[campo]);
-        if (valorProcesado) {
-          datosFormateados[campo] = {
-            valor: valorProcesado.valor,
-            unidad: valorProcesado.unidad || obtenerUnidadPorDefecto(campo)
-          };
+    // Validar que el valor sea numérico si no es Ausencia/Presencia
+    if (analisisInfo.rango && analisisInfo.rango !== 'Ausencia/Presencia') {
+        const valorNumerico = Number(valor);
+        
+        if (isNaN(valorNumerico)) {
+            throw new ValidationError(`El valor para ${analisisInfo.nombre} debe ser numérico`);
         }
-      }
-    });
+    }
 
-    // Crear el resultado con los valores iniciales
-    const resultado = new Resultado({
-      idMuestra: datos.idMuestra,
-      documento: datos.documento,
-      fechaHora: datos.fechaHora || new Date(),
-      tipoMuestreo: datos.tipoMuestreo || "Simple",
-      pH: datosFormateados.pH,
-      turbidez: datosFormateados.turbidez,
-      oxigenoDisuelto: datosFormateados.oxigenoDisuelto,
-      nitratos: datosFormateados.nitratos,
-      solidosSuspendidos: datosFormateados.solidosSuspendidos,
-      fosfatos: datosFormateados.fosfatos,
-      observaciones: datos.observaciones || "",
-      verificado: false,
-      cedulaLaboratorista: datos.cedulaLaboratorista,
-      nombreLaboratorista: datos.nombreLaboratorista,
-      historialCambios: [] // El historial comienza vacío, solo se llenará con los PUT
-    });
+    // Validar la unidad
+    if (unidad !== analisisInfo.unidad) {
+        throw new ValidationError(`La unidad para ${analisisInfo.nombre} debe ser ${analisisInfo.unidad}`);
+    }
 
-    console.log("Registrando resultado inicial:", JSON.stringify({
-      idMuestra: resultado.idMuestra,
-      valores: {
-        pH: resultado.pH,
-        turbidez: resultado.turbidez,
-        oxigenoDisuelto: resultado.oxigenoDisuelto,
-        nitratos: resultado.nitratos,
-        solidosSuspendidos: resultado.solidosSuspendidos,
-        fosfatos: resultado.fosfatos
-      },
-      observaciones: resultado.observaciones
-    }, null, 2));
-
-    await resultado.save();
-    return resultado;
-  } catch (error) {
-    console.error("Error al registrar el resultado:", error);
-    throw new Error("Error al registrar el resultado: " + error.message);
-  }
+    return {
+        valor: valor.toString(),
+        unidad: unidad,
+        metodo: analisisInfo.metodo,
+        tipo: analisisInfo.tipo
+    };
 };
 
-// Función auxiliar para obtener la unidad por defecto según el campo
-const obtenerUnidadPorDefecto = (campo) => {
-  switch (campo) {
-    case 'pH':
-      return 'mv';
-    case 'turbidez':
-      return 'NTU';
-    case 'fosfatos':
-      return 'mg/k';
-    default:
-      return 'mg/L';
-  }
+const registrarResultado = async (datosEntrada) => {
+    try {
+        // Verificar que la muestra existe
+        const muestra = await Muestra.findOne({ id_muestra: datosEntrada.idMuestra });
+        if (!muestra) {
+            throw new ValidationError('La muestra no existe');
+        }
+
+        // Obtener información de los análisis desde la base de datos
+        const analisisInfo = await Analisis.find({
+            nombre: { $in: Object.keys(datosEntrada.resultados) }
+        });
+
+        // Crear un mapa de análisis para fácil acceso
+        const analisisMap = analisisInfo.reduce((acc, analisis) => {
+            acc[analisis.nombre] = analisis;
+            return acc;
+        }, {});
+
+        // Validar que todos los análisis existen en la base de datos
+        for (const nombre of Object.keys(datosEntrada.resultados)) {
+            if (!analisisMap[nombre]) {
+                throw new ValidationError(`El análisis ${nombre} no existe en la base de datos`);
+            }
+        }
+
+        // Validar que los análisis correspondan a los seleccionados en la muestra
+        const analisisNoSeleccionados = Object.keys(datosEntrada.resultados).filter(
+            analisis => !muestra.analisisSeleccionados.some(a => a.nombre === analisis)
+        );
+
+        if (analisisNoSeleccionados.length > 0) {
+            throw new ValidationError(
+                `Los siguientes análisis no fueron seleccionados originalmente: ${analisisNoSeleccionados.join(', ')}`
+            );
+        }
+
+        // Procesar los resultados
+        const resultadosMap = new Map();
+        const cambiosIniciales = {};
+
+        for (const [nombre, datosAnalisis] of Object.entries(datosEntrada.resultados)) {
+            const analisis = analisisMap[nombre];
+            const valorProcesado = procesarValorUnidad(datosAnalisis.valor, datosAnalisis.unidad, analisis);
+
+            if (valorProcesado) {
+                resultadosMap.set(nombre, valorProcesado);
+                cambiosIniciales[nombre] = {
+                    valorAnterior: "No registrado",
+                    valorNuevo: `${datosAnalisis.valor} ${datosAnalisis.unidad}`,
+                    unidad: datosAnalisis.unidad,
+                    metodo: analisis.metodo
+                };
+            }
+        }
+
+        // Crear el resultado
+        const resultado = new Resultado({
+            idMuestra: datosEntrada.idMuestra,
+            cliente: {
+                nombre: muestra.cliente.nombre,
+                documento: muestra.cliente.documento
+            },
+            tipoDeAgua: muestra.tipoDeAgua,
+            lugarMuestreo: muestra.lugarMuestreo,
+            fechaHoraMuestreo: muestra.fechaHoraMuestreo,
+            tipoAnalisis: muestra.tipoAnalisis,
+            estado: 'En análisis',
+            resultados: resultadosMap,
+            observaciones: datosEntrada.observaciones || "",
+            verificado: false,
+            cedulaLaboratorista: datosEntrada.cedulaLaboratorista,
+            nombreLaboratorista: datosEntrada.nombreLaboratorista,
+            historialCambios: [{
+                nombre: datosEntrada.nombreLaboratorista,
+                cedula: datosEntrada.cedulaLaboratorista,
+                fecha: new Date(),
+                observaciones: datosEntrada.observaciones || "Registro inicial",
+                cambiosRealizados: {
+                    resultados: cambiosIniciales
+                }
+            }]
+        });
+
+        await resultado.save();
+
+        // Actualizar el estado de la muestra
+        await muestra.updateOne({ estado: 'En análisis' });
+
+        return resultado;
+    } catch (error) {
+        console.error("Error al registrar el resultado:", error);
+        throw error;
+    }
 };
 
 module.exports = { registrarResultado };

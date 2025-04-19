@@ -227,6 +227,26 @@ const verificarLaboratorista = async (req, res, next) => {
     }
 };
 
+// Middleware para verificar rol
+const verificarRol = (rolesPermitidos) => {
+    return (req, res, next) => {
+        try {
+            if (!req.usuario) {
+                throw new AuthenticationError('Usuario no autenticado');
+            }
+
+            const rolUsuario = req.usuario.rol;
+            if (!rolesPermitidos.includes(rolUsuario)) {
+                throw new AuthorizationError(`No tiene permisos para realizar esta acción. Se requiere uno de los siguientes roles: ${rolesPermitidos.join(', ')}`);
+            }
+
+            next();
+        } catch (error) {
+            next(error);
+        }
+    };
+};
+
 module.exports = {
     login,
     verificarToken,
@@ -234,5 +254,6 @@ module.exports = {
     verificarRolAdministrador,
     verificarLaboratorista,
     verificarPermiso,
+    verificarRol,
     PERMISOS
 };

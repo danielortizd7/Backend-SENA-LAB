@@ -1,5 +1,6 @@
 const { Muestra } = require('../../../shared/models/muestrasModel');
 const { NotFoundError, DatabaseError, ValidationError } = require('../../../shared/errors/AppError');
+const { analisisDisponibles } = require('../../../shared/data/analisisData');
 
 // Validar rol de usuario
 const validarRolUsuario = (usuario) => {
@@ -26,6 +27,30 @@ const validarRolUsuario = (usuario) => {
     return true;
 };
 
+// Función para calcular el total de análisis seleccionados
+const calcularPrecioTotal = (analisisSeleccionados) => {
+    let total = 0;
+    
+    // Obtener todos los análisis disponibles
+    const todosLosAnalisis = [
+        ...analisisDisponibles.fisicoquimico,
+        ...analisisDisponibles.microbiologico
+    ];
+    
+    // Calcular el total sumando los precios de los análisis seleccionados
+    analisisSeleccionados.forEach(nombreAnalisis => {
+        const analisis = todosLosAnalisis.find(a => a.nombre === nombreAnalisis);
+        if (analisis) {
+            // Convertir el precio de string con formato "xx,xxx" a número
+            const precioNumerico = parseFloat(analisis.precio.replace(/,/g, ''));
+            total += precioNumerico;
+        }
+    });
+    
+    // Formatear el total al formato colombiano (con comas para miles)
+    return total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
+
 // Obtener todas las muestras
 const obtenerMuestras = async () => {
     try {
@@ -42,7 +67,8 @@ const obtenerMuestra = async (id) => {
     try {
         console.log('Buscando muestra con ID:', id);
         const muestra = await Muestra.findOne({ id_muestra: id.trim() })
-            .collation({ locale: "es", strength: 2 });
+            .collation({ locale: "es", strength: 2 })
+            .lean(); // Use lean() to get plain JavaScript object
         
         if (!muestra) {
             console.log('Muestra no encontrada');
@@ -59,80 +85,87 @@ const obtenerMuestra = async (id) => {
     }
 };
 
+// Función para procesar firmas
+const procesarFirmas = (datosMuestra, usuario) => {
+    return {
+        administrador: {
+            nombre: usuario.nombre,
+            documento: usuario.documento,
+            firmaAdministrador: datosMuestra.firmas?.firmaAdministrador?.firma || ''
+        },
+        cliente: {
+            nombre: datosMuestra.cliente.nombre,
+            documento: datosMuestra.cliente.documento,
+            firmaCliente: datosMuestra.firmas?.firmaCliente?.firma || ''
+        }
+    };
+};
+
+// Función para crear entrada de historial
+const crearEntradaHistorial = (estado, usuario, observaciones) => {
+    return {
+        estado,
+        administrador: {
+            nombre: usuario.nombre,
+            documento: usuario.documento,
+            email: usuario.email
+        },
+        fechaCambio: new Date(),
+        observaciones: observaciones || `Estado cambiado a ${estado}`
+    };
+};
+
 // Crear una nueva muestra
 const crearMuestra = async (datosMuestra, usuario) => {
     try {
         // Validar el rol del usuario
         validarRolUsuario(usuario);
 
-        // Procesar las firmas
-        const firmas = {
-            cedulaAdministrador: usuario.documento,
-            firmaAdministrador: datosMuestra.firmas?.firmaAdministrador?.firma || '',
-            fechaFirmaAdministrador: new Date(),
-            cedulaCliente: datosMuestra.documento,
-            firmaCliente: datosMuestra.firmas?.firmaCliente?.firma || '',
-            fechaFirmaCliente: new Date()
-        };
-
-        // Procesar análisis seleccionados con validación por tipo
-        const analisisProcesados = Array.isArray(datosMuestra.analisisSeleccionados)
-            ? datosMuestra.analisisSeleccionados.map(a => {
-                if (typeof a === 'object') {
-                    // Validar formato de rango según tipo de análisis
-                    if (datosMuestra.tipoAnalisis === 'FisicoQuimico' && a.rango && !/^[\d,\.]+\s*-\s*[\d,\.]+$/.test(a.rango)) {
-                        throw new ValidationError(`Formato de rango inválido para ${a.nombre}. Use "X,X - Y,Y"`);
-                    }
-                    if (datosMuestra.tipoAnalisis === 'Microbiologico' && a.rango && !/^(UFC\/\d+ml|Ausencia\/Presencia)$/.test(a.rango)) {
-                        throw new ValidationError(`Formato de rango inválido para ${a.nombre}. Use "UFC/Xml" o "Ausencia/Presencia"`);
-                    }
-                    
-                    return {
-                        nombre: a.nombre,
-                        rango: a.rango || '',
-                        unidad: a.unidad || ''
-                    };
-                }
-                return {
-                    nombre: a,
-                    rango: '',
-                    unidad: ''
-                };
-            })
-            : [];
-
-        const muestraData = {
+        // Normalizar campos
+        const datosNormalizados = {
             ...datosMuestra,
-            analisisSeleccionados: analisisProcesados,
-            tipoAnalisis: datosMuestra.tipoAnalisis, // Ahora acepta string directamente
-            firmas,
-            creadoPor: usuario.id,
-            estado: 'Recibida',
-            historial: [{
-                estado: 'Recibida',
-                cedulaadministrador: usuario.documento,
-                nombreadministrador: usuario.nombre,
-                fechaCambio: new Date(),
-                observaciones: 'Muestra registrada inicialmente'
-            }]
+            tipoMuestreo: datosMuestra.tipoMuestreo === "Compuesto" ? "Compuesto" : "Simple",
+            tipoAnalisis: datosMuestra.tipoAnalisis === "Fisicoquimico" ? "Fisicoquímico" : datosMuestra.tipoAnalisis,
+            estado: datosMuestra.estado || 'Recibida'
         };
-        
-        console.log('Datos de la muestra a crear:', {
-            documento: muestraData.documento,
-            tipoDeAgua: muestraData.tipoDeAgua,
-            tipoAnalisis: muestraData.tipoAnalisis,
-            firmas: muestraData.firmas,
-            estado: muestraData.estado,
-            historial: muestraData.historial[0]
+
+        // Calcular el precio total si no está definido
+        if (!datosNormalizados.precioTotal && datosNormalizados.analisisSeleccionados) {
+            datosNormalizados.precioTotal = calcularPrecioTotal(datosNormalizados.analisisSeleccionados);
+        }
+
+        // Procesar las firmas
+        const firmas = procesarFirmas(datosNormalizados, usuario);
+
+        // Crear el objeto de muestra con los datos normalizados
+        const muestra = new Muestra({
+            ...datosNormalizados,
+            firmas,
+            creadoPor: {
+                nombre: usuario.nombre,
+                documento: usuario.documento,
+                email: usuario.email,
+                fechaCreacion: new Date()
+            },
+            historial: [crearEntradaHistorial(
+                datosNormalizados.estado,
+                usuario,
+                datosNormalizados.observaciones || 'Muestra registrada inicialmente'
+            )],
+            actualizadoPor: []
         });
 
-        const muestra = new Muestra(muestraData);
+        console.log('Intentando guardar muestra:', JSON.stringify(muestra, null, 2));
+        
         await muestra.save();
         return muestra;
     } catch (error) {
-        console.error('Error al crear muestra:', error);
+        console.error('Error completo al crear muestra:', error);
         if (error instanceof ValidationError) {
             throw error;
+        }
+        if (error.name === 'ValidationError') {
+            throw new ValidationError(Object.values(error.errors).map(e => e.message).join(', '));
         }
         throw new DatabaseError('Error al crear la muestra', error);
     }
@@ -145,8 +178,7 @@ const actualizarMuestra = async (id, datosActualizacion, usuario) => {
         // Validar el rol del usuario
         validarRolUsuario(usuario);
 
-        // Limpiar el ID de la muestra y validar formato
-        const idLimpio = id.trim().replace(/\/+/g, '/');
+        const idLimpio = id.replace(/[^a-zA-Z0-9-]/g, '');
         console.log('ID de muestra a actualizar (limpio):', idLimpio);
 
         // Filtrar campos inmutables y agregar validaciones
@@ -160,7 +192,10 @@ const actualizarMuestra = async (id, datosActualizacion, usuario) => {
             }
         }
 
-        console.log('Datos de actualización filtrados:', datosActualizados);
+        // Calcular el precio total si se están actualizando los análisis seleccionados
+        if (datosActualizados.analisisSeleccionados) {
+            datosActualizados.precioTotal = calcularPrecioTotal(datosActualizados.analisisSeleccionados);
+        }
 
         // Verificar si la muestra existe antes de actualizar
         const muestraExistente = await Muestra.findOne({ id_muestra: idLimpio });
@@ -168,75 +203,51 @@ const actualizarMuestra = async (id, datosActualizacion, usuario) => {
             throw new NotFoundError('Muestra no encontrada');
         }
 
+        // Preparar datos para actualizar
+        const datosParaActualizar = { ...datosActualizados };
+        
+        // Si se está rechazando la muestra, actualizar el campo rechazoMuestra
+        if (datosActualizacion.estado === 'Rechazada') {
+            datosParaActualizar.rechazoMuestra = {
+                rechazada: true,
+                motivo: datosActualizacion.observaciones,
+                fechaRechazo: new Date()
+            };
+        }
+
+        // Procesar firmas si se están actualizando
+        if (datosActualizacion.firmas) {
+            datosParaActualizar.firmas = procesarFirmas(datosActualizacion, usuario);
+        }
+
+        // Agregar al historial si hay cambio de estado
+        if (datosActualizacion.estado && datosActualizacion.estado !== muestraExistente.estado) {
+            datosParaActualizar.$push = {
+                ...datosParaActualizar.$push,
+                historial: crearEntradaHistorial(
+                    datosActualizacion.estado,
+                    usuario,
+                    datosActualizacion.observaciones
+                )
+            };
+        }
+
         const muestra = await Muestra.findOneAndUpdate(
             { id_muestra: idLimpio },
-            {
-                ...datosActualizados,
-                $push: {
-                    actualizadoPor: [{
-                        usuario: usuario.documento,
-                        nombre: usuario.nombre,
-                        fecha: new Date()
-                    }]
-                }
-            },
-            { 
-                new: true, 
-                runValidators: true,
-                context: 'query'
-            }
+            { $set: datosParaActualizar },
+            { new: true }
         );
 
-        console.log('Muestra actualizada:', muestra);
-        return muestra;
-    } catch (error) {
-        if (error instanceof NotFoundError || error instanceof ValidationError) {
-            throw error;
-        }
-        console.error('Error detallado de MongoDB:', {
-            message: error.message,
-            code: error.code,
-            keyPattern: error.keyPattern,
-            keyValue: error.keyValue
-        });
-        throw new DatabaseError('Error al actualizar la muestra', error);
-    }
-};
-
-// Registrar firma en una muestra
-const registrarFirma = async (idMuestra, datosFirma, usuario) => {
-    try {
-        // Validar el rol del usuario
-        validarRolUsuario(usuario);
-
-        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
         if (!muestra) {
             throw new NotFoundError('Muestra no encontrada');
         }
 
-        // Inicializar el objeto de firmas si no existe
-        if (!muestra.firmas) {
-            muestra.firmas = {};
-        }
-
-        // Actualizar las firmas según el rol
-        if (usuario.rol === 'administrador') {
-            muestra.firmas.firmaAdministrador = datosFirma.firma;
-            muestra.firmas.cedulaAdministrador = usuario.documento;
-            muestra.firmas.fechaFirmaAdministrador = new Date();
-        } else if (usuario.rol === 'cliente') {
-            muestra.firmas.firmaCliente = datosFirma.firma;
-            muestra.firmas.cedulaCliente = usuario.documento;
-            muestra.firmas.fechaFirmaCliente = new Date();
-        }
-
-        await muestra.save();
         return muestra;
     } catch (error) {
         if (error instanceof NotFoundError || error instanceof ValidationError) {
             throw error;
         }
-        throw new DatabaseError('Error al registrar la firma', error);
+        throw new DatabaseError('Error al actualizar la muestra', error);
     }
 };
 
@@ -290,5 +301,5 @@ module.exports = {
     eliminarMuestra,
     obtenerMuestrasPorTipo,
     obtenerMuestrasPorEstado,
-    registrarFirma
-};
+    calcularPrecioTotal
+}; 

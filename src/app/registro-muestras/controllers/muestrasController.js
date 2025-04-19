@@ -2,8 +2,7 @@ const { validationResult } = require('express-validator');
 const { ResponseHandler } = require('../../../shared/utils/responseHandler');
 const { ValidationError, NotFoundError } = require('../../../shared/errors/AppError');
 const { Muestra, estadosValidos, TipoAgua, TIPOS_AGUA, SUBTIPOS_RESIDUAL } = require('../../../shared/models/muestrasModel');
-const AuditoriaService = require('../../auditoria/services/auditoriaService');
-const { getAnalisisPorTipoAgua } = require('../../../shared/models/analisisModel');
+const { getAnalisisPorTipoAgua, analisisDisponibles } = require('../../../shared/data/analisisData');
 const Usuario = require('../../../shared/models/usuarioModel');
 const { validarUsuario } = require('../services/usuariosService');
 const muestrasService = require('../services/muestrasService');
@@ -14,6 +13,23 @@ const { formatPaginationResponse } = require('../../../shared/middleware/paginat
 
 // URL base para las peticiones a la API de usuarios
 const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
+
+// Función para formatear precio con separadores de miles
+const formatearPrecio = (precio) => {
+    if (!precio) return "0";
+    return precio.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+};
+
+// Función para formatear precio en formato de moneda colombiana
+const formatearPrecioCOP = (precio) => {
+    if (!precio) return "$0";
+    return new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(precio);
+};
 
 //Funciones de Utilidad 
 const obtenerDatosUsuario = (req) => {
@@ -119,8 +135,11 @@ const validarDatosMuestra = (datos) => {
     }
 
     // Validar firmas solo si no es una muestra rechazada
-    if (datos.estado !== 'Rechazada' && (!datos.firmas?.firmaAdministrador?.firma || !datos.firmas?.firmaCliente?.firma)) {
-        errores.push('Se requieren las firmas del administrador y del cliente');
+    if (!datos.firmas?.firmaAdministrador?.firma) {
+        errores.push('La firma del administrador es requerida');
+    }
+    if (!datos.firmas?.firmaCliente?.firma) {
+        errores.push('La firma del cliente es requerida');
     }
 
     if (errores.length > 0) {
@@ -273,7 +292,7 @@ const obtenerMuestras = async (req, res, next) => {
         // Ejecutar las consultas en paralelo
         const [muestras, total] = await Promise.all([
             Muestra.find(filtro)
-                .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente tipoMuestreo tipoAnalisis identificacionMuestra planMuestreo condicionesAmbientales preservacionMuestra analisisSeleccionados rechazoMuestra observaciones firmas historial creadoPor actualizadoPor createdAt updatedAt')
+                .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente tipoMuestreo tipoAnalisis identificacionMuestra planMuestreo condicionesAmbientales preservacionMuestra analisisSeleccionados rechazoMuestra observaciones firmas historial creadoPor actualizadoPor createdAt updatedAt precioTotal')
                 .sort(sort)
                 .skip(req.pagination.skip)
                 .limit(req.pagination.limit)
@@ -295,7 +314,8 @@ const obtenerMuestras = async (req, res, next) => {
                 creadoPor: {
                     ...muestra.creadoPor,
                     fechaCreacion: formatearFechaHora(muestra.createdAt)
-                }
+                },
+                precioTotal: formatearPrecio(muestra.precioTotal)
             };
 
             // Eliminar el campo firmas si la muestra está rechazada
@@ -399,39 +419,36 @@ const obtenerDatosUsuarioExterno = async (documento) => {
 const obtenerMuestra = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const muestra = await Muestra.findOne({ id_muestra: id })
-            .populate('creadoPor', 'nombre email documento')
-            .lean();
-
-        if (!muestra) {
-            throw new NotFoundError('Muestra no encontrada');
-        }
-
-        // Formatear la fecha y actualizar datos de usuarios
-        const muestraFormateada = {
-            ...muestra,
-            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
-            historial: muestra.historial.map(h => ({
-                ...h,
-                fechaCambio: formatearFechaHora(h.fechaCambio)
-            })),
-            createdAt: formatearFechaHora(muestra.createdAt),
-            updatedAt: formatearFechaHora(muestra.updatedAt),
-            creadoPor: {
-                ...muestra.creadoPor,
-                fechaCreacion: formatearFechaHora(muestra.createdAt)
-            }
-        };
-
-        // Eliminar el campo firmas si la muestra está rechazada
-        if (muestra.estado === 'Rechazada') {
-            delete muestraFormateada.firmas;
-        }
-
-        ResponseHandler.success(res, { muestra: muestraFormateada }, 'Muestra obtenida correctamente');
+        
+        // Usar el servicio para obtener la muestra
+        const muestra = await muestrasService.obtenerMuestra(id);
+        
+        // Retornar la muestra exactamente como está en la base de datos
+        ResponseHandler.success(res, { muestra }, 'Muestra obtenida correctamente');
     } catch (error) {
         next(error);
     }
+};
+
+// Función para calcular el total de análisis seleccionados
+const calcularTotalAnalisis = (analisisSeleccionados) => {
+    let total = 0;
+    
+    // Obtener todos los análisis disponibles
+    const todosLosAnalisis = [
+        ...analisisDisponibles.fisicoquimico,
+        ...analisisDisponibles.microbiologico
+    ];
+    
+    // Calcular el total sumando los precios de los análisis seleccionados
+    analisisSeleccionados.forEach(nombreAnalisis => {
+        const analisis = todosLosAnalisis.find(a => a.nombre === nombreAnalisis);
+        if (analisis) {
+            total += analisis.precio;
+        }
+    });
+    
+    return total;
 };
 
 const registrarMuestra = async (req, res, next) => {
@@ -442,7 +459,19 @@ const registrarMuestra = async (req, res, next) => {
         if (!req.usuario || req.usuario.rol !== 'administrador') {
             throw new ValidationError('No tiene permisos para registrar muestras. Se requiere rol de administrador');
         }
-        
+
+        // Calcular el precio total de los análisis
+        const precioTotal = datos.analisisSeleccionados.reduce((total, analisis) => {
+            // Asegurarse de que el precio sea un número
+            const precio = typeof analisis.precio === 'string' ? 
+                parseInt(analisis.precio.replace(/[^0-9]/g, '')) : 
+                (analisis.precio || 0);
+            return total + precio;
+        }, 0);
+
+        console.log('Análisis seleccionados:', datos.analisisSeleccionados);
+        console.log('Precio total calculado:', precioTotal);
+
         // Validar los datos de la muestra
         validarDatosMuestra(datos);
 
@@ -531,6 +560,29 @@ const registrarMuestra = async (req, res, next) => {
         const esRechazada = datos.estado === 'Rechazada';
         const motivoRechazo = esRechazada ? datos.observaciones : '';
 
+        // Preparar la estructura de firmas solo si la muestra no está siendo rechazada
+        const firmas = esRechazada ? {} : {
+            firmaAdministrador: {
+                nombre: datosAdministrador.nombre,
+                documento: datosAdministrador.documento,
+                firma: datos.firmas?.firmaAdministrador?.firma || ''
+            },
+            firmaCliente: {
+                nombre: datosCliente.nombre,
+                documento: datosCliente.documento,
+                firma: datos.firmas?.firmaCliente?.firma || ''
+            }
+        };
+
+        // Limpiar y estructurar los análisis seleccionados
+        const analisisSeleccionadosLimpios = datos.analisisSeleccionados.map(analisis => ({
+            nombre: analisis.nombre,
+            precio: analisis.precio,
+            unidad: analisis.unidad,
+            metodo: analisis.metodo,
+            rango: analisis.rango
+        }));
+
         // Crear la muestra con los datos formateados correctamente
         const muestra = new Muestra({
             ...datos,
@@ -539,23 +591,14 @@ const registrarMuestra = async (req, res, next) => {
             estado: esRechazada ? 'Rechazada' : 'Recibida',
             preservacionMuestra: datos.preservacionMuestra,
             descripcion: datos.descripcion,
+            precioTotal,
+            analisisSeleccionados: analisisSeleccionadosLimpios,
             rechazoMuestra: {
                 rechazada: esRechazada,
                 motivo: motivoRechazo,
                 fechaRechazo: esRechazada ? new Date() : null
             },
-            firmas: {
-                administrador: {
-                    nombre: datosAdministrador.nombre,
-                    documento: datosAdministrador.documento,
-                    firmaAdministrador: esRechazada ? '' : (datos.firmas?.firmaAdministrador?.firma || '')
-                },
-                cliente: {
-                    nombre: datosCliente.nombre,
-                    documento: datosCliente.documento,
-                    firmaCliente: esRechazada ? '' : (datos.firmas?.firmaCliente?.firma || '')
-                }
-            },
+            ...(esRechazada ? {} : { firmas }), // Solo incluir firmas si no está rechazada
             creadoPor: {
                 nombre: datosAdministrador.nombre,
                 documento: datosAdministrador.documento,
@@ -569,14 +612,6 @@ const registrarMuestra = async (req, res, next) => {
                 observaciones: esRechazada ? motivoRechazo : (datos.observaciones || 'Registro inicial de muestra')
             }],
             actualizadoPor: []
-        });
-
-        console.log('Datos de la muestra antes de guardar:', {
-            cliente: muestra.cliente,
-            creadoPor: muestra.creadoPor,
-            firmas: muestra.firmas,
-            estado: muestra.estado,
-            rechazoMuestra: muestra.rechazoMuestra
         });
 
         // Guardar la muestra
@@ -630,7 +665,13 @@ const registrarMuestra = async (req, res, next) => {
             condicionesAmbientales: muestraGuardada.condicionesAmbientales,
             preservacionMuestra: muestraGuardada.preservacionMuestra,
             descripcion: muestraGuardada.descripcion,
-            analisisSeleccionados: muestraGuardada.analisisSeleccionados,
+            analisisSeleccionados: muestraGuardada.analisisSeleccionados.map(analisis => ({
+                nombre: analisis.nombre,
+                precio: formatearPrecioCOP(analisis.precio),
+                unidad: analisis.unidad,
+                metodo: analisis.metodo,
+                rango: analisis.rango
+            })),
             estado: muestraGuardada.estado,
             rechazoMuestra: {
                 rechazada: muestraGuardada.rechazoMuestra.rechazada,
@@ -660,21 +701,22 @@ const registrarMuestra = async (req, res, next) => {
                 accion: a.accion
             })),
             createdAt: formatearFechaHora(muestraGuardada.createdAt),
-            updatedAt: formatearFechaHora(muestraGuardada.updatedAt)
+            updatedAt: formatearFechaHora(muestraGuardada.updatedAt),
+            precioTotal: formatearPrecioCOP(muestraGuardada.precioTotal)
         };
 
         // Solo incluir firmas en la respuesta si la muestra no está rechazada
         if (!esRechazada) {
             respuesta.firmas = {
-                administrador: {
-                    nombre: muestraGuardada.firmas.administrador.nombre,
-                    documento: muestraGuardada.firmas.administrador.documento,
-                    firmaAdministrador: muestraGuardada.firmas.administrador.firmaAdministrador
+                firmaAdministrador: {
+                    nombre: muestraGuardada.firmas.firmaAdministrador.nombre,
+                    documento: muestraGuardada.firmas.firmaAdministrador.documento,
+                    firma: muestraGuardada.firmas.firmaAdministrador.firma
                 },
-                cliente: {
-                    nombre: muestraGuardada.firmas.cliente.nombre,
-                    documento: muestraGuardada.firmas.cliente.documento,
-                    firmaCliente: muestraGuardada.firmas.cliente.firmaCliente
+                firmaCliente: {
+                    nombre: muestraGuardada.firmas.firmaCliente.nombre,
+                    documento: muestraGuardada.firmas.firmaCliente.documento,
+                    firma: muestraGuardada.firmas.firmaCliente.firma
                 }
             };
         }
@@ -721,54 +763,8 @@ const actualizarMuestra = async (req, res, next) => {
             throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otro"');
         }
 
-        // Preparar datos para actualizar
-        const datosParaActualizar = { ...datosActualizacion };
-        
-        // Si se está rechazando la muestra, actualizar el campo rechazoMuestra
-        if (datosActualizacion.estado === 'Rechazada') {
-            datosParaActualizar.rechazoMuestra = {
-                rechazada: true,
-                motivo: datosActualizacion.observaciones,
-                fechaRechazo: new Date()
-            };
-            
-            // Agregar al historial
-            datosParaActualizar.$push = {
-                ...datosParaActualizar.$push,
-                historial: {
-                    estado: 'Rechazada',
-                    administrador: {
-                        documento: usuario.documento,
-                        nombre: usuario.nombre,
-                        email: usuario.email
-                    },
-                    fechaCambio: new Date(),
-                    observaciones: datosActualizacion.observaciones
-                }
-            };
-        }
-
-        // Actualizar la muestra
-        const muestra = await Muestra.findOneAndUpdate(
-            { id_muestra: id },
-            {
-                ...datosParaActualizar,
-                $push: {
-                    ...datosParaActualizar.$push,
-                    actualizadoPor: {
-                        documento: usuario.documento,
-                        nombre: usuario.nombre,
-                        fecha: new Date(),
-                        accion: 'Actualización de muestra'
-                    }
-                }
-            },
-            { new: true }
-        );
-
-        if (!muestra) {
-            throw new NotFoundError('Muestra no encontrada');
-        }
+        // Usar el servicio para actualizar la muestra
+        const muestra = await muestrasService.actualizarMuestra(id, datosActualizacion, usuario);
 
         // Formatear fechas para la respuesta
         const formatearFecha = (fecha) => {
@@ -829,8 +825,8 @@ const actualizarMuestra = async (req, res, next) => {
             },
             firmas: {
                 ...muestra.firmas,
-                fechaFirmaAdministrador: muestra.firmas.fechaFirmaAdministrador ? formatearFecha(muestra.firmas.fechaFirmaAdministrador) : null,
-                fechaFirmaCliente: muestra.firmas.fechaFirmaCliente ? formatearFecha(muestra.firmas.fechaFirmaCliente) : null
+                fechaFirmaAdministrador: muestra.firmas.firmaAdministrador ? formatearFecha(muestra.firmas.firmaAdministrador.fecha) : null,
+                fechaFirmaCliente: muestra.firmas.firmaCliente ? formatearFecha(muestra.firmas.firmaCliente.fecha) : null
             }
         };
 
@@ -849,8 +845,15 @@ const registrarFirma = async (req, res, next) => {
         validarRolAdministrador(usuario);
         const { id } = req.params;
         const { firmas } = req.body;
-        const muestra = await muestrasService.registrarFirma(id, firmas, usuario);
-        ResponseHandler.success(res, { muestra }, 'Firma registrada exitosamente');
+        
+        // Redirigir la solicitud al controlador de firma-digital
+        // Modificar el body para que coincida con lo que espera el controlador de firma-digital
+        req.body.id_muestra = id;
+        req.body.firmas = firmas;
+        
+        // Importar y usar el controlador de firma-digital
+        const { guardarFirma } = require('../../firma-digital/controllers/firmaController');
+        return guardarFirma(req, res);
     } catch (error) {
         next(error);
     }
@@ -861,11 +864,8 @@ const eliminarMuestra = async (req, res, next) => {
         const usuario = obtenerDatosUsuario(req);
         const { id } = req.params;
         
-        const muestra = await Muestra.findOneAndDelete({ id_muestra: id });
-        
-        if (!muestra) {
-            throw new NotFoundError('Muestra no encontrada');
-        }
+        // Usar el servicio para eliminar la muestra
+        await muestrasService.eliminarMuestra(id, usuario);
 
         ResponseHandler.success(res, null, 'Muestra eliminada exitosamente');
     } catch (error) {
@@ -873,22 +873,36 @@ const eliminarMuestra = async (req, res, next) => {
     }
 };
 
-const obtenerAnalisisDisponibles = async (req, res, next) => {
+// Crear una nueva muestra
+const crearMuestra = async (req, res) => {
     try {
-        const { tipoAgua, subtipoResidual } = req.query;
-        
-        if (!tipoAgua) {
-            throw new ValidationError('El tipo de agua es requerido');
-        }
-
-        const analisis = await getAnalisisPorTipoAgua(tipoAgua.toLowerCase(), subtipoResidual);
-        
-        ResponseHandler.success(res, {
-            fisicoquimico: analisis.fisicoquimico,
-            microbiologico: analisis.microbiologico
-        }, 'Análisis disponibles obtenidos correctamente');
+        const muestra = await muestrasService.crearMuestra(req.body, req.user);
+        res.status(201).json(muestra);
     } catch (error) {
-        next(error);
+        if (error instanceof ValidationError) {
+            res.status(400).json({ error: error.message });
+        } else if (error instanceof DatabaseError) {
+            res.status(500).json({ error: 'Error al crear la muestra' });
+        } else {
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    }
+};
+
+// Obtener muestras por tipo y estado
+const obtenerMuestrasPorTipoEstado = async (req, res) => {
+    try {
+        const { tipo, estado } = req.query;
+        const muestras = await muestrasService.obtenerMuestras(tipo, estado);
+        res.json(muestras);
+    } catch (error) {
+        if (error instanceof ValidationError) {
+            res.status(400).json({ error: error.message });
+        } else if (error instanceof DatabaseError) {
+            res.status(500).json({ error: 'Error al obtener las muestras' });
+        } else {
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
     }
 };
 
@@ -908,5 +922,6 @@ module.exports = {
     actualizarMuestra,
     registrarFirma,
     eliminarMuestra,
-    obtenerAnalisisDisponibles
+    crearMuestra,
+    obtenerMuestrasPorTipoEstado
 };

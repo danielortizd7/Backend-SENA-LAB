@@ -6,32 +6,39 @@ const firmaValidators = {
     guardarFirma: [
         body('id_muestra')
             .notEmpty().withMessage('El ID de muestra es requerido')
-            .trim()
-            .matches(/^MUESTRA-[A-Z0-9]+$/).withMessage('Formato de ID inválido'),
+            .trim(),
 
-        body('cedulaAdministrador')
-            .notEmpty().withMessage('La cédula del administrador es requerida')
-            .isLength({ min: 8, max: 10 }).withMessage('La cédula debe tener entre 8 y 10 caracteres')
-            .matches(/^\d+$/).withMessage('La cédula debe contener solo números'),
+        body('firmas.administrador.nombre')
+            .notEmpty().withMessage('El nombre del administrador es requerido'),
 
-        body('firmaAdministrador')
+        body('firmas.administrador.documento')
+            .notEmpty().withMessage('El documento del administrador es requerido'),
+
+        body('firmas.administrador.firmaAdministrador')
             .notEmpty().withMessage('La firma del administrador es requerida')
             .custom((value) => {
+                if (!value || value.trim() === '') {
+                    throw new Error('La firma del administrador no puede estar vacía');
+                }
                 if (!value.startsWith('data:image/')) {
                     throw new Error('La firma debe ser una imagen en base64');
                 }
                 return true;
             }),
 
-        body('cedulaCliente')
-            .optional()
-            .isLength({ min: 8, max: 10 }).withMessage('La cédula debe tener entre 8 y 10 caracteres')
-            .matches(/^\d+$/).withMessage('La cédula debe contener solo números'),
+        body('firmas.cliente.nombre')
+            .notEmpty().withMessage('El nombre del cliente es requerido'),
 
-        body('firmaCliente')
-            .optional()
+        body('firmas.cliente.documento')
+            .notEmpty().withMessage('El documento del cliente es requerido'),
+
+        body('firmas.cliente.firmaCliente')
+            .notEmpty().withMessage('La firma del cliente es requerida')
             .custom((value) => {
-                if (value && !value.startsWith('data:image/')) {
+                if (!value || value.trim() === '') {
+                    throw new Error('La firma del cliente no puede estar vacía');
+                }
+                if (!value.startsWith('data:image/')) {
                     throw new Error('La firma debe ser una imagen en base64');
                 }
                 return true;
@@ -41,7 +48,6 @@ const firmaValidators = {
         param('idMuestra')
             .notEmpty().withMessage('El ID de muestra es requerido')
             .trim()
-            .matches(/^MUESTRA-[A-Z0-9]+$/).withMessage('Formato de ID inválido')
     ]
 };
 
