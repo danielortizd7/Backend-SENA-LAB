@@ -4,7 +4,6 @@ const cors = require("cors");
 const path = require("path");
 const connectDB = require("./src/config/database.js");
 const { ResponseHandler } = require('./src/shared/utils/responseHandler');
-const { registrarAccion } = require('./src/shared/middleware/auditMiddleware');
 
 // Importar rutas
 const muestrasRoutes = require("./src/app/registro-muestras/routes/muestrasRoutes");
