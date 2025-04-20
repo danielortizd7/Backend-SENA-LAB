@@ -132,7 +132,7 @@ const analisisSchema = new mongoose.Schema({
         required: true
     },
     precio: {
-        type: Number,
+        type: String,
         required: true,
         min: 0
     },
@@ -190,7 +190,7 @@ const analisisDisponibles = {
             metodo: "SM2130 B",
             unidad: "UNT",
             rango: "1.0 - 4000",
-            precio: 5.900,
+            precio: "5,900",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -200,7 +200,7 @@ const analisisDisponibles = {
             metodo: "SM2120 C",
             unidad: "UPC",
             rango: "10.0 - 40.0",
-            precio: 8.000,
+            precio: "8,000",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -210,7 +210,7 @@ const analisisDisponibles = {
             metodo: "SM2320 B",
             unidad: "mg/L CaCO3",
             rango: "20 - 500",
-            precio: 9.900,
+            precio: "9,900",
             matriz: ["AP", "AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -220,7 +220,7 @@ const analisisDisponibles = {
             metodo: "SM2340 C",
             unidad: "mg/L CaCO3",
             rango: "20 - 500",
-            precio: 12.200,
+            precio: "12,200",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -230,7 +230,7 @@ const analisisDisponibles = {
             metodo: "SM3500CaB",
             unidad: "mg/L CaCO3",
             rango: "5 - 500",
-            precio: 11.900,
+            precio: "11,900",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -240,7 +240,7 @@ const analisisDisponibles = {
             metodo: "SM 3500CaB",
             unidad: "mg/L Ca",
             rango: "1 - 200",
-            precio: 12.900,
+            precio: "12,900",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -250,7 +250,7 @@ const analisisDisponibles = {
             metodo: "SM 3500-MgB",
             unidad: "mg/L Mg",
             rango: "10-500",
-            precio: 12.900,
+            precio: "12,900",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -260,7 +260,7 @@ const analisisDisponibles = {
             metodo: "SM4500 Cl G",
             unidad: "mg/L Cl2",
             rango: "0.5 - 2.5",
-            precio: 12.200,
+            precio: "12,200",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -320,7 +320,7 @@ const analisisDisponibles = {
             metodo: "SM4500 P E",
             unidad: "mg/L PO4",
             rango: "0.1 - 2.0",
-            precio: 21.100,
+            precio: "21,100",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -340,7 +340,7 @@ const analisisDisponibles = {
             metodo: "8008 HACH",
             unidad: "mg/L Fe",
             rango: "0.02-3.00",
-            precio: 23.900,
+            precio: "23,900",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -350,7 +350,7 @@ const analisisDisponibles = {
             metodo: "SM3112B Modificado Abs. Atómica",
             unidad: "µg/L Hg",
             rango: "0.8 - 30",
-            precio: 39.900,
+            precio: "39,900",
             matriz: ["AP", "AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -360,7 +360,7 @@ const analisisDisponibles = {
             metodo: "10360 HACH",
             unidad: "mg/L",
             rango: "0.1 - 20",
-            precio: 7.500,
+            precio: "7,500",
             matriz: ["AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -370,7 +370,7 @@ const analisisDisponibles = {
             metodo: "10360 HACH",
             unidad: "mg/L O2",
             rango: "6.0 - 2032",
-            precio: 54.300,
+            precio: "54,300",
             matriz: ["AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -380,7 +380,7 @@ const analisisDisponibles = {
             metodo: "8000 HACH",
             unidad: "mg/L O2",
             rango: "3 - 15000",
-            precio: 48.500,
+            precio: "48,500",
             matriz: ["AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -390,7 +390,7 @@ const analisisDisponibles = {
             metodo: "8165 HACH",
             unidad: "mL/L",
             rango: "0.1 - 1000",
-            precio: 5.900,
+            precio: "5,900",
             matriz: ["AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -400,7 +400,7 @@ const analisisDisponibles = {
             metodo: "SM2450 D",
             unidad: "mg/L",
             rango: "0.1 - 1000",
-            precio: 21.900,
+            precio: "21,900",
             matriz: ["AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.FISICOQUIMICO,
             activo: true
@@ -412,7 +412,7 @@ const analisisDisponibles = {
             metodo: "1029 HACH",
             unidad: "UFC/100mL",
             rango: "UFC/100ml",
-            precio: 49.700,
+            precio: "49,700",
             matriz: ["AP", "AS", "ARnD", "ARD"],
             tipo: TIPOS_ANALISIS.MICROBIOLOGICO,
             activo: true
@@ -422,7 +422,7 @@ const analisisDisponibles = {
             metodo: "Readycult Merk",
             unidad: "Ausencia/Presencia",
             rango: "Ausencia/Presencia",
-            precio: 22.000,
+            precio: "22,000",
             matriz: ["AP"],
             tipo: TIPOS_ANALISIS.MICROBIOLOGICO,
             activo: true
