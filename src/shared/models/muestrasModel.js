@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const estadosValidos = ["Recibida", "En análisis", "Finalizada", "Rechazada"];
+const estadosValidos = ["Recibida", "En análisis", "Finalizada", "Rechazada", "En cotizacion"];
 
 // Constantes para tipos de muestreo
 const TIPOS_MUESTREO = {
@@ -25,7 +25,8 @@ const ESTADOS = {
     RECIBIDA: 'Recibida',
     EN_PROCESO: 'En proceso',
     COMPLETADA: 'Completada',
-    RECHAZADA: 'Rechazada'
+    RECHAZADA: 'Rechazada',
+    COTIZADA: 'En cotizacion'
 };
 
 // Esquema para resultados de análisis
@@ -121,7 +122,7 @@ const historialEstadoSchema = new mongoose.Schema({
     estado: {
         type: String,
         required: true,
-        enum: ['Recibida', 'En análisis','Finalizada', 'Rechazada']
+        enum: ['Recibida', 'En análisis','Finalizada', 'Rechazada', 'En cotizacion']
     },
     administrador: {
         type: datosUsuarioSchema,
@@ -146,6 +147,20 @@ const rechazoSchema = new mongoose.Schema({
         type: String
     },
     fechaRechazo: {
+        type: Date
+    }
+});
+
+// Esquema para cotización de muestra
+const cotizacionSchema = new mongoose.Schema({
+    cotizada: {
+        type: Boolean,
+        default: false
+    },
+    motivo: {
+        type: String
+    },
+    fechaCotizacion: {
         type: Date
     }
 });
@@ -299,7 +314,7 @@ const muestraSchema = new mongoose.Schema({
     estado: {
         type: String,
         required: true,
-        enum: ['Recibida', 'En análisis', 'Finalizada', 'Rechazada'],
+        enum: ['Recibida', 'En análisis', 'Finalizada', 'Rechazada', 'En cotizacion'],
         default: 'Recibida'
     },
     rechazoMuestra: {
@@ -310,6 +325,17 @@ const muestraSchema = new mongoose.Schema({
         motivo: String,
         fechaRechazo: Date
     },
+cotizacionMuestra: {
+    cotizada: {
+        type: Boolean,
+        default: false
+    },
+    fechaCotizacion: Date,
+    precioTotal: {
+        type: Number,
+        default: 0
+    }
+},
 
     // Campos adicionales
     observaciones: {
@@ -322,7 +348,7 @@ const muestraSchema = new mongoose.Schema({
             firma: {
                 type: String,
                 required: function() {
-                    return this.estado !== 'Rechazada';
+                    return this.estado !== 'Rechazada' && this.estado !== 'En cotizacion';
                 }
             }
         },
@@ -332,7 +358,7 @@ const muestraSchema = new mongoose.Schema({
             firma: {
                 type: String,
                 required: function() {
-                    return this.estado !== 'Rechazada';
+                    return this.estado !== 'Rechazada' && this.estado !== 'En cotizacion';
                 }
             }
         }
@@ -369,6 +395,17 @@ muestraSchema.pre('save', function(next) {
         this.precioTotal = this.analisisSeleccionados.reduce((total, analisis) => {
             return total + (analisis.precio || 0);
         }, 0);
+    }
+    next();
+});
+
+// Middleware para limpiar campos de rechazo y cotización según estado
+muestraSchema.pre('save', function(next) {
+    if (this.estado !== 'Rechazada') {
+        this.rechazoMuestra = undefined;
+    }
+    if (this.estado !== 'En cotizacion') {
+        this.cotizacionMuestra = undefined;
     }
     next();
 });

@@ -134,11 +134,16 @@ const crearMuestra = async (datosMuestra, usuario) => {
             datosNormalizados.precioTotal = calcularPrecioTotal(datosNormalizados.analisisSeleccionados);
         }
 
+        // Manejar precio total para estado En cotizacion
+        if (datosNormalizados.estado === 'En cotizacion') {
+            datosNormalizados.precioTotal = calcularPrecioTotal(datosNormalizados.analisisSeleccionados);
+        }
+
         // Procesar las firmas
         const firmas = procesarFirmas(datosNormalizados, usuario);
 
         // Crear el objeto de muestra con los datos normalizados
-        const muestra = new Muestra({
+        const muestraData = {
             ...datosNormalizados,
             firmas,
             creadoPor: {
@@ -153,7 +158,18 @@ const crearMuestra = async (datosMuestra, usuario) => {
                 datosNormalizados.observaciones || 'Muestra registrada inicialmente'
             )],
             actualizadoPor: []
-        });
+        };
+
+        // Manejar estado En cotizacion
+        if (datosNormalizados.estado === 'En cotizacion') {
+            muestraData.cotizacionMuestra = {
+                cotizada: true,
+                fechaCotizacion: new Date(),
+                precioTotal: datosNormalizados.precioTotal || 0
+            };
+        }
+
+        const muestra = new Muestra(muestraData);
 
         console.log('Intentando guardar muestra:', JSON.stringify(muestra, null, 2));
         
@@ -213,6 +229,18 @@ const actualizarMuestra = async (id, datosActualizacion, usuario) => {
                 motivo: datosActualizacion.observaciones,
                 fechaRechazo: new Date()
             };
+        }
+
+        // Si se está cotizando la muestra, actualizar el campo cotizacionMuestra y precioTotal
+        if (datosActualizacion.estado === 'En cotizacion') {
+            datosParaActualizar.cotizacionMuestra = {
+                cotizada: true,
+                fechaCotizacion: new Date(),
+                precioTotal: datosActualizacion.precioTotal || 0
+            };
+            if (datosActualizacion.analisisSeleccionados) {
+                datosParaActualizar.precioTotal = calcularPrecioTotal(datosActualizacion.analisisSeleccionados);
+            }
         }
 
         // Procesar firmas si se están actualizando

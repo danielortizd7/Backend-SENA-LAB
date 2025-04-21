@@ -10,6 +10,7 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
+const AuditoriaService = require('../../auditoria/services/auditoriaService'); // Added import for AuditoriaService
 
 // URL base para las peticiones a la API de usuarios
 const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
@@ -69,18 +70,28 @@ const normalizarCampos = (datos) => {
         datos.tipoDeAgua.tipo = datos.tipoDeAgua.tipo.toLowerCase();
     }
 
+    // Normalizar estado
+if (datos.estado) {
+    const estadoLower = datos.estado.trim().toLowerCase();
+    if (estadoLower === 'rechazada') {
+        datos.estado = 'Rechazada';
+    } else if (estadoLower === 'en cotizacion') {
+        datos.estado = 'En cotizacion';
+    }
+}
+
     return datos;
 };
 
 const validarDatosMuestra = (datos) => {
     const errores = [];
 
-    // Si la muestra está rechazada, solo validar campos básicos
-    if (datos.estado === 'Rechazada') {
+    // Si la muestra está rechazada o en cotización, solo validar campos básicos
+    if (datos.estado === 'Rechazada' || datos.estado === 'En cotizacion') {
         if (!datos.documento) errores.push('El documento es requerido');
         if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
         if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
-        if (!datos.observaciones) errores.push('El motivo de rechazo es requerido');
+        if (!datos.observaciones) errores.push('El motivo es requerido');
         
         if (errores.length > 0) {
             throw new ValidationError(errores.join('. '));
@@ -134,7 +145,7 @@ const validarDatosMuestra = (datos) => {
         errores.push('Debe seleccionar al menos un análisis');
     }
 
-    // Validar firmas solo si no es una muestra rechazada
+    // Validar firmas solo si no es una muestra rechazada ni en cotización
     if (!datos.firmas?.firmaAdministrador?.firma) {
         errores.push('La firma del administrador es requerida');
     }
@@ -556,12 +567,14 @@ const registrarMuestra = async (req, res, next) => {
         
         const id_muestra = `${datos.tipoDeAgua.codigo}${datos.tipoAnalisis.charAt(0)}${año}${mes}${dia}${consecutivo}`;
 
-        // Determinar si la muestra está siendo rechazada
+        // Determinar si la muestra está siendo rechazada o cotizada
         const esRechazada = datos.estado === 'Rechazada';
+        const esCotizada = datos.estado === 'En cotizacion';
         const motivoRechazo = esRechazada ? datos.observaciones : '';
+        const motivoCotizacion = esCotizada ? datos.observaciones : '';
 
-        // Preparar la estructura de firmas solo si la muestra no está siendo rechazada
-        const firmas = esRechazada ? {} : {
+        // Preparar la estructura de firmas solo si la muestra no está siendo rechazada ni cotizada
+        const firmas = (esRechazada || esCotizada) ? {} : {
             firmaAdministrador: {
                 nombre: datosAdministrador.nombre,
                 documento: datosAdministrador.documento,
@@ -588,17 +601,22 @@ const registrarMuestra = async (req, res, next) => {
             ...datos,
             id_muestra,
             cliente: datosCliente,
-            estado: esRechazada ? 'Rechazada' : 'Recibida',
+            estado: esRechazada ? 'Rechazada' : (esCotizada ? 'En cotizacion' : 'Recibida'),
             preservacionMuestra: datos.preservacionMuestra,
             descripcion: datos.descripcion,
             precioTotal,
             analisisSeleccionados: analisisSeleccionadosLimpios,
-            rechazoMuestra: {
-                rechazada: esRechazada,
+            rechazoMuestra: esRechazada ? {
+                rechazada: true,
                 motivo: motivoRechazo,
-                fechaRechazo: esRechazada ? new Date() : null
-            },
-            ...(esRechazada ? {} : { firmas }), // Solo incluir firmas si no está rechazada
+                fechaRechazo: new Date()
+            } : undefined,
+            cotizacionMuestra: esCotizada ? {
+                cotizada: true,
+                fechaCotizacion: new Date(),
+                precioTotal: precioTotal
+            } : undefined,
+            ...(esRechazada || esCotizada ? {} : { firmas }), // Solo incluir firmas si no está rechazada ni cotizada
             creadoPor: {
                 nombre: datosAdministrador.nombre,
                 documento: datosAdministrador.documento,
@@ -606,10 +624,10 @@ const registrarMuestra = async (req, res, next) => {
                 fechaCreacion: formatearFechaHora(fecha)
             },
             historial: [{
-                estado: esRechazada ? 'Rechazada' : 'Recibida',
+                estado: esRechazada ? 'Rechazada' : (esCotizada ? 'En cotizacion' : 'Recibida'),
                 administrador: datosAdministrador,
                 fechaCambio: new Date(),
-                observaciones: esRechazada ? motivoRechazo : (datos.observaciones || 'Registro inicial de muestra')
+                observaciones: esRechazada ? motivoRechazo : (esCotizada ? motivoCotizacion : (datos.observaciones || 'Registro inicial de muestra'))
             }],
             actualizadoPor: []
         });
@@ -677,6 +695,10 @@ const registrarMuestra = async (req, res, next) => {
                 rechazada: muestraGuardada.rechazoMuestra.rechazada,
                 motivo: muestraGuardada.rechazoMuestra.motivo
             },
+            cotizacionMuestra: {
+                cotizada: muestraGuardada.cotizacionMuestra.cotizada,
+                motivo: muestraGuardada.cotizacionMuestra.motivo
+            },
             observaciones: muestraGuardada.observaciones,
             historial: muestraGuardada.historial.map(h => ({
                 estado: h.estado,
@@ -706,7 +728,7 @@ const registrarMuestra = async (req, res, next) => {
         };
 
         // Solo incluir firmas en la respuesta si la muestra no está rechazada
-        if (!esRechazada) {
+        if (!esRechazada && !esCotizada) {
             respuesta.firmas = {
                 firmaAdministrador: {
                     nombre: muestraGuardada.firmas.firmaAdministrador.nombre,
@@ -723,7 +745,7 @@ const registrarMuestra = async (req, res, next) => {
 
         return res.status(201).json({
             success: true,
-            message: esRechazada ? 'Muestra rechazada exitosamente' : 'Muestra registrada exitosamente',
+            message: esRechazada ? 'Muestra rechazada exitosamente' : (esCotizada ? 'Muestra En cotizacion exitosamente' : 'Muestra registrada exitosamente'),
             data: {
                 muestra: respuesta
             }
@@ -757,6 +779,10 @@ const actualizarMuestra = async (req, res, next) => {
         // Validaciones específicas
         if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.observaciones) {
             throw new ValidationError('Debe especificar el motivo del rechazo en las observaciones');
+        }
+
+        if (datosActualizacion.estado === 'En cotizacion' && !datosActualizacion.observaciones) {
+            throw new ValidationError('Debe especificar el motivo de la cotización en las observaciones');
         }
 
         if (datosActualizacion.preservacionMuestra === 'Otro' && !datosActualizacion.descripcion) {

@@ -3,17 +3,6 @@ const fs = require("fs");
 const path = require("path");
 const { Muestra } = require("../models/muestrasModel");
 
-<<<<<<< HEAD
-const generarPDF = (muestra, cedulaCliente, firmaCliente, cedulaAdministrador, firmaAdministrador) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            console.log("Iniciando generación de PDF para:", muestra.id_muestra);
-            
-            // Usar muestra directamente (los análisis ya son strings)
-            const muestraPopulada = muestra;
-            
-            const doc = new PDFDocument({ margin: 50 });
-=======
 // Función para formatear fechas
 const formatearFecha = (fechaObj) => {
     if (fechaObj?.fecha && fechaObj?.hora) {
@@ -70,7 +59,6 @@ const generarPDF = async (muestra) => {
                 }
             });
 
->>>>>>> daniel_muestras
             const nombreArchivo = `muestra_${muestra.id_muestra}.pdf`;
             const rutaArchivo = path.join(process.cwd(), "public", "pdfs", nombreArchivo);
 
@@ -118,17 +106,6 @@ const generarPDF = async (muestra) => {
                 console.error("Error al cargar el logo:", error);
             }
 
-<<<<<<< HEAD
-            // Análisis seleccionados
-            doc.text("Análisis Seleccionados:", { underline: true }).moveDown(0.5);
-            if (Array.isArray(muestraPopulada.analisisSeleccionados)) {
-                muestraPopulada.analisisSeleccionados.forEach((analisis, index) => {
-                    const lineaAnalisis = `   ${index + 1}. ${analisis.nombre}`;
-                    const lineaDetalle = `      Rango: ${analisis.rango || 'N/A'} - Unidad: ${analisis.unidad || 'N/A'}`;
-                    
-                    doc.text(lineaAnalisis);
-                    doc.fontSize(10).text(lineaDetalle).fontSize(12);
-=======
             // Título con fondo azul marino
             doc.rect(0, 80, doc.page.width, 25).fill('#002D4D');
             doc.fillColor('white').fontSize(14).text('Detalles de la Muestra', 0, 85, { align: 'center' });
@@ -226,7 +203,6 @@ const generarPDF = async (muestra) => {
                 doc.image(firmaAdminBuffer, 50, signatureY, {
                     fit: [signatureWidth, 50],
                     align: 'center'
->>>>>>> daniel_muestras
                 });
             }
             doc.fontSize(10)
