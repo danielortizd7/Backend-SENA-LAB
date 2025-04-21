@@ -32,7 +32,7 @@ async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
                     throw new Error('La muestra debe estar en proceso para ser finalizada');
                 }
                 break;
-            case 'Cotizada':
+            case 'En Cotizacion':
                 if (!muestra.analisisSeleccionados || muestra.analisisSeleccionados.length === 0) {
                     throw new Error('No se puede cotizar una muestra sin análisis seleccionados');
                 }

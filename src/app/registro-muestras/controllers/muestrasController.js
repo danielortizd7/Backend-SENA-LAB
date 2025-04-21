@@ -75,8 +75,8 @@ const normalizarCampos = (datos) => {
 const validarDatosMuestra = (datos) => {
     const errores = [];
 
-    // Si la muestra está rechazada o cotizada, solo validar campos básicos
-    if (datos.estado === 'Rechazada' || datos.estado === 'Cotizada') {
+    // Si la muestra está rechazada o en cotización, solo validar campos básicos
+    if (datos.estado === 'Rechazada' || datos.estado === 'En Cotizacion') {
         if (!datos.documento) errores.push('El documento es requerido');
         if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
         if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
@@ -136,8 +136,8 @@ const validarDatosMuestra = (datos) => {
         errores.push('Debe seleccionar al menos un análisis');
     }
 
-    // Validar firmas solo si no es una muestra rechazada y no está en estado Cotizada o Pendiente
-    if (datos.estado !== 'Rechazada' && datos.estado !== 'Cotizada' && datos.estado !== 'Pendiente') {
+    // Validar firmas solo si no es una muestra rechazada y no está en estado En Cotizacion o Pendiente
+    if (datos.estado !== 'Rechazada' && datos.estado !== 'En Cotizacion' && datos.estado !== 'Pendiente') {
         if (!datos.firmas?.firmaAdministrador?.firma) {
             errores.push('La firma del administrador es requerida');
         }
@@ -332,8 +332,8 @@ const obtenerMuestras = async (req, res, next) => {
                     })) : []
             };
 
-            // Eliminar el campo firmas si la muestra está rechazada o cotizada
-            if (muestra.estado === 'Rechazada' || muestra.estado === 'Cotizada') {
+            // Eliminar el campo firmas si la muestra está rechazada o en cotización
+            if (muestra.estado === 'Rechazada' || muestra.estado === 'En Cotizacion') {
                 delete muestraFormateada.firmas;
             }
 
@@ -491,13 +491,13 @@ const registrarMuestra = async (req, res, next) => {
 
         // Determinar el estado inicial de la muestra
         const esRechazada = datos.estado === 'Rechazada';
-        const esCotizada = datos.estado === 'Cotizada';
+        const esCotizada = datos.estado === 'En Cotizacion';
         
         let estadoInicial;
         if (esRechazada) {
             estadoInicial = 'Rechazada';
         } else if (esCotizada) {
-            estadoInicial = 'Cotizada';
+            estadoInicial = 'En Cotizacion';
         } else {
             estadoInicial = 'Recibida';
         }
@@ -696,7 +696,7 @@ const registrarMuestra = async (req, res, next) => {
             precioTotal: formatearPrecioCOP(muestraGuardada.precioTotal)
         };
 
-        // Solo incluir firmas en la respuesta si la muestra no está rechazada ni cotizada
+        // Solo incluir firmas en la respuesta si la muestra no está rechazada ni en cotización
         if (!esRechazada && !esCotizada && muestraGuardada.firmas) {
             respuesta.firmas = {
                 firmaAdministrador: muestraGuardada.firmas.firmaAdministrador ? {
@@ -715,7 +715,7 @@ const registrarMuestra = async (req, res, next) => {
         return res.status(201).json({
             success: true,
             message: esRechazada ? 'Muestra rechazada exitosamente' : 
-                    (esCotizada ? 'Muestra cotizada exitosamente' : 
+                    (esCotizada ? 'Muestra en proceso de cotización exitosamente' : 
                     'Muestra registrada exitosamente'),
             data: {
                 muestra: respuesta
