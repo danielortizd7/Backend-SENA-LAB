@@ -38,4 +38,11 @@ router.get(
     auditoriaController.filtrarRegistros
 );
 
-module.exports = router; 
+// Nueva ruta para generar PDF de un registro de auditoría
+router.get(
+    "/registros/:id/pdf",
+    verificarPermiso(PERMISOS.VER_AUDITORIA),
+    auditoriaController.generarPDFRegistro
+);
+
+module.exports = router;

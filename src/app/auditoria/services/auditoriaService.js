@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Auditoria = require('../models/auditoriaModel');
 const { ResponseHandler } = require('../../../shared/utils/responseHandler');
 const AuditoriaMuestras = require('../models/auditoriaModelMuestras');
+const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
 
 class AuditoriaService {
     static async registrarAccion(datosAuditoria) {
@@ -106,6 +107,31 @@ class AuditoriaService {
             return await this.obtenerRegistros(query);
         } catch (error) {
             console.error('Error filtrando registros de auditoría:', error);
+            throw error;
+        }
+    }
+
+    // Nuevo método para generar PDF de un registro de auditoría
+    static async generarPDFRegistro(id) {
+        try {
+            const registro = await this.obtenerRegistroAuditoria(id);
+            if (!registro) {
+                throw new Error('Registro de auditoría no encontrado');
+            }
+            const pdfPath = await generarPDFAuditoria(registro);
+            return pdfPath;
+        } catch (error) {
+            console.error('Error generando PDF de auditoría:', error);
+            throw error;
+        }
+    }
+
+    // Nuevo método para exportar registros de auditoría
+    static async exportarRegistros(filtros = {}) {
+        try {
+            return await this.filtrarRegistros(filtros);
+        } catch (error) {
+            console.error('Error exportando registros de auditoría:', error);
             throw error;
         }
     }

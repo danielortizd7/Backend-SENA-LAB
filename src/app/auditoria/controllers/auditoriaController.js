@@ -141,6 +141,23 @@ class AuditoriaController {
       });
     }
   }
+
+  // Nuevo método para generar PDF de un registro de auditoría
+  async generarPDFRegistro(req, res) {
+    try {
+      const id = req.params.id;
+      const pdfPath = await auditoriaService.generarPDFRegistro(id);
+      res.json({
+        success: true,
+        pdfUrl: pdfPath
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 }
 
-module.exports = new AuditoriaController(); 
+module.exports = new AuditoriaController();
