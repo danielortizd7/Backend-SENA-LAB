@@ -33,19 +33,7 @@ import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import CloseIcon from '@mui/icons-material/Close';
 
-// URLs base actualizadas
-const BASE_URLS = {
-  USUARIOS: import.meta.env.VITE_BACKEND_URL || 'https://backend-sena-lab-1-qpzp.onrender.com/api',
-  MUESTRAS: import.meta.env.VITE_BACKEND_MUESTRAS_URL || 'http://localhost:5000'
-};
-
-// URLs específicas actualizadas
-const API_URLS = {
-  USUARIOS: `${BASE_URLS.USUARIOS}/usuarios`,
-  MUESTRAS: `${BASE_URLS.MUESTRAS}/api/muestras`,
-  RESULTADOS: `${BASE_URLS.MUESTRAS}/api/ingreso-resultados`
-};
-
+// Función para formatear fechas
 const formatearFecha = (fecha) => {
   if (!fecha) return 'Fecha no disponible';
   
@@ -79,7 +67,14 @@ const ListaResultados = () => {
 
   useEffect(() => {
     cargarResultados();
-  }, []);
+
+    // Actualizar cada 30 segundos
+    const intervalo = setInterval(() => {
+      cargarResultados(currentPage, pagination.limit);
+    }, 30000);
+
+    return () => clearInterval(intervalo);
+  }, [currentPage, pagination.limit]);
 
   const cargarResultados = async (page = 1, limit = 10) => {
     try {
@@ -107,10 +102,9 @@ const ListaResultados = () => {
       };
 
       const queryParams = new URLSearchParams(params).toString();
-      console.log("Parámetros enviados al backend:", queryParams);
 
       const response = await axios.get(
-        `${API_URLS.RESULTADOS}/resultados?${queryParams}`,
+        `https://backend-registro-muestras.onrender.com/api/ingreso-resultados/resultados?${queryParams}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -119,10 +113,17 @@ const ListaResultados = () => {
         }
       );
 
-      console.log("Respuesta del backend (resultados):", response.data);
+      if (response.data && response.data.data && response.data.data.data) {
+        // Asegurarnos de que los datos se muestran exactamente como vienen del backend
+        const resultadosFormateados = response.data.data.data.map(resultado => ({
+          ...resultado,
+          // Mantener la estructura original de fechas
+          fechaHoraMuestreo: resultado.fechaHoraMuestreo || { fecha: 'No disponible', hora: 'No disponible' },
+          createdAt: resultado.createdAt || { fecha: 'No disponible', hora: 'No disponible' },
+          updatedAt: resultado.updatedAt || { fecha: 'No disponible', hora: 'No disponible' }
+        }));
 
-      if (response.data && response.data.data && response.data.data.data && response.data.data.pagination) {
-        setResultados(response.data.data.data); // Array de resultados
+        setResultados(resultadosFormateados);
         setPagination({
           page: response.data.data.pagination.currentPage,
           limit: response.data.data.pagination.limit,
@@ -130,7 +131,6 @@ const ListaResultados = () => {
           totalPages: response.data.data.pagination.totalPages,
         });
       } else {
-        console.warn("Estructura inesperada en la respuesta de resultados:", response.data);
         setResultados([]);
         setPagination({
           page: 1,
@@ -141,8 +141,6 @@ const ListaResultados = () => {
       }
     } catch (err) {
       console.error('Error al cargar resultados:', err);
-      console.error('Detalles del error:', err.response?.data || err.message);
-
       if (err.response?.status === 401 || err.response?.status === 403) {
         setError('Sesión expirada. Por favor, inicia sesión nuevamente.');
         localStorage.removeItem('token');
@@ -181,7 +179,7 @@ const ListaResultados = () => {
       setVerificando(true);
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        `${API_URLS.RESULTADOS}/verificar/${selectedResult.idMuestra}`,
+        `https://backend-registro-muestras.onrender.com/api/ingreso-resultados/verificar/${selectedResult.idMuestra}`,
         { observaciones: observacionesVerificacion },
         {
           headers: {
@@ -217,8 +215,10 @@ const ListaResultados = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
+      const timestamp = new Date().getTime();
+      
       const response = await axios.get(
-        `${API_URLS.RESULTADOS}/muestra/${resultado.idMuestra}`,
+        `https://backend-registro-muestras.onrender.com/api/ingreso-resultados/muestra/${resultado.idMuestra}?timestamp=${timestamp}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -227,10 +227,9 @@ const ListaResultados = () => {
         }
       );
 
-      console.log("Detalles de la muestra:", response.data);
-
       if (response.data && response.data.data) {
         setSelectedResult(response.data.data);
+        cargarResultados(currentPage, pagination.limit);
       } else {
         console.warn("Estructura inesperada en la respuesta de detalles:", response.data);
         setSelectedResult(null);
@@ -282,8 +281,8 @@ const ListaResultados = () => {
                 <TableRow>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>ID Muestra</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Cliente</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Última Actualización</TableCell>
-                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Estado</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Fecha</TableCell>
+                  <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Estado Muestra</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Acciones</TableCell>
                 </TableRow>
               </TableHead>
@@ -303,16 +302,23 @@ const ListaResultados = () => {
                     <TableCell>{resultado.idMuestra}</TableCell>
                     <TableCell>{resultado.cliente?.nombre || 'Sin nombre'}</TableCell>
                     <TableCell>
-                      {resultado.updatedAt?.fecha && resultado.updatedAt?.hora 
-                        ? `${resultado.updatedAt.fecha} ${resultado.updatedAt.hora}`
-                        : formatearFecha(resultado.updatedAt)}
+                      {resultado.fechaHoraMuestreo?.fecha && resultado.fechaHoraMuestreo?.hora 
+                        ? `${resultado.fechaHoraMuestreo.fecha} ${resultado.fechaHoraMuestreo.hora}`
+                        : 'Fecha no disponible'}
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={resultado.verificado ? "Verificado" : "Pendiente"}
-                        color={resultado.verificado ? "success" : "warning"}
+                        label={resultado.estado || "No definido"}
+                        color={
+                          resultado.estado === "Finalizada" ? "success" :
+                          resultado.estado === "En análisis" ? "info" :
+                          "default"
+                        }
                         sx={{
-                          bgcolor: resultado.verificado ? '#39A900' : '#FF9800',
+                          bgcolor: 
+                            resultado.estado === "Finalizada" ? '#39A900' :
+                            resultado.estado === "En análisis" ? '#2196F3' :
+                            '#757575',
                           color: 'white'
                         }}
                       />
@@ -395,10 +401,14 @@ const ListaResultados = () => {
                           <Grid item xs={6}>
                             <Typography><strong>ID Muestra:</strong> {selectedResult.idMuestra}</Typography>
                             <Typography><strong>Cliente:</strong> {selectedResult.cliente?.nombre || 'Sin nombre'}</Typography>
-                            <Typography><strong>Fecha:</strong> {formatearFecha(selectedResult.fechaHoraMuestreo)}</Typography>
+                            <Typography><strong>Fecha:</strong> {
+                              selectedResult?.fechaHoraMuestreo?.fecha && selectedResult?.fechaHoraMuestreo?.hora 
+                                ? `${selectedResult.fechaHoraMuestreo.fecha} ${selectedResult.fechaHoraMuestreo.hora}`
+                                : 'Fecha no disponible'
+                            }</Typography>
                           </Grid>
                           <Grid item xs={6}>
-                            <Typography><strong>Estado:</strong> {selectedResult.verificado ? "Verificado" : "Pendiente"}</Typography>
+                            <Typography><strong>Estado:</strong> {selectedResult.estado}</Typography>
                             <Typography><strong>Laboratorista:</strong> {selectedResult.nombreLaboratorista}</Typography>
                           </Grid>
                         </Grid>
@@ -445,9 +455,11 @@ const ListaResultados = () => {
                                     Cambio #{selectedResult.historialCambios.length - index}
                                   </Typography>
                                   <Typography variant="body2" sx={{ mb: 1, color: '#666' }}>
-                                    Realizado por: {cambio.nombre} | Fecha: {cambio.fecha?.fecha && cambio.fecha?.hora 
-                                      ? `${cambio.fecha.fecha} ${cambio.fecha.hora}`
-                                      : formatearFecha(cambio.fecha)}
+                                    Realizado por: {cambio.nombre} | Fecha: {
+                                      cambio.fecha?.fecha && cambio.fecha?.hora 
+                                        ? `${cambio.fecha.fecha} ${cambio.fecha.hora}`
+                                        : 'Fecha no disponible'
+                                    }
                                   </Typography>
                                 </Grid>
                                 <Grid item xs={12}>
@@ -483,7 +495,9 @@ const ListaResultados = () => {
                   </Grid>
 
                   <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
-                    {!selectedResult.verificado && JSON.parse(localStorage.getItem('user') || '{}').rol === 'administrador' && (
+                    {!selectedResult.verificado && 
+                     selectedResult.estado === 'En análisis' && 
+                     JSON.parse(localStorage.getItem('user') || '{}').rol === 'administrador' && (
                       <Button
                         variant="contained"
                         onClick={() => setDialogoVerificacion(true)}
@@ -494,6 +508,23 @@ const ListaResultados = () => {
                       >
                         Verificar Resultados
                       </Button>
+                    )}
+                    {!selectedResult.verificado && 
+                     selectedResult.estado !== 'En análisis' && 
+                     JSON.parse(localStorage.getItem('user') || '{}').rol === 'administrador' && (
+                      <Tooltip title="Solo se pueden verificar resultados de muestras En análisis">
+                        <span>
+                          <Button
+                            variant="contained"
+                            disabled
+                            sx={{
+                              backgroundColor: '#cccccc'
+                            }}
+                          >
+                            Verificar Resultados
+                          </Button>
+                        </span>
+                      </Tooltip>
                     )}
                     <Button 
                       variant="outlined"
@@ -514,8 +545,12 @@ const ListaResultados = () => {
             <DialogTitle>Verificar Resultados</DialogTitle>
             <DialogContent>
               <DialogContentText>
+                Al verificar los resultados, la muestra pasará a estado "Finalizada". 
                 Por favor, ingrese las observaciones de la verificación:
               </DialogContentText>
+              <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                Esta acción es irreversible y cambiará el estado de la muestra a "Finalizada".
+              </Alert>
               <TextField
                 autoFocus
                 margin="dense"

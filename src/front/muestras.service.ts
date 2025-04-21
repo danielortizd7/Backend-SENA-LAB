@@ -209,6 +209,25 @@ export class MuestrasService {
       throw new Error(error.response?.data?.message || 'Error al actualizar la muestra');
     }
   }
+
+  async actualizarEstadoMuestra(id: string, nuevoEstado: string): Promise<ApiResponse<MuestraFormData>> {
+    try {
+      const response = await axios.put<ApiResponse<MuestraFormData>>(
+        `${this.API_URL}/${id}/estado`,
+        { estado: nuevoEstado },
+        { headers: this.getHeaders() }
+      );
+
+      if (!response.data.success) {
+        throw new Error(response.data.message || 'Error al actualizar el estado de la muestra');
+      }
+
+      return response.data;
+    } catch (error: any) {
+      console.error('Error al actualizar estado de la muestra:', error.response || error);
+      throw new Error(error.response?.data?.message || 'Error al actualizar el estado de la muestra');
+    }
+  }
 }
 
 export const muestrasService = new MuestrasService();

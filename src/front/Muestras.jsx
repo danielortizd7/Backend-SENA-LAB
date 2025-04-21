@@ -39,6 +39,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import AuthContext from "../context/AuthContext";
 import { muestrasService } from "../services/muestras.service";
+import { message } from 'antd';
 
 // ----- URLs para las peticiones -----
 const BASE_URLS = {
@@ -173,18 +174,31 @@ const ActionButton = ({ tooltip, onClick, IconComponent }) => (
  */
 const getEstadoChipProps = (estado) => {
   switch (estado) {
-    case "Recibida":
-      return { chipColor: "primary", sx: { backgroundColor: "#39A900", color: "white" } };
-    case "En análisis":
-      return { chipColor: "info", sx: { backgroundColor: "#2196F3", color: "white" } };
-    case "Pendiente de resultados":
-      return { chipColor: "warning", sx: { backgroundColor: "#FF9800", color: "white" } };
+    case "Pendiente":
+      return {
+        chipColor: "warning",
+        sx: { bgcolor: "#FF9800", color: "white" }
+      };
+    case "En Proceso":
+      return {
+        chipColor: "info",
+        sx: { bgcolor: "#2196F3", color: "white" }
+      };
     case "Finalizada":
-      return { chipColor: "success", sx: { backgroundColor: "#4CAF50", color: "white" } };
-    case "Rechazada":
-      return { chipColor: "error", sx: { backgroundColor: "#F44336", color: "white" } };
+      return {
+        chipColor: "success",
+        sx: { bgcolor: "#39A900", color: "white" }
+      };
+    case "En Cotización":
+      return {
+        chipColor: "secondary",
+        sx: { bgcolor: "#9C27B0", color: "white" }
+      };
     default:
-      return { chipColor: "default", sx: { backgroundColor: "#666", color: "white" } };
+      return {
+        chipColor: "default",
+        sx: { bgcolor: "#757575", color: "white" }
+      };
   }
 };
 
@@ -860,6 +874,16 @@ const Muestras = () => {
   };
 
   const handleViewDetails = (muestra) => setSelectedMuestra(muestra);
+
+  const handleEstadoChange = async (id, nuevoEstado) => {
+    try {
+      await axios.put(`/api/cambios-estado/${id}`, { nuevoEstado });
+      message.success('Estado actualizado correctamente');
+      fetchMuestras();
+    } catch (error) {
+      message.error('Error al actualizar el estado');
+    }
+  };
 
   if (loading)
     return <CircularProgress sx={{ display: "block", margin: "20px auto" }} />;
