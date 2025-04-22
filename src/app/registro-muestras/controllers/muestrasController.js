@@ -643,7 +643,7 @@ const registrarMuestra = async (req, res, next) => {
                     metodo: req.method,
                    /* ruta: req.originalUrl,*/
                     descripcion: 'Registro de nueva muestra',
-                    idMuestra: muestraGuardada._id,
+                 //   idMuestra: muestraGuardada._id,
                     tipoMuestra: muestraGuardada.tipoDeAgua.tipo,
                     estadoMuestra: muestraGuardada.estado,
                     datosCompletos: muestraGuardada.toObject(),

@@ -7,7 +7,10 @@ const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
 class AuditoriaService {
     static async registrarAccion(datosAuditoria) {
         try {
+            const nuevoId = await Auditoria.generarNuevoId();
+
             const registro = new Auditoria({
+                _id: nuevoId,
                 usuario: datosAuditoria.usuario,
                 accion: datosAuditoria.accion,
                 detalles: {
@@ -27,11 +30,13 @@ class AuditoriaService {
 
     static async registrarAccionMuestra(datosAuditoria) {
         try {
+            const nuevoId = await AuditoriaMuestras.generarNuevoId();
+
             const auditoriaData = {
+                _id: nuevoId,
                 usuario: datosAuditoria.usuario,
                 accion: {
-                    tipo: datosAuditoria.metodo,
-                   // ruta: datosAuditoria.ruta,
+                    tipo: datosAuditoria.metodo || 'POST',
                     descripcion: datosAuditoria.descripcion
                 },
                 muestra: {
@@ -39,18 +44,12 @@ class AuditoriaService {
                     tipo: datosAuditoria.tipoMuestra,
                     estado: datosAuditoria.estadoMuestra,
                     datosCompletos: datosAuditoria.datosCompletos
-                },
-               /* cambios: datosAuditoria.cambios,
-                metadata: {
-                    ip: datosAuditoria.ip,
-                    userAgent: datosAuditoria.userAgent
-                }*/
+                }
             };
 
             return await AuditoriaMuestras.create(auditoriaData);
         } catch (error) {
             console.error('Error registrando auditoría de muestra:', error);
-            // Fallback al sistema general si falla
             return await Auditoria.create({
                 ...datosAuditoria,
                 tipo: 'MUESTRA_FALLBACK'
@@ -58,11 +57,22 @@ class AuditoriaService {
         }
     }
 
-    static async obtenerRegistros(filtros = {}) {
+// Métodos registrarAccion y registrarAccionMuestra ya definidos en la parte anterior
+static async obtenerRegistros(filtros = {}, pagina = 1, limite = 10) {
         try {
-            return await Auditoria.find(filtros)
-                .sort({ fecha: -1 })
-                .lean();
+            const skip = (pagina - 1) * limite;
+
+            const [registrosGenerales, registrosMuestras] = await Promise.all([
+                Auditoria.find(filtros).sort({ fecha: -1 }).skip(skip).limit(limite).lean(),
+                AuditoriaMuestras.find(filtros).sort({ createdAt: -1 }).skip(skip).limit(limite).lean()
+            ]);
+
+            const registrosCombinados = registrosGenerales.concat(registrosMuestras);
+            registrosCombinados.sort((a, b) => new Date(b.fecha || b.createdAt) - new Date(a.fecha || a.createdAt));
+
+            const registrosPaginados = registrosCombinados.slice(0, limite);
+
+            return registrosPaginados;
         } catch (error) {
             console.error('Error obteniendo registros de auditoría:', error);
             throw error;
@@ -71,47 +81,62 @@ class AuditoriaService {
 
     static async obtenerRegistroAuditoria(id) {
         try {
-            if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-                throw new Error(`ID de auditoría inválido: ${id}. Debe ser un ObjectId válido de 24 caracteres hexadecimales`);
+            let registro = await Auditoria.findOne({ _id: id }).lean();
+            if (!registro) {
+                registro = await AuditoriaMuestras.findOne({ _id: id }).lean();
             }
-            return await Auditoria.findById(id).lean();
+            return registro;
         } catch (error) {
             console.error('Error obteniendo registro de auditoría:', error);
             throw error;
         }
     }
 
-    static async filtrarRegistros(filtros = {}) {
-        // Limpiar objeto de filtros de valores undefined
+    static async filtrarRegistros(filtros = {}, pagina = 1, limite = 10) {
         const filtrosLimpios = Object.fromEntries(
             Object.entries(filtros).filter(([_, v]) => v !== undefined)
         );
         try {
+            const skip = (pagina - 1) * limite;
+
             const query = {};
-            
-            if (filtros.fechaInicio && filtros.fechaFin) {
+
+            if (filtrosLimpios.fechaInicio && filtrosLimpios.fechaFin) {
                 query.fecha = {
-                    $gte: new Date(filtros.fechaInicio),
-                    $lte: new Date(filtros.fechaFin)
+                    $gte: new Date(filtrosLimpios.fechaInicio),
+                    $lte: new Date(filtrosLimpios.fechaFin)
                 };
             }
 
-            if (filtros.usuario) {
-                query['usuario.documento'] = filtros.usuario;
+            if (filtrosLimpios.usuario) {
+                query['usuario.documento'] = filtrosLimpios.usuario;
             }
 
-            if (filtros.accion) {
-                query['accion.tipo'] = filtros.accion;
+            if (filtrosLimpios.accion) {
+                query['accion.tipo'] = filtrosLimpios.accion;
             }
 
-            return await this.obtenerRegistros(query);
+            if (filtrosLimpios.idMuestra) {
+                query['detalles.idMuestra'] = filtrosLimpios.idMuestra;
+            }
+
+            const [registrosGenerales, registrosMuestras] = await Promise.all([
+                Auditoria.find(query).sort({ fecha: -1 }).skip(skip).limit(limite).lean(),
+                AuditoriaMuestras.find(query).sort({ createdAt: -1 }).skip(skip).limit(limite).lean()
+            ]);
+
+            const registrosCombinados = registrosGenerales.concat(registrosMuestras);
+            registrosCombinados.sort((a, b) => new Date(b.fecha || b.createdAt) - new Date(a.fecha || a.createdAt));
+
+            const registrosPaginados = registrosCombinados.slice(0, limite);
+
+            return registrosPaginados;
         } catch (error) {
             console.error('Error filtrando registros de auditoría:', error);
             throw error;
         }
     }
 
-    // Nuevo método para generar PDF de un registro de auditoría
     static async generarPDFRegistro(id) {
         try {
             const registro = await this.obtenerRegistroAuditoria(id);
@@ -126,10 +151,10 @@ class AuditoriaService {
         }
     }
 
-    // Nuevo método para exportar registros de auditoría
-    static async exportarRegistros(filtros = {}) {
+    static async exportarRegistros(filtros = {}, pagina = 1, limite = 10) {
         try {
-            return await this.filtrarRegistros(filtros);
+            const registros = await this.filtrarRegistros(filtros, pagina, limite);
+            return registros;
         } catch (error) {
             console.error('Error exportando registros de auditoría:', error);
             throw error;

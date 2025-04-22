@@ -3,6 +3,10 @@ const { PERMISOS } = require("../../../config/rolesConfig");
 
 const auditoriaSchema = new mongoose.Schema(
   {
+    _id: {
+      type: String,
+      required: true
+    },
     usuario: {
       id: String,
       nombre: String,
@@ -111,4 +115,20 @@ auditoriaSchema.statics.obtenerEstadisticas = async function(fechaInicio, fechaF
   ]);
 };
 
-module.exports = mongoose.model("Auditoria", auditoriaSchema); 
+// Importar el modelo Counter para el contador atómico
+const Counter = require('./counterModel');
+
+// Método estático para generar el próximo ID secuencial usando contador atómico
+auditoriaSchema.statics.generarNuevoId = async function() {
+  const sequenceDocument = await Counter.findOneAndUpdate(
+    { _id: 'auditoriaId' },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
+
+  const nuevoNumero = sequenceDocument.seq;
+  const nuevoId = 'auditoria' + nuevoNumero.toString().padStart(3, '0');
+  return nuevoId;
+};
+
+module.exports = mongoose.model("Auditoria", auditoriaSchema);
