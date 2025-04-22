@@ -136,7 +136,7 @@ const validarDatosMuestra = (datos) => {
         errores.push('Debe seleccionar al menos un análisis');
     }
 
-    // Validar firmas solo si no es una muestra rechazada y no está en estado En Cotizacion o Pendiente
+    // Validar firmas solo si no es una muestra rechazada y o En Cotizacion 
     if (datos.estado !== 'Rechazada' && datos.estado !== 'En Cotizacion' && datos.estado !== 'Pendiente') {
         if (!datos.firmas?.firmaAdministrador?.firma) {
             errores.push('La firma del administrador es requerida');

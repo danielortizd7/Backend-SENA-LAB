@@ -6,7 +6,6 @@ const TIPOS_ANALISIS = {
     MICROBIOLOGICO: "microbiologico"
 };
 
-
 const MATRICES = {
     AP: "AP",   // Agua Potable
     AS: "AS",   // Agua Superficial
@@ -71,96 +70,6 @@ const UNIDADES_MEDIDA = [
     "UFC/100mL",
     "Ausencia/Presencia"
 ];
-
-const METODOS_ANALISIS = [
-    "SM 4500 H+ B",
-    "SM2510 B",
-    "SM2130 B",
-    "SM2120 C",
-    "SM2320 B",
-    "SM2340 C",
-    "SM3500CaB",
-    "SM 3500-MgB",
-    "SM4500 Cl G",
-    "SM 4500-Cl- B",
-    "8029 HACH",
-    "SM 4500 NO3 B",
-    "SM 4500 NO2 B",
-    "SM 4500 SO4 E",
-    "SM4500 P E",
-    "SM3111B Abs. Atómica",
-    "8008 HACH",
-    "SM3112B Modificado Abs. Atómica",
-    "10360 HACH",
-    "8000 HACH",
-    "8165 HACH",
-    "SM2450 D",
-    "1029 HACH",
-    "Readycult Merk"
-];
-
-// Esquema mejorado para los análisis
-const analisisSchema = new mongoose.Schema({
-    nombre: {
-        type: String,
-        required: true,
-        validate: {
-            validator: function(v) {
-                return NOMBRES_FISICOQUIMICOS.includes(v) || NOMBRES_MICROBIOLOGICOS.includes(v);
-            },
-            message: props => `${props.value} no es un nombre de análisis válido`
-        }
-    },
-    tipo: {
-        type: String,
-        required: true,
-        enum: Object.values(TIPOS_ANALISIS),
-        default: TIPOS_ANALISIS.FISICOQUIMICO
-    },
-    metodo: {
-        type: String,
-        required: true,
-        enum: METODOS_ANALISIS
-    },
-    unidad: {
-        type: String,
-        required: true,
-        enum: UNIDADES_MEDIDA
-    },
-    rango: {
-        type: String,
-        required: true
-    },
-    precio: {
-        type: String,
-        required: true,
-        min: 0
-    },
-    matriz: {
-        type: [{
-            type: String,
-            enum: Object.values(MATRICES)
-        }],
-        required: true,
-        validate: {
-            validator: function(v) {
-                return v && v.length > 0;
-            },
-            message: 'Debe especificar al menos una matriz'
-        }
-    },
-    activo: {
-        type: Boolean,
-        default: true
-    },
-    version: {
-        type: String,
-        default: '1.0'
-    }
-}, {
-    timestamps: true,
-    versionKey: false
-});
 
 // Lista predefinida de análisis según la tabla
 const analisisDisponibles = {
@@ -469,74 +378,13 @@ const getAnalisisPorTipoAgua = (tipoAgua, subtipoResidual = null) => {
     };
 };
 
-// Crear el modelo
-const Analisis = mongoose.models.Analisis || mongoose.model('Analisis', analisisSchema);
-
-// Función para inicializar los análisis en la base de datos
-const inicializarAnalisis = async () => {
-    try {
-        const count = await Analisis.countDocuments();
-        if (count === 0) {
-            const todosLosAnalisis = [
-                ...analisisDisponibles.fisicoquimico,
-                ...analisisDisponibles.microbiologico
-            ];
-            await Analisis.insertMany(todosLosAnalisis);
-            console.log('Análisis inicializados correctamente');
-        }
-    } catch (error) {
-        console.error('Error al inicializar análisis:', error);
-    }
-};
-
-// Funciones CRUD para manejar análisis
-const crearAnalisis = async (datosAnalisis) => {
-    try {
-        const nuevoAnalisis = new Analisis(datosAnalisis);
-        return await nuevoAnalisis.save();
-    } catch (error) {
-        throw new Error(`Error al crear análisis: ${error.message}`);
-    }
-};
-
-const actualizarAnalisis = async (id, datosActualizados) => {
-    try {
-        return await Analisis.findByIdAndUpdate(id, datosActualizados, { new: true });
-    } catch (error) {
-        throw new Error(`Error al actualizar análisis: ${error.message}`);
-    }
-};
-
-const cambiarEstadoAnalisis = async (id, activo) => {
-    try {
-        return await Analisis.findByIdAndUpdate(id, { activo }, { new: true });
-    } catch (error) {
-        throw new Error(`Error al cambiar estado del análisis: ${error.message}`);
-    }
-};
-
-const listarAnalisis = async (filtros = {}) => {
-    try {
-        return await Analisis.find(filtros);
-    } catch (error) {
-        throw new Error(`Error al listar análisis: ${error.message}`);
-    }
-};
-
 module.exports = {
-    Analisis,
-    inicializarAnalisis,
-    analisisDisponibles,
-    matrizMap,
-    getAnalisisPorTipoAgua,
     TIPOS_ANALISIS,
     MATRICES,
+    UNIDADES_MEDIDA,
     NOMBRES_FISICOQUIMICOS,
     NOMBRES_MICROBIOLOGICOS,
-    UNIDADES_MEDIDA,
-    METODOS_ANALISIS,
-    crearAnalisis,
-    actualizarAnalisis,
-    cambiarEstadoAnalisis,
-    listarAnalisis
+    analisisDisponibles,
+    matrizMap,
+    getAnalisisPorTipoAgua
 }; 
