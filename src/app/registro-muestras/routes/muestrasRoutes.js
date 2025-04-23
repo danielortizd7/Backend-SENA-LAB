@@ -38,4 +38,4 @@ router.get('/muestras/tipo/:tipo', verificarToken, muestrasController.obtenerMue
 router.put('/muestras/:id/estado', verificarToken, muestrasController.actualizarEstadoMuestra);
 router.get('/cliente/:documento', verificarToken, muestrasController.obtenerMuestrasPorCliente);
 
-module.exports = router; 
+module.exports = router;

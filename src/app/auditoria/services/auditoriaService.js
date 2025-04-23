@@ -1,139 +1,166 @@
-const Auditoria = require("../models/auditoriaModel");
+const mongoose = require('mongoose');
+const Auditoria = require('../models/auditoriaModel');
+const { ResponseHandler } = require('../../../shared/utils/responseHandler');
+const AuditoriaMuestras = require('../models/auditoriaModelMuestras');
+const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
 
 class AuditoriaService {
-  async registrarAccion(datos) {
-    try {
-      // Agregar duración de la acción
-      datos.duracion = Date.now() - datos.fecha.getTime();
+    static async registrarAccion(datosAuditoria) {
+        try {
+            const nuevoId = await Auditoria.generarNuevoId();
 
-      const auditoria = new Auditoria(datos);
-      await auditoria.save();
-      return auditoria;
-    } catch (error) {
-      console.error('Error al registrar acción:', error);
-      throw new Error(`Error al registrar acción: ${error.message}`);
-    }
-  }
+            const registro = new Auditoria({
+                _id: nuevoId,
+                usuario: datosAuditoria.usuario,
+                accion: datosAuditoria.accion,
+                detalles: {
+                    ...datosAuditoria.detalles,
+                    idMuestra: datosAuditoria.detalles.idMuestra || null
+                },
+                fecha: datosAuditoria.fecha
+            });
 
-  async obtenerRegistroAuditoria(filtros = {}, pagina = 1, limite = 10) {
-    try {
-      const skip = (pagina - 1) * limite;
-      
-      // Construir filtros de búsqueda
-      const query = {};
-      
-      if (filtros.fechaInicio && filtros.fechaFin) {
-        query.fecha = {
-          $gte: new Date(filtros.fechaInicio),
-          $lte: new Date(filtros.fechaFin)
-        };
-      }
-      
-      if (filtros.usuario) {
-        query['usuario.documento'] = filtros.usuario;
-      }
-      
-      if (filtros.rol) {
-        query['usuario.rol'] = filtros.rol;
-      }
-      
-      if (filtros.accion) {
-        query['accion.tipo'] = filtros.accion;
-      }
-      
-      if (filtros.estado) {
-        query.estado = filtros.estado;
-      }
-
-      if (filtros.idMuestra) {
-        query['detalles.idMuestra'] = filtros.idMuestra;
-      }
-
-      // Ejecutar consulta con paginación
-      const [registros, total] = await Promise.all([
-        Auditoria.find(query)
-          .sort({ fecha: -1 })
-          .skip(skip)
-          .limit(limite),
-        Auditoria.countDocuments(query)
-      ]);
-
-      return {
-        registros,
-        total,
-        pagina,
-        totalPaginas: Math.ceil(total / limite)
-      };
-    } catch (error) {
-      throw new Error(`Error al obtener registros de auditoría: ${error.message}`);
-    }
-  }
-
-  async exportarRegistros(filtros = {}) {
-    try {
-      const query = this.construirQueryFiltros(filtros);
-      return await Auditoria.find(query).sort({ fecha: -1 });
-    } catch (error) {
-      throw new Error(`Error al exportar registros: ${error.message}`);
-    }
-  }
-
-  async obtenerEstadisticas(fechaInicio, fechaFin) {
-    try {
-      return await Auditoria.obtenerEstadisticas(
-        new Date(fechaInicio),
-        new Date(fechaFin)
-      );
-    } catch (error) {
-      throw new Error(`Error al obtener estadísticas: ${error.message}`);
-    }
-  }
-
-  async limpiarRegistrosAntiguos(diasAntiguedad = 30) {
-    try {
-      const resultado = await Auditoria.limpiarRegistrosAntiguos(diasAntiguedad);
-      return {
-        mensaje: `Se eliminaron ${resultado.deletedCount} registros antiguos`,
-        registrosEliminados: resultado.deletedCount
-      };
-    } catch (error) {
-      throw new Error(`Error al limpiar registros antiguos: ${error.message}`);
-    }
-  }
-
-  // Método privado para construir la query de filtros
-  construirQueryFiltros(filtros) {
-    const query = {};
-    
-    if (filtros.fechaInicio && filtros.fechaFin) {
-      query.fecha = {
-        $gte: new Date(filtros.fechaInicio),
-        $lte: new Date(filtros.fechaFin)
-      };
-    }
-    
-    if (filtros.usuario) {
-      query['usuario.documento'] = filtros.usuario;
-    }
-    
-    if (filtros.rol) {
-      query['usuario.rol'] = filtros.rol;
-    }
-    
-    if (filtros.accion) {
-      query['accion.tipo'] = filtros.accion;
-    }
-    
-    if (filtros.estado) {
-      query.estado = filtros.estado;
+            await registro.save();
+            return registro;
+        } catch (error) {
+            console.error('Error registrando auditoría:', error);
+            throw error;
+        }
     }
 
-    if (filtros.idMuestra) {
-      query['detalles.idMuestra'] = filtros.idMuestra;
+    static async registrarAccionMuestra(datosAuditoria) {
+        try {
+            const nuevoId = await AuditoriaMuestras.generarNuevoId();
+
+            const auditoriaData = {
+                _id: nuevoId,
+                usuario: datosAuditoria.usuario,
+                accion: {
+                    tipo: datosAuditoria.metodo || 'POST',
+                    descripcion: datosAuditoria.descripcion
+                },
+                muestra: {
+                    id: datosAuditoria.idMuestra,
+                    tipo: datosAuditoria.tipoMuestra,
+                    estado: datosAuditoria.estadoMuestra,
+                    datosCompletos: datosAuditoria.datosCompletos
+                }
+            };
+
+            return await AuditoriaMuestras.create(auditoriaData);
+        } catch (error) {
+            console.error('Error registrando auditoría de muestra:', error);
+            return await Auditoria.create({
+                ...datosAuditoria,
+                tipo: 'MUESTRA_FALLBACK'
+            });
+        }
     }
 
-    return query;
-  }
+
+    // Métodos registrarAccion y registrarAccionMuestra ya definidos en la parte anterior
+static async obtenerRegistros(filtros = {}, pagina = 1, limite = 10) {
+        try {
+            const skip = (pagina - 1) * limite;
+
+            const [registrosGenerales, registrosMuestras] = await Promise.all([
+                Auditoria.find(filtros).sort({ fecha: -1 }).skip(skip).limit(limite).lean(),
+                AuditoriaMuestras.find(filtros).sort({ createdAt: -1 }).skip(skip).limit(limite).lean()
+            ]);
+
+            const registrosCombinados = registrosGenerales.concat(registrosMuestras);
+            registrosCombinados.sort((a, b) => new Date(b.fecha || b.createdAt) - new Date(a.fecha || a.createdAt));
+
+            const registrosPaginados = registrosCombinados.slice(0, limite);
+
+            return registrosPaginados;
+        } catch (error) {
+            console.error('Error obteniendo registros de auditoría:', error);
+            throw error;
+        }
+    }
+
+    static async obtenerRegistroAuditoria(id) {
+        try {
+            let registro = await Auditoria.findOne({ _id: id }).lean();
+            if (!registro) {
+                registro = await AuditoriaMuestras.findOne({ _id: id }).lean();
+            }
+            return registro;
+        } catch (error) {
+            console.error('Error obteniendo registro de auditoría:', error);
+            throw error;
+        }
+    }
+
+    static async filtrarRegistros(filtros = {}, pagina = 1, limite = 10) {
+        const filtrosLimpios = Object.fromEntries(
+            Object.entries(filtros).filter(([_, v]) => v !== undefined)
+        );
+        try {
+            const skip = (pagina - 1) * limite;
+
+            const query = {};
+
+            if (filtrosLimpios.fechaInicio && filtrosLimpios.fechaFin) {
+                query.fecha = {
+                    $gte: new Date(filtrosLimpios.fechaInicio),
+                    $lte: new Date(filtrosLimpios.fechaFin)
+                };
+            }
+
+            if (filtrosLimpios.usuario) {
+                query['usuario.documento'] = filtrosLimpios.usuario;
+            }
+
+            if (filtrosLimpios.accion) {
+                query['accion.tipo'] = filtrosLimpios.accion;
+            }
+
+            if (filtrosLimpios.idMuestra) {
+                query['detalles.idMuestra'] = filtrosLimpios.idMuestra;
+            }
+
+            const [registrosGenerales, registrosMuestras] = await Promise.all([
+                Auditoria.find(query).sort({ fecha: -1 }).skip(skip).limit(limite).lean(),
+                AuditoriaMuestras.find(query).sort({ createdAt: -1 }).skip(skip).limit(limite).lean()
+            ]);
+
+            const registrosCombinados = registrosGenerales.concat(registrosMuestras);
+            registrosCombinados.sort((a, b) => new Date(b.fecha || b.createdAt) - new Date(a.fecha || a.createdAt));
+
+            const registrosPaginados = registrosCombinados.slice(0, limite);
+
+            return registrosPaginados;
+        } catch (error) {
+            console.error('Error filtrando registros de auditoría:', error);
+            throw error;
+        }
+    }
+
+    static async generarPDFRegistro(id) {
+        try {
+            const registro = await this.obtenerRegistroAuditoria(id);
+            if (!registro) {
+                throw new Error('Registro de auditoría no encontrado');
+            }
+            const pdfPath = await generarPDFAuditoria(registro);
+            return pdfPath;
+        } catch (error) {
+            console.error('Error generando PDF de auditoría:', error);
+            throw error;
+        }
+    }
+
+    static async exportarRegistros(filtros = {}, pagina = 1, limite = 10) {
+        try {
+            const registros = await this.filtrarRegistros(filtros, pagina, limite);
+            return registros;
+        } catch (error) {
+            console.error('Error exportando registros de auditoría:', error);
+            throw error;
+        }
+    }
 }
 
-module.exports = new AuditoriaService(); 
+module.exports = AuditoriaService;

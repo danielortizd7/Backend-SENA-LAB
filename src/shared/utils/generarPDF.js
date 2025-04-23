@@ -1,6 +1,7 @@
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 const path = require("path");
+const { Muestra } = require("../models/muestrasModel");
 
 // Función para formatear fechas
 const formatearFecha = (fechaObj) => {
@@ -249,4 +250,104 @@ const generarPDF = async (muestra) => {
     });
 };
 
-module.exports = generarPDF; // estado bien
+// Nueva función para generar PDF de auditoría
+const generarPDFAuditoria = async (auditoria) => {
+    return new Promise((resolve, reject) => {
+        try {
+            console.log("Iniciando generación de PDF para auditoría:", auditoria._id);
+            
+            const doc = new PDFDocument({ 
+                size: 'A4',
+                margin: 50,
+                info: {
+                    Title: `Reporte de Auditoría ${auditoria._id}`,
+                    Author: 'Sistema SENA',
+                    Subject: 'Reporte de Auditoría',
+                }
+            });
+
+            const nombreArchivo = `auditoria_${auditoria._id}.pdf`;
+            const rutaArchivo = path.join(process.cwd(), "public", "pdfs", nombreArchivo);
+
+            // Crear directorio si no existe
+            if (!fs.existsSync(path.dirname(rutaArchivo))) {
+                fs.mkdirSync(path.dirname(rutaArchivo), { recursive: true });
+            }
+
+            const stream = fs.createWriteStream(rutaArchivo);
+            doc.pipe(stream);
+
+            // Logo SENA - lado derecho
+            const logoPath = path.resolve(process.cwd(), "public", "assets", "logoSena.png");
+            if (fs.existsSync(logoPath)) {
+                doc.image(logoPath, doc.page.width - 130, 20, { 
+                    width: 80,
+                    align: 'right'
+                });
+            }
+
+            // Título con fondo azul marino
+            doc.rect(0, 80, doc.page.width, 25).fill('#002D4D');
+            doc.fillColor('white').fontSize(14).text('Detalles de la Auditoría', 0, 85, { align: 'center' });
+
+            // Tabla de datos
+            const startY = 120;
+            const colWidth = (doc.page.width - 100) / 2;
+
+            // Encabezados de la tabla
+            doc.rect(50, startY, colWidth, 20).fill('#39A900');
+            doc.rect(50 + colWidth, startY, colWidth, 20).fill('#39A900');
+            doc.fillColor('white')
+               .fontSize(10)
+               .text('Campo', 60, startY + 5)
+               .text('Valor', 60 + colWidth, startY + 5);
+
+            // Datos de la tabla
+            let currentY = startY + 20;
+            const rowHeight = 20;
+            const detalles = [
+                ['ID Auditoría', auditoria._id || 'N/A'],
+                ['Usuario', auditoria.usuario?.nombre || 'N/A'],
+                ['Documento Usuario', auditoria.usuario?.documento || 'N/A'],
+                ['Acción', auditoria.accion?.tipo || 'N/A'],
+                ['Descripción', auditoria.accion?.descripcion || 'N/A'],
+                ['Fecha', formatearFecha(auditoria.fecha)],
+                ['Detalles', JSON.stringify(auditoria.detalles) || 'N/A']
+            ];
+
+            detalles.forEach((row, index) => {
+                const y = currentY + (index * rowHeight);
+                // Fondo de la fila
+                doc.rect(50, y, colWidth * 2, rowHeight)
+                   .fillAndStroke(index % 2 === 0 ? '#f9f9f9' : 'white', '#e0e0e0');
+                // Texto
+                doc.fillColor('black')
+                   .fontSize(9)
+                   .text(row[0], 60, y + 5)
+                   .text(row[1], 60 + colWidth, y + 5);
+            });
+
+            // Finalizar documento
+            doc.end();
+
+            stream.on("finish", () => {
+                console.log("PDF de auditoría generado exitosamente:", rutaArchivo);
+                resolve(`/pdfs/${nombreArchivo}`);
+            });
+
+            stream.on("error", (error) => {
+                console.error("Error al escribir el PDF de auditoría:", error);
+                reject(error);
+            });
+
+        } catch (error) {
+            console.error("Error al generar PDF de auditoría:", error);
+            reject(error);
+        }
+    });
+};
+
+module.exports = {
+    generarPDF,
+    generarPDFAuditoria
+};

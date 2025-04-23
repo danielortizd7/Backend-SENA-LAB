@@ -10,6 +10,7 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
+const AuditoriaService = require('../../auditoria/services/auditoriaService'); // Added import for AuditoriaService
 
 // URL base para las peticiones a la API de usuarios
 const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
@@ -68,6 +69,16 @@ const normalizarCampos = (datos) => {
     if (datos.tipoDeAgua?.tipo) {
         datos.tipoDeAgua.tipo = datos.tipoDeAgua.tipo.toLowerCase();
     }
+
+    // Normalizar estado
+if (datos.estado) {
+    const estadoLower = datos.estado.trim().toLowerCase();
+    if (estadoLower === 'rechazada') {
+        datos.estado = 'Rechazada';
+    } else if (estadoLower === 'en cotizacion') {
+        datos.estado = 'En cotizacion';
+    }
+}
 
     return datos;
 };
@@ -629,6 +640,30 @@ const registrarMuestra = async (req, res, next) => {
         // Guardar la muestra
         const muestraGuardada = await muestra.save();
 
+        //AUDITORIAS
+        setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccionMuestra({
+                    usuario: req.usuario,
+                    metodo: req.method,
+                   /* ruta: req.originalUrl,*/
+                    descripcion: 'Registro de nueva muestra',
+                 //   idMuestra: muestraGuardada._id,
+                    tipoMuestra: muestraGuardada.tipoDeAgua.tipo,
+                    estadoMuestra: muestraGuardada.estado,
+                    datosCompletos: muestraGuardada.toObject(),
+                  /*  cambios: {
+                        anteriores: null,
+                        nuevos: nuevaMuestra.toObject()
+                    },
+                    ip: req.ip,
+                    userAgent: req.headers['user-agent']*/
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
+
         // Preparar la respuesta simplificada
         const respuesta = {
             id_muestra: muestraGuardada.id_muestra,
@@ -665,6 +700,10 @@ const registrarMuestra = async (req, res, next) => {
             rechazoMuestra: {
                 rechazada: muestraGuardada.rechazoMuestra.rechazada,
                 motivo: muestraGuardada.rechazoMuestra.motivo
+            },
+            cotizacionMuestra: {
+                cotizada: muestraGuardada.cotizacionMuestra.cotizada,
+                motivo: muestraGuardada.cotizacionMuestra.motivo
             },
             observaciones: muestraGuardada.observaciones,
             historial: Array.isArray(muestraGuardada.historial) ? 
@@ -732,6 +771,7 @@ const registrarMuestra = async (req, res, next) => {
 };
 
 const actualizarMuestra = async (req, res, next) => {
+    console.log('Datos recibidos para actualizar muestra:', req.body);
     try {
         const usuario = obtenerDatosUsuario(req);
         const { id } = req.params;
@@ -749,6 +789,10 @@ const actualizarMuestra = async (req, res, next) => {
         // Validaciones específicas
         if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.observaciones) {
             throw new ValidationError('Debe especificar el motivo del rechazo en las observaciones');
+        }
+
+        if (datosActualizacion.estado === 'En cotizacion' && !datosActualizacion.observaciones) {
+            throw new ValidationError('Debe especificar el motivo de la cotización en las observaciones');
         }
 
         if (datosActualizacion.preservacionMuestra === 'Otro' && !datosActualizacion.descripcion) {
@@ -779,6 +823,27 @@ const actualizarMuestra = async (req, res, next) => {
                 hora: `${horas}:${minutos}:${segundos}`
             };
         };
+
+         // AUDITORÍA
+         setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccionMuestra({
+                    usuario,
+                    metodo: req.method,
+                    descripcion: 'Actualización de muestra',
+                    idMuestra: muestra._id,
+                    tipoMuestra: muestra.tipoDeAgua?.tipo,
+                    estadoMuestra: muestra.estado,
+                    datosCompletos: muestra.toObject(),
+                    cambios: {
+                        anteriores: muestraOriginal,
+                        nuevos: muestra.toObject()
+                    }
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         // Preparar la respuesta
         const respuesta = {

@@ -292,6 +292,17 @@ const muestraSchema = new mongoose.Schema({
         motivo: String,
         fechaRechazo: Date
     },
+cotizacionMuestra: {
+    cotizada: {
+        type: Boolean,
+        default: false
+    },
+    fechaCotizacion: Date,
+    precioTotal: {
+        type: Number,
+        default: 0
+    }
+},
 
     // Campos adicionales
     observaciones: {
@@ -330,6 +341,17 @@ muestraSchema.pre('save', function(next) {
         this.precioTotal = this.analisisSeleccionados.reduce((total, analisis) => {
             return total + (analisis.precio || 0);
         }, 0);
+    }
+    next();
+});
+
+// Middleware para limpiar campos de rechazo y cotización según estado
+muestraSchema.pre('save', function(next) {
+    if (this.estado !== 'Rechazada') {
+        this.rechazoMuestra = undefined;
+    }
+    if (this.estado !== 'En cotizacion') {
+        this.cotizacionMuestra = undefined;
     }
     next();
 });

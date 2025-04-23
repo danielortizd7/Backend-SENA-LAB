@@ -7,6 +7,7 @@ const { Muestra } = require("../../../shared/models/muestrasModel");
 const { formatPaginationResponse } = require("../../../shared/middleware/paginationMiddleware");
 const Analisis = require("../../../shared/models/analisisModel");
 const resultadoService = require("../services/resultadoService");
+const AuditoriaService = require('../../auditoria/services/auditoriaService');
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
@@ -91,6 +92,23 @@ const registrarResultado = async (req, res) => {
         // Usar el servicio para registrar el resultado
         const resultado = await resultadoService.registrarResultado(datosResultado);
 
+        // Registrar auditoría de registro de muestra
+        setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccionMuestra({
+                    usuario,
+                    metodo: 'POST',
+                    descripcion: 'Registro de resultado y muestra',
+                    idMuestra,
+                    tipoMuestra: resultado.tipoDeAgua,
+                    estadoMuestra: resultado.estado,
+                    datosCompletos: resultado
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
+
         // Formatear el resultado para la respuesta
         const resultadoFormateado = {
             ...resultado.toObject(),
@@ -127,6 +145,7 @@ const registrarResultado = async (req, res) => {
     }
 };
 
+
 const editarResultado = async (req, res) => {
     try {
         const { idMuestra } = req.params;
@@ -155,6 +174,9 @@ const editarResultado = async (req, res) => {
                 errorCode: 'NOT_FOUND'
             });
         }
+
+        // Guardar valores anteriores para auditoría
+        const valoresAnteriores = resultado.toObject();
 
         // Obtener información de los análisis
         const analisisInfo = await Analisis.find({
@@ -230,6 +252,29 @@ const editarResultado = async (req, res) => {
         });
 
         await resultado.save();
+
+        // Registrar auditoría con valores anteriores y nuevos
+        setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccion({
+                    usuario,
+                    accion: {
+                        tipo: 'PUT',
+                        descripcion: 'Actualización de resultado'
+                    },
+                    detalles: {
+                        idMuestra,
+                        cambios: {
+                            antes: valoresAnteriores,
+                            despues: resultado.toObject()
+                        }
+                    },
+                    fecha: new Date()
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         // Formatear el resultado para la respuesta
         const resultadoFormateado = {
