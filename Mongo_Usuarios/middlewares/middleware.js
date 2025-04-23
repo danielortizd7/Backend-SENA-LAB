@@ -27,7 +27,12 @@ const autenticar = (usuarioModel) => async (req, res, next) => {
                 detalles: 'Usuario no encontrado o inactivo'
             });
         }
-        
+        if (usuario.rol.name === 'cliente' && req.body.plataforma !== 'movil') {
+            return res.status(403).json({
+                error: 'Acceso denegado',
+                detalles: 'Los clientes solo pueden iniciar sesión desde la plataforma móvil'
+            });
+        }
         
         req.usuario = {
             ...usuario.toObject(),
@@ -63,13 +68,6 @@ const soloRoles = (rolesPermitidos = []) => {
             const usuario = req.usuario;
             if (!usuario) {
                 return res.status(401).json({ error: 'Autenticación requerida' });
-            }
-
-            if (usuario.rol.name === 'cliente') {
-                return res.status(403).json({
-                    error: 'Acceso denegado',
-                    detalle: 'Los clientes no pueden iniciar sesión'
-                });
             }
 
             if (rolesPermitidos.includes(usuario.rol)) {

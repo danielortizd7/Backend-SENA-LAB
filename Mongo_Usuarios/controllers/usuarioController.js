@@ -202,26 +202,35 @@ class UsuarioController {
       }
       
 
-    async login(req, res) {
+      async login(req, res) {
         try {
-            const { email, password } = req.body;
+            const { email, password, plataforma } = req.body; // 👈 importante agregar esto
+    
             const usuario = await this.usuarioModel.obtenerPorEmail(email);
             console.log('Usuario obtenido:', usuario);
-
+    
             if (!usuario) {
                 return res.status(400).json({
                     error: 'Credenciales inválidas',
                     detalles: 'Email no encontrado'
                 });
             }
-
+    
             if (!usuario.activo) {
                 return res.status(400).json({
                     error: 'Usuario inactivo',
                     detalles: 'El usuario está desactivado'
                 });
             }
-
+    
+            // 👇 validación de rol cliente solo si NO es móvil
+            if (usuario.rol.name === 'cliente' && plataforma !== 'movil') {
+                return res.status(403).json({
+                    error: 'Acceso denegado',
+                    detalles: 'Los clientes solo pueden iniciar sesión desde la app móvil'
+                });
+            }
+    
             const contraseñaValida = await bcrypt.compare(password, usuario.password);
             if (!contraseñaValida) {
                 return res.status(400).json({
@@ -229,7 +238,7 @@ class UsuarioController {
                     detalles: 'Contraseña incorrecta'
                 });
             }
-
+    
             const payload = {
                 userId: usuario._id,
                 email: usuario.email,
@@ -237,7 +246,7 @@ class UsuarioController {
                 rol: usuario.rol.name,
                 permisos: usuario.rol.permisos || []
             };
-
+    
             const token = jwt.sign(payload, config.jwtConfig.secret, { expiresIn: config.jwtConfig.expiresIn });
             return res.status(200).json({
                 mensaje: 'Login exitoso',
@@ -254,6 +263,7 @@ class UsuarioController {
             res.status(500).json({ error: 'Error en el servidor', detalles: error.message });
         }
     }
+    
 
     async obtenerTodos(req, res) {
         try {
