@@ -3,20 +3,16 @@ const { PERMISOS } = require("../../../config/rolesConfig");
 
 const auditoriaSchema = new mongoose.Schema(
   {
-    _id: {
-      type: String,
-      required: true
-    },
     usuario: {
       id: String,
       nombre: String,
       rol: String,
       documento: String,
-     /* permisos: [{
+      permisos: [{
         type: String,
         // Permitir cualquier string para evitar errores de validación
-         enum: Object.values(PERMISOS)
-      }]*/
+        // enum: Object.values(PERMISOS)
+      }]
     },
     accion: {
       tipo: {
@@ -24,16 +20,16 @@ const auditoriaSchema = new mongoose.Schema(
         enum: ['GET', 'POST', 'PUT', 'DELETE'],
         required: true
       },
-     /* ruta: {
+      ruta: {
         type: String,
         required: true
-      },*/
+      },
       descripcion: String,
-     /* permisosRequeridos: [{
+      permisosRequeridos: [{
         type: String,
         // Permitir cualquier string para evitar errores de validación
-         enum: Object.values(PERMISOS)
-      }]*/
+        // enum: Object.values(PERMISOS)
+      }]
     },
     detalles: {
       idMuestra: String,
@@ -41,8 +37,8 @@ const auditoriaSchema = new mongoose.Schema(
         antes: Object,
         despues: Object
       },
-      /*ip: String,
-      userAgent: String,*/
+      ip: String,
+      userAgent: String,
       parametros: Object,
       query: Object
     },
@@ -115,20 +111,4 @@ auditoriaSchema.statics.obtenerEstadisticas = async function(fechaInicio, fechaF
   ]);
 };
 
-// Importar el modelo Counter para el contador atómico
-const Counter = require('./counterModel');
-
-// Método estático para generar el próximo ID secuencial usando contador atómico
-auditoriaSchema.statics.generarNuevoId = async function() {
-  const sequenceDocument = await Counter.findOneAndUpdate(
-    { _id: 'auditoriaId' },
-    { $inc: { seq: 1 } },
-    { new: true, upsert: true }
-  );
-
-  const nuevoNumero = sequenceDocument.seq;
-  const nuevoId = 'auditoria' + nuevoNumero.toString().padStart(3, '0');
-  return nuevoId;
-};
-
-module.exports = mongoose.model("Auditoria", auditoriaSchema);
+module.exports = mongoose.model("Auditoria", auditoriaSchema); 

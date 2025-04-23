@@ -10,7 +10,6 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
-const AuditoriaService = require('../../auditoria/services/auditoriaService'); // Added import for AuditoriaService
 
 // URL base para las peticiones a la API de usuarios
 const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
@@ -69,16 +68,6 @@ const normalizarCampos = (datos) => {
     if (datos.tipoDeAgua?.tipo) {
         datos.tipoDeAgua.tipo = datos.tipoDeAgua.tipo.toLowerCase();
     }
-
-    // Normalizar estado
-if (datos.estado) {
-    const estadoLower = datos.estado.trim().toLowerCase();
-    if (estadoLower === 'rechazada') {
-        datos.estado = 'Rechazada';
-    } else if (estadoLower === 'en cotizacion') {
-        datos.estado = 'En cotizacion';
-    }
-}
 
     return datos;
 };
@@ -420,6 +409,7 @@ const obtenerDatosUsuarioExterno = async (documento) => {
         // Si encontramos datos del usuario, devolverlos
         if (userData) {
             return {
+                _id: userData._id,
                 nombre: userData.nombre || 'Usuario no identificado',
                 documento: userData.documento,
                 email: userData.email || '',
@@ -553,6 +543,7 @@ const registrarMuestra = async (req, res, next) => {
             
             if (response.data && response.data.nombre) {
                 datosCliente = {
+                    _id: response.data._id,
                     nombre: response.data.nombre,
                     documento: response.data.documento,
                     email: response.data.email,
@@ -621,6 +612,7 @@ const registrarMuestra = async (req, res, next) => {
                 fechaRechazo: null
             },
             creadoPor: {
+                _id: new mongoose.Types.ObjectId(),
                 nombre: datosAdministrador.nombre,
                 documento: datosAdministrador.documento,
                 email: datosAdministrador.email,
@@ -628,7 +620,12 @@ const registrarMuestra = async (req, res, next) => {
             },
             historial: [{
                 estado: estadoInicial,
-                administrador: datosAdministrador,
+                administrador: {
+                    _id: new mongoose.Types.ObjectId(),
+                    nombre: datosAdministrador.nombre,
+                    documento: datosAdministrador.documento,
+                    email: datosAdministrador.email
+                },
                 fechaCambio: new Date(),
                 observaciones: esRechazada ? motivoRechazo : 
                              (esCotizada ? 'Muestra en proceso de cotización' : 
@@ -640,34 +637,12 @@ const registrarMuestra = async (req, res, next) => {
         // Guardar la muestra
         const muestraGuardada = await muestra.save();
 
-        //AUDITORIAS
-        setImmediate(async () => {
-            try {
-                await AuditoriaService.registrarAccionMuestra({
-                    usuario: req.usuario,
-                    metodo: req.method,
-                   /* ruta: req.originalUrl,*/
-                    descripcion: 'Registro de nueva muestra',
-                 //   idMuestra: muestraGuardada._id,
-                    tipoMuestra: muestraGuardada.tipoDeAgua.tipo,
-                    estadoMuestra: muestraGuardada.estado,
-                    datosCompletos: muestraGuardada.toObject(),
-                  /*  cambios: {
-                        anteriores: null,
-                        nuevos: nuevaMuestra.toObject()
-                    },
-                    ip: req.ip,
-                    userAgent: req.headers['user-agent']*/
-                });
-            } catch (error) {
-                console.error('[AUDITORIA ERROR]', error.message);
-            }
-        });
-
         // Preparar la respuesta simplificada
         const respuesta = {
             id_muestra: muestraGuardada.id_muestra,
+            _id: muestraGuardada._id,
             cliente: {
+                _id: muestraGuardada.cliente._id,
                 nombre: muestraGuardada.cliente.nombre,
                 documento: muestraGuardada.cliente.documento,
                 email: muestraGuardada.cliente.email,
@@ -687,7 +662,6 @@ const registrarMuestra = async (req, res, next) => {
             planMuestreo: muestraGuardada.planMuestreo,
             condicionesAmbientales: muestraGuardada.condicionesAmbientales,
             preservacionMuestra: muestraGuardada.preservacionMuestra,
-            descripcion: muestraGuardada.descripcion,
             analisisSeleccionados: Array.isArray(muestraGuardada.analisisSeleccionados) ? 
                 muestraGuardada.analisisSeleccionados.map(analisis => ({
                     nombre: analisis.nombre,
@@ -699,17 +673,15 @@ const registrarMuestra = async (req, res, next) => {
             estado: muestraGuardada.estado,
             rechazoMuestra: {
                 rechazada: muestraGuardada.rechazoMuestra.rechazada,
-                motivo: muestraGuardada.rechazoMuestra.motivo
-            },
-            cotizacionMuestra: {
-                cotizada: muestraGuardada.cotizacionMuestra.cotizada,
-                motivo: muestraGuardada.cotizacionMuestra.motivo
+                motivo: muestraGuardada.rechazoMuestra.motivo,
+                fechaRechazo: muestraGuardada.rechazoMuestra.fechaRechazo
             },
             observaciones: muestraGuardada.observaciones,
             historial: Array.isArray(muestraGuardada.historial) ? 
                 muestraGuardada.historial.map(h => ({
                     estado: h.estado,
                     administrador: {
+                        _id: h.administrador._id,
                         nombre: h.administrador.nombre,
                         documento: h.administrador.documento,
                         email: h.administrador.email
@@ -718,6 +690,7 @@ const registrarMuestra = async (req, res, next) => {
                     observaciones: h.observaciones
                 })) : [],
             creadoPor: {
+                _id: muestraGuardada.creadoPor._id,
                 nombre: muestraGuardada.creadoPor.nombre,
                 documento: muestraGuardada.creadoPor.documento,
                 email: muestraGuardada.creadoPor.email,
@@ -725,6 +698,7 @@ const registrarMuestra = async (req, res, next) => {
             },
             actualizadoPor: Array.isArray(muestraGuardada.actualizadoPor) ? 
                 muestraGuardada.actualizadoPor.map(a => ({
+                    _id: a._id,
                     nombre: a.nombre,
                     documento: a.documento,
                     fecha: formatearFechaHora(a.fecha),
@@ -771,7 +745,6 @@ const registrarMuestra = async (req, res, next) => {
 };
 
 const actualizarMuestra = async (req, res, next) => {
-    console.log('Datos recibidos para actualizar muestra:', req.body);
     try {
         const usuario = obtenerDatosUsuario(req);
         const { id } = req.params;
@@ -789,10 +762,6 @@ const actualizarMuestra = async (req, res, next) => {
         // Validaciones específicas
         if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.observaciones) {
             throw new ValidationError('Debe especificar el motivo del rechazo en las observaciones');
-        }
-
-        if (datosActualizacion.estado === 'En cotizacion' && !datosActualizacion.observaciones) {
-            throw new ValidationError('Debe especificar el motivo de la cotización en las observaciones');
         }
 
         if (datosActualizacion.preservacionMuestra === 'Otro' && !datosActualizacion.descripcion) {
@@ -823,27 +792,6 @@ const actualizarMuestra = async (req, res, next) => {
                 hora: `${horas}:${minutos}:${segundos}`
             };
         };
-
-         // AUDITORÍA
-         setImmediate(async () => {
-            try {
-                await AuditoriaService.registrarAccionMuestra({
-                    usuario,
-                    metodo: req.method,
-                    descripcion: 'Actualización de muestra',
-                    idMuestra: muestra._id,
-                    tipoMuestra: muestra.tipoDeAgua?.tipo,
-                    estadoMuestra: muestra.estado,
-                    datosCompletos: muestra.toObject(),
-                    cambios: {
-                        anteriores: muestraOriginal,
-                        nuevos: muestra.toObject()
-                    }
-                });
-            } catch (error) {
-                console.error('[AUDITORIA ERROR]', error.message);
-            }
-        });
 
         // Preparar la respuesta
         const respuesta = {
@@ -1006,10 +954,65 @@ const actualizarEstadoMuestra = async (req, res) => {
 // Obtener muestras por ID de cliente
 const obtenerMuestrasPorCliente = async (req, res, next) => {
     try {
-        const { documento } = req.params;
-        const muestras = await muestrasService.obtenerMuestrasPorCliente(documento);
-        ResponseHandler.success(res, { muestras }, 'Muestras obtenidas correctamente');
+        console.log('Recibida solicitud para obtener muestras de cliente');
+        const { identificador } = req.params;
+        console.log('Identificador recibido:', identificador);
+
+        const muestras = await muestrasService.obtenerMuestrasPorCliente(identificador);
+        
+        // Formatear las fechas y datos en los resultados
+        const muestrasFormateadas = muestras.map(muestra => ({
+            id_muestra: muestra.id_muestra,
+            cliente: {
+                _id: muestra.cliente._id,
+                nombre: muestra.cliente.nombre,
+                documento: muestra.cliente.documento,
+                email: muestra.cliente.email,
+                telefono: muestra.cliente.telefono,
+                direccion: muestra.cliente.direccion
+            },
+            tipoDeAgua: muestra.tipoDeAgua,
+            tipoMuestreo: muestra.tipoMuestreo,
+            lugarMuestreo: muestra.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
+            tipoAnalisis: muestra.tipoAnalisis,
+            identificacionMuestra: muestra.identificacionMuestra,
+            planMuestreo: muestra.planMuestreo,
+            condicionesAmbientales: muestra.condicionesAmbientales,
+            preservacionMuestra: muestra.preservacionMuestra,
+            analisisSeleccionados: muestra.analisisSeleccionados.map(analisis => ({
+                ...analisis,
+                precio: formatearPrecioCOP(analisis.precio)
+            })),
+            estado: muestra.estado,
+            rechazoMuestra: muestra.rechazoMuestra,
+            observaciones: muestra.observaciones,
+            firmas: muestra.firmas,
+            creadoPor: {
+                ...muestra.creadoPor,
+                fechaCreacion: formatearFechaHora(muestra.createdAt)
+            },
+            historial: Array.isArray(muestra.historial) ? 
+                muestra.historial.map(h => ({
+                    ...h,
+                    fechaCambio: formatearFechaHora(h.fechaCambio)
+                })) : [],
+            createdAt: formatearFechaHora(muestra.createdAt),
+            updatedAt: formatearFechaHora(muestra.updatedAt),
+            precioTotal: formatearPrecioCOP(muestra.precioTotal)
+        }));
+
+        console.log(`Se encontraron ${muestrasFormateadas.length} muestras para el cliente`);
+
+        ResponseHandler.success(res, { 
+            muestras: muestrasFormateadas,
+            total: muestrasFormateadas.length
+        }, 'Muestras obtenidas correctamente');
     } catch (error) {
+        console.error('Error al obtener muestras por cliente:', error);
+        if (error instanceof NotFoundError) {
+            return ResponseHandler.error(res, error, 404);
+        }
         next(error);
     }
 };

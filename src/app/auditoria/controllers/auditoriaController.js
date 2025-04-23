@@ -1,33 +1,6 @@
 const auditoriaService = require("../services/auditoriaService");
 
 class AuditoriaController {
-  async obtenerRegistroPorId(req, res) {
-    try {
-      const registro = await auditoriaService.obtenerRegistroAuditoria(req.params.id);
-      if (!registro) {
-        return res.status(404).json({
-          success: false,
-          message: 'Registro de auditoría no encontrado'
-        });
-      }
-      res.json({
-        success: true,
-        data: registro
-      });
-    } catch (error) {
-      if (error.message.includes('ID de auditoría inválido')) {
-        return res.status(400).json({
-          success: false,
-          message: error.message
-        });
-      }
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
   async obtenerRegistros(req, res) {
     try {
       const {
@@ -50,7 +23,7 @@ class AuditoriaController {
         estado
       };
 
-      const resultado = await auditoriaService.filtrarRegistros(
+      const resultado = await auditoriaService.obtenerRegistroAuditoria(
         filtros,
         parseInt(pagina),
         parseInt(limite)
@@ -128,7 +101,7 @@ class AuditoriaController {
         idMuestra
       };
 
-      const resultado = await auditoriaService.filtrarRegistros(filtros);
+      const resultado = await auditoriaService.obtenerRegistroAuditoria(filtros);
 
       res.json({
         success: true,
@@ -141,23 +114,6 @@ class AuditoriaController {
       });
     }
   }
-
-  // Nuevo método para generar PDF de un registro de auditoría
-  async generarPDFRegistro(req, res) {
-    try {
-      const id = req.params.id;
-      const pdfPath = await auditoriaService.generarPDFRegistro(id);
-      res.json({
-        success: true,
-        pdfUrl: pdfPath
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
 }
 
-module.exports = new AuditoriaController();
+module.exports = new AuditoriaController(); 
