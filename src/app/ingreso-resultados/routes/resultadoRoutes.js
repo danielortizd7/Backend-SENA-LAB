@@ -10,6 +10,9 @@ router.get("/muestra/:idMuestra",
   resultadoController.obtenerResultadoPorMuestra
 );
 
+// Obtener resultados por cliente
+router.get("/cliente/:documento", resultadoController.obtenerResultadosPorCliente);
+
 // Obtener todos los resultados
 router.get("/resultados",
   paginationMiddleware,

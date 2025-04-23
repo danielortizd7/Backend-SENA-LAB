@@ -535,6 +535,76 @@ const obtenerResultadoPorId = async (req, res) => {
     }
 };
 
+const obtenerResultadosPorCliente = async (req, res) => {
+    try {
+        const { documento } = req.params;
+        
+        if (!documento) {
+            return res.status(400).json({
+                success: false,
+                message: 'El documento del cliente es requerido',
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
+
+        // Buscar todas las muestras del cliente
+        const muestras = await Muestra.find({ 'cliente.documento': documento })
+            .select('id_muestra cliente tipoDeAgua lugarMuestreo fechaHoraMuestreo tipoAnalisis estado')
+            .lean();
+
+        if (!muestras || muestras.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontraron muestras para este cliente',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Obtener los IDs de las muestras
+        const idsMuestras = muestras.map(muestra => muestra.id_muestra);
+
+        // Buscar los resultados de las muestras
+        const resultados = await Resultado.find({ idMuestra: { $in: idsMuestras } })
+            .select('-__v')
+            .lean();
+
+        // Formatear la respuesta
+        const resultadosFormateados = resultados.map(resultado => {
+            const muestraCorrespondiente = muestras.find(m => m.id_muestra === resultado.idMuestra);
+            return {
+                ...resultado,
+                muestra: {
+                    id_muestra: muestraCorrespondiente.id_muestra,
+                    tipoDeAgua: muestraCorrespondiente.tipoDeAgua,
+                    lugarMuestreo: muestraCorrespondiente.lugarMuestreo,
+                    fechaHoraMuestreo: formatearFechaHora(muestraCorrespondiente.fechaHoraMuestreo),
+                    tipoAnalisis: muestraCorrespondiente.tipoAnalisis,
+                    estado: muestraCorrespondiente.estado
+                },
+                fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+                createdAt: formatearFechaHora(resultado.createdAt),
+                updatedAt: formatearFechaHora(resultado.updatedAt),
+                historialCambios: resultado.historialCambios?.map(cambio => ({
+                    ...cambio,
+                    fecha: formatearFechaHora(cambio.fecha)
+                })) || []
+            };
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: resultadosFormateados
+        });
+    } catch (error) {
+        console.error('Error al obtener resultados por cliente:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al obtener los resultados del cliente',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     registrarResultado,
     editarResultado,
@@ -546,5 +616,6 @@ module.exports = {
     eliminarResultado,
     obtenerResultadosPorMuestra,
     actualizarResultado,
-    obtenerResultadoPorId
+    obtenerResultadoPorId,
+    obtenerResultadosPorCliente
 };

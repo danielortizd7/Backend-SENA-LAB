@@ -28,4 +28,14 @@ router.put('/:id/estado', verificarToken, verificarRolAdministrador, muestrasCon
 router.get('/lab', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestras);
 router.get('/lab/:id', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestra);
 
+// Rutas para muestras
+router.get('/muestras', verificarToken, muestrasController.obtenerMuestras);
+router.get('/muestras/:id', verificarToken, muestrasController.obtenerMuestra);
+router.post('/muestras', verificarToken, muestrasController.crearMuestra);
+router.put('/muestras/:id', verificarToken, muestrasController.actualizarMuestra);
+router.delete('/muestras/:id', verificarToken, muestrasController.eliminarMuestra);
+router.get('/muestras/tipo/:tipo', verificarToken, muestrasController.obtenerMuestrasPorTipoEstado);
+router.put('/muestras/:id/estado', verificarToken, muestrasController.actualizarEstadoMuestra);
+router.get('/cliente/:documento', verificarToken, muestrasController.obtenerMuestrasPorCliente);
+
 module.exports = router; 

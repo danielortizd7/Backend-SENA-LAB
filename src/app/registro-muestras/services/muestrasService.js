@@ -310,6 +310,29 @@ const obtenerMuestrasPorEstado = async (estado) => {
     }
 };
 
+// Obtener muestras por cliente
+const obtenerMuestrasPorCliente = async (documento) => {
+    try {
+        if (!documento) {
+            throw new ValidationError('El documento del cliente es requerido');
+        }
+
+        const muestras = await Muestra.find({ 'cliente.documento': documento })
+            .sort({ fechaHoraMuestreo: -1 });
+
+        if (!muestras || muestras.length === 0) {
+            throw new NotFoundError('No se encontraron muestras para este cliente');
+        }
+
+        return muestras;
+    } catch (error) {
+        if (error instanceof NotFoundError || error instanceof ValidationError) {
+            throw error;
+        }
+        throw new DatabaseError('Error al obtener las muestras del cliente', error);
+    }
+};
+
 module.exports = {
     obtenerMuestras,
     obtenerMuestra,
@@ -318,5 +341,6 @@ module.exports = {
     eliminarMuestra,
     obtenerMuestrasPorTipo,
     obtenerMuestrasPorEstado,
-    calcularPrecioTotal
+    calcularPrecioTotal,
+    obtenerMuestrasPorCliente
 }; 
