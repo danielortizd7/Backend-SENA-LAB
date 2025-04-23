@@ -57,7 +57,8 @@ class AuditoriaService {
         }
     }
 
-// Métodos registrarAccion y registrarAccionMuestra ya definidos en la parte anterior
+
+    // Métodos registrarAccion y registrarAccionMuestra ya definidos en la parte anterior
 static async obtenerRegistros(filtros = {}, pagina = 1, limite = 10) {
         try {
             const skip = (pagina - 1) * limite;
