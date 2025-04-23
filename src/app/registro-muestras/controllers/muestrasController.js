@@ -75,12 +75,14 @@ const normalizarCampos = (datos) => {
 const validarDatosMuestra = (datos) => {
     const errores = [];
 
-    // Si la muestra está rechazada, solo validar campos básicos
-    if (datos.estado === 'Rechazada') {
+    // Si la muestra está rechazada o en cotización, solo validar campos básicos
+    if (datos.estado === 'Rechazada' || datos.estado === 'En Cotizacion') {
         if (!datos.documento) errores.push('El documento es requerido');
         if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
         if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
-        if (!datos.observaciones) errores.push('El motivo de rechazo es requerido');
+        if (datos.estado === 'Rechazada' && !datos.observaciones) {
+            errores.push('El motivo de rechazo es requerido');
+        }
         
         if (errores.length > 0) {
             throw new ValidationError(errores.join('. '));
@@ -134,12 +136,14 @@ const validarDatosMuestra = (datos) => {
         errores.push('Debe seleccionar al menos un análisis');
     }
 
-    // Validar firmas solo si no es una muestra rechazada
-    if (!datos.firmas?.firmaAdministrador?.firma) {
-        errores.push('La firma del administrador es requerida');
-    }
-    if (!datos.firmas?.firmaCliente?.firma) {
-        errores.push('La firma del cliente es requerida');
+    // Validar firmas solo si no es una muestra rechazada y o En Cotizacion 
+    if (datos.estado !== 'Rechazada' && datos.estado !== 'En Cotizacion' && datos.estado !== 'Pendiente') {
+        if (!datos.firmas?.firmaAdministrador?.firma) {
+            errores.push('La firma del administrador es requerida');
+        }
+        if (!datos.firmas?.firmaCliente?.firma) {
+            errores.push('La firma del cliente es requerida');
+        }
     }
 
     if (errores.length > 0) {
@@ -287,15 +291,20 @@ const obtenerMuestras = async (req, res, next) => {
 
         // Configurar el ordenamiento
         const sort = {};
-        sort[req.pagination.sortBy] = req.pagination.sortOrder === 'desc' ? -1 : 1;
+        if (req.pagination && req.pagination.sortBy) {
+            sort[req.pagination.sortBy] = req.pagination.sortOrder === 'desc' ? -1 : 1;
+        } else {
+            // Ordenamiento por defecto
+            sort.createdAt = -1;
+        }
 
         // Ejecutar las consultas en paralelo
         const [muestras, total] = await Promise.all([
             Muestra.find(filtro)
                 .select('id_muestra tipoDeAgua lugarMuestreo fechaHoraMuestreo estado cliente tipoMuestreo tipoAnalisis identificacionMuestra planMuestreo condicionesAmbientales preservacionMuestra analisisSeleccionados rechazoMuestra observaciones firmas historial creadoPor actualizadoPor createdAt updatedAt precioTotal')
                 .sort(sort)
-                .skip(req.pagination.skip)
-                .limit(req.pagination.limit)
+                .skip(req.pagination?.skip || 0)
+                .limit(req.pagination?.limit || 10)
                 .lean(),
             Muestra.countDocuments(filtro)
         ]);
@@ -305,21 +314,26 @@ const obtenerMuestras = async (req, res, next) => {
             const muestraFormateada = {
                 ...muestra,
                 fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
-                historial: muestra.historial.map(h => ({
+                historial: Array.isArray(muestra.historial) ? muestra.historial.map(h => ({
                     ...h,
                     fechaCambio: formatearFechaHora(h.fechaCambio)
-                })),
+                })) : [],
                 createdAt: formatearFechaHora(muestra.createdAt),
                 updatedAt: formatearFechaHora(muestra.updatedAt),
-                creadoPor: {
+                creadoPor: muestra.creadoPor ? {
                     ...muestra.creadoPor,
                     fechaCreacion: formatearFechaHora(muestra.createdAt)
-                },
-                precioTotal: formatearPrecio(muestra.precioTotal)
+                } : null,
+                precioTotal: formatearPrecio(muestra.precioTotal),
+                analisisSeleccionados: Array.isArray(muestra.analisisSeleccionados) ? 
+                    muestra.analisisSeleccionados.map(analisis => ({
+                        ...analisis,
+                        precio: formatearPrecioCOP(analisis.precio)
+                    })) : []
             };
 
-            // Eliminar el campo firmas si la muestra está rechazada
-            if (muestra.estado === 'Rechazada') {
+            // Eliminar el campo firmas si la muestra está rechazada o en cotización
+            if (muestra.estado === 'Rechazada' || muestra.estado === 'En Cotizacion') {
                 delete muestraFormateada.firmas;
             }
 
@@ -327,14 +341,16 @@ const obtenerMuestras = async (req, res, next) => {
         });
 
         // Formatear la respuesta con paginación
-        const respuesta = formatPaginationResponse(
-            muestrasFormateadas,
-            total,
-            req.pagination
-        );
+        const respuesta = req.pagination ? 
+            formatPaginationResponse(muestrasFormateadas, total, req.pagination) : 
+            {
+                data: muestrasFormateadas,
+                total
+            };
 
         ResponseHandler.success(res, respuesta, 'Muestras obtenidas correctamente');
     } catch (error) {
+        console.error('Error al obtener muestras:', error);
         next(error);
     }
 };
@@ -430,25 +446,32 @@ const obtenerMuestra = async (req, res, next) => {
     }
 };
 
-// Función para calcular el total de análisis seleccionados
-const calcularTotalAnalisis = (analisisSeleccionados) => {
-    let total = 0;
-    
-    // Obtener todos los análisis disponibles
-    const todosLosAnalisis = [
-        ...analisisDisponibles.fisicoquimico,
-        ...analisisDisponibles.microbiologico
-    ];
-    
-    // Calcular el total sumando los precios de los análisis seleccionados
-    analisisSeleccionados.forEach(nombreAnalisis => {
-        const analisis = todosLosAnalisis.find(a => a.nombre === nombreAnalisis);
-        if (analisis) {
-            total += analisis.precio;
-        }
-    });
-    
-    return total;
+// Función para procesar análisis y calcular precio total
+const procesarAnalisisYPrecio = (analisisSeleccionados) => {
+    let analisisLimpios = [];
+    let precioTotal = 0;
+
+    if (analisisSeleccionados && Array.isArray(analisisSeleccionados)) {
+        analisisLimpios = analisisSeleccionados.map(analisis => {
+            // Asegurarse de que el precio sea un número
+            const precio = typeof analisis.precio === 'string' ? 
+                parseInt(analisis.precio.replace(/[^0-9]/g, '')) : 
+                (analisis.precio || 0);
+            
+            // Acumular el precio total
+            precioTotal += precio;
+
+            return {
+                nombre: analisis.nombre,
+                precio: precio,
+                unidad: analisis.unidad,
+                metodo: analisis.metodo,
+                rango: analisis.rango
+            };
+        });
+    }
+
+    return { analisisLimpios, precioTotal };
 };
 
 const registrarMuestra = async (req, res, next) => {
@@ -460,20 +483,31 @@ const registrarMuestra = async (req, res, next) => {
             throw new ValidationError('No tiene permisos para registrar muestras. Se requiere rol de administrador');
         }
 
-        // Calcular el precio total de los análisis
-        const precioTotal = datos.analisisSeleccionados.reduce((total, analisis) => {
-            // Asegurarse de que el precio sea un número
-            const precio = typeof analisis.precio === 'string' ? 
-                parseInt(analisis.precio.replace(/[^0-9]/g, '')) : 
-                (analisis.precio || 0);
-            return total + precio;
-        }, 0);
+        // Procesar análisis y calcular precio total
+        const { analisisLimpios, precioTotal } = procesarAnalisisYPrecio(datos.analisisSeleccionados);
 
-        console.log('Análisis seleccionados:', datos.analisisSeleccionados);
+        console.log('Análisis seleccionados:', analisisLimpios);
         console.log('Precio total calculado:', precioTotal);
 
-        // Validar los datos de la muestra
-        validarDatosMuestra(datos);
+        // Determinar el estado inicial de la muestra
+        const esRechazada = datos.estado === 'Rechazada';
+        const esCotizada = datos.estado === 'En Cotizacion';
+        
+        let estadoInicial;
+        if (esRechazada) {
+            estadoInicial = 'Rechazada';
+        } else if (esCotizada) {
+            estadoInicial = 'En Cotizacion';
+        } else {
+            estadoInicial = 'Recibida';
+        }
+
+        // Validar que el estado sea válido
+        if (!estadosValidos.includes(estadoInicial)) {
+            throw new ValidationError(`Estado no válido: ${estadoInicial}. Los estados válidos son: ${estadosValidos.join(', ')}`);
+        }
+
+        const motivoRechazo = esRechazada ? datos.observaciones : '';
 
         // Verificar que tenemos el ID del usuario
         if (!req.usuario || !req.usuario.id) {
@@ -556,49 +590,25 @@ const registrarMuestra = async (req, res, next) => {
         
         const id_muestra = `${datos.tipoDeAgua.codigo}${datos.tipoAnalisis.charAt(0)}${año}${mes}${dia}${consecutivo}`;
 
-        // Determinar si la muestra está siendo rechazada
-        const esRechazada = datos.estado === 'Rechazada';
-        const motivoRechazo = esRechazada ? datos.observaciones : '';
-
-        // Preparar la estructura de firmas solo si la muestra no está siendo rechazada
-        const firmas = esRechazada ? {} : {
-            firmaAdministrador: {
-                nombre: datosAdministrador.nombre,
-                documento: datosAdministrador.documento,
-                firma: datos.firmas?.firmaAdministrador?.firma || ''
-            },
-            firmaCliente: {
-                nombre: datosCliente.nombre,
-                documento: datosCliente.documento,
-                firma: datos.firmas?.firmaCliente?.firma || ''
-            }
-        };
-
-        // Limpiar y estructurar los análisis seleccionados
-        const analisisSeleccionadosLimpios = datos.analisisSeleccionados.map(analisis => ({
-            nombre: analisis.nombre,
-            precio: analisis.precio,
-            unidad: analisis.unidad,
-            metodo: analisis.metodo,
-            rango: analisis.rango
-        }));
-
         // Crear la muestra con los datos formateados correctamente
         const muestra = new Muestra({
             ...datos,
             id_muestra,
             cliente: datosCliente,
-            estado: esRechazada ? 'Rechazada' : 'Recibida',
+            estado: estadoInicial,
             preservacionMuestra: datos.preservacionMuestra,
             descripcion: datos.descripcion,
             precioTotal,
-            analisisSeleccionados: analisisSeleccionadosLimpios,
-            rechazoMuestra: {
-                rechazada: esRechazada,
+            analisisSeleccionados: analisisLimpios,
+            rechazoMuestra: esRechazada ? {
+                rechazada: true,
                 motivo: motivoRechazo,
-                fechaRechazo: esRechazada ? new Date() : null
+                fechaRechazo: new Date()
+            } : {
+                rechazada: false,
+                motivo: null,
+                fechaRechazo: null
             },
-            ...(esRechazada ? {} : { firmas }), // Solo incluir firmas si no está rechazada
             creadoPor: {
                 nombre: datosAdministrador.nombre,
                 documento: datosAdministrador.documento,
@@ -606,10 +616,12 @@ const registrarMuestra = async (req, res, next) => {
                 fechaCreacion: formatearFechaHora(fecha)
             },
             historial: [{
-                estado: esRechazada ? 'Rechazada' : 'Recibida',
+                estado: estadoInicial,
                 administrador: datosAdministrador,
                 fechaCambio: new Date(),
-                observaciones: esRechazada ? motivoRechazo : (datos.observaciones || 'Registro inicial de muestra')
+                observaciones: esRechazada ? motivoRechazo : 
+                             (esCotizada ? 'Muestra en proceso de cotización' : 
+                             'Muestra recibida')
             }],
             actualizadoPor: []
         });
@@ -641,65 +653,70 @@ const registrarMuestra = async (req, res, next) => {
             condicionesAmbientales: muestraGuardada.condicionesAmbientales,
             preservacionMuestra: muestraGuardada.preservacionMuestra,
             descripcion: muestraGuardada.descripcion,
-            analisisSeleccionados: muestraGuardada.analisisSeleccionados.map(analisis => ({
-                nombre: analisis.nombre,
-                precio: formatearPrecioCOP(analisis.precio),
-                unidad: analisis.unidad,
-                metodo: analisis.metodo,
-                rango: analisis.rango
-            })),
+            analisisSeleccionados: Array.isArray(muestraGuardada.analisisSeleccionados) ? 
+                muestraGuardada.analisisSeleccionados.map(analisis => ({
+                    nombre: analisis.nombre,
+                    precio: formatearPrecioCOP(analisis.precio),
+                    unidad: analisis.unidad,
+                    metodo: analisis.metodo,
+                    rango: analisis.rango
+                })) : [],
             estado: muestraGuardada.estado,
             rechazoMuestra: {
                 rechazada: muestraGuardada.rechazoMuestra.rechazada,
                 motivo: muestraGuardada.rechazoMuestra.motivo
             },
             observaciones: muestraGuardada.observaciones,
-            historial: muestraGuardada.historial.map(h => ({
-                estado: h.estado,
-                administrador: {
-                    nombre: h.administrador.nombre,
-                    documento: h.administrador.documento,
-                    email: h.administrador.email
-                },
-                fechaCambio: formatearFechaHora(h.fechaCambio),
-                observaciones: h.observaciones
-            })),
+            historial: Array.isArray(muestraGuardada.historial) ? 
+                muestraGuardada.historial.map(h => ({
+                    estado: h.estado,
+                    administrador: {
+                        nombre: h.administrador.nombre,
+                        documento: h.administrador.documento,
+                        email: h.administrador.email
+                    },
+                    fechaCambio: formatearFechaHora(h.fechaCambio),
+                    observaciones: h.observaciones
+                })) : [],
             creadoPor: {
                 nombre: muestraGuardada.creadoPor.nombre,
                 documento: muestraGuardada.creadoPor.documento,
                 email: muestraGuardada.creadoPor.email,
                 fechaCreacion: formatearFechaHora(muestraGuardada.createdAt)
             },
-            actualizadoPor: muestraGuardada.actualizadoPor.map(a => ({
-                nombre: a.nombre,
-                documento: a.documento,
-                fecha: formatearFechaHora(a.fecha),
-                accion: a.accion
-            })),
+            actualizadoPor: Array.isArray(muestraGuardada.actualizadoPor) ? 
+                muestraGuardada.actualizadoPor.map(a => ({
+                    nombre: a.nombre,
+                    documento: a.documento,
+                    fecha: formatearFechaHora(a.fecha),
+                    accion: a.accion
+                })) : [],
             createdAt: formatearFechaHora(muestraGuardada.createdAt),
             updatedAt: formatearFechaHora(muestraGuardada.updatedAt),
             precioTotal: formatearPrecioCOP(muestraGuardada.precioTotal)
         };
 
-        // Solo incluir firmas en la respuesta si la muestra no está rechazada
-        if (!esRechazada) {
+        // Solo incluir firmas en la respuesta si la muestra no está rechazada ni en cotización
+        if (!esRechazada && !esCotizada && muestraGuardada.firmas) {
             respuesta.firmas = {
-                firmaAdministrador: {
+                firmaAdministrador: muestraGuardada.firmas.firmaAdministrador ? {
                     nombre: muestraGuardada.firmas.firmaAdministrador.nombre,
                     documento: muestraGuardada.firmas.firmaAdministrador.documento,
                     firma: muestraGuardada.firmas.firmaAdministrador.firma
-                },
-                firmaCliente: {
+                } : null,
+                firmaCliente: muestraGuardada.firmas.firmaCliente ? {
                     nombre: muestraGuardada.firmas.firmaCliente.nombre,
                     documento: muestraGuardada.firmas.firmaCliente.documento,
                     firma: muestraGuardada.firmas.firmaCliente.firma
-                }
+                } : null
             };
         }
 
         return res.status(201).json({
             success: true,
-            message: esRechazada ? 'Muestra rechazada exitosamente' : 'Muestra registrada exitosamente',
+            message: esRechazada ? 'Muestra rechazada exitosamente' : 
+                    (esCotizada ? 'Muestra en proceso de cotización exitosamente' : 
+                    'Muestra registrada exitosamente'),
             data: {
                 muestra: respuesta
             }
@@ -860,6 +877,67 @@ const obtenerMuestrasPorTipoEstado = async (req, res) => {
     }
 };
 
+const actualizarEstadoMuestra = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { estado } = req.body;
+
+        // Validar que el estado sea válido
+        if (!estadosValidos.includes(estado)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Estado no válido'
+            });
+        }
+
+        // Obtener la muestra
+        const muestra = await Muestra.findById(id);
+        if (!muestra) {
+            return res.status(404).json({
+                success: false,
+                message: 'Muestra no encontrada'
+            });
+        }
+
+        const estadoAnterior = muestra.estado;
+
+        // Actualizar el estado
+        muestra.estado = estado;
+
+        // Registrar el cambio en el historial
+        muestra.historialEstados.push({
+            estado,
+            estadoAnterior,
+            fecha: new Date(),
+            usuario: req.usuario._id,
+            observaciones: req.body.observaciones || `Cambio de estado de ${estadoAnterior} a ${estado}`
+        });
+
+        // Si la muestra es rechazada, actualizar el campo de rechazo
+        if (estado === 'Rechazada') {
+            muestra.rechazoMuestra = {
+                rechazada: true,
+                motivo: req.body.observaciones || 'Muestra rechazada',
+                fechaRechazo: new Date()
+            };
+        }
+
+        await muestra.save();
+
+        res.json({
+            success: true,
+            message: 'Estado de la muestra actualizado correctamente',
+            data: muestra
+        });
+    } catch (error) {
+        console.error('Error al actualizar estado de la muestra:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al actualizar el estado de la muestra'
+        });
+    }
+};
+
 module.exports = {
     // Controladores de Usuario
     validarUsuarioController,
@@ -877,5 +955,6 @@ module.exports = {
     registrarFirma,
     eliminarMuestra,
     crearMuestra,
-    obtenerMuestrasPorTipoEstado
+    obtenerMuestrasPorTipoEstado,
+    actualizarEstadoMuestra
 };

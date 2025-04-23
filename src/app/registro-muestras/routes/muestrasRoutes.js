@@ -21,6 +21,7 @@ router.get('/', paginationMiddleware, muestrasController.obtenerMuestras);
 router.get('/:id', muestrasController.obtenerMuestra);
 router.put('/:id', verificarToken, muestrasController.actualizarMuestra);
 router.delete('/:id', verificarToken, verificarRolAdministrador, muestrasController.eliminarMuestra);
+router.put('/:id/estado', verificarToken, verificarRolAdministrador, muestrasController.actualizarEstadoMuestra);
 
 // ===== RUTAS DE LABORATORIO (verificarLaboratorista) =====
 // Rutas específicas para laboratoristas

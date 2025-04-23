@@ -87,6 +87,14 @@ const obtenerMuestra = async (id) => {
 
 // Función para procesar firmas
 const procesarFirmas = (datosMuestra, usuario) => {
+    // Si no hay firmas o el estado es Rechazada, Cotizada o Pendiente, devolver un objeto vacío
+    if (!datosMuestra.firmas || 
+        datosMuestra.estado === 'Rechazada' || 
+        datosMuestra.estado === 'Cotizada' || 
+        datosMuestra.estado === 'Pendiente') {
+        return {};
+    }
+    
     return {
         administrador: {
             nombre: usuario.nombre,
@@ -126,16 +134,23 @@ const crearMuestra = async (datosMuestra, usuario) => {
             ...datosMuestra,
             tipoMuestreo: datosMuestra.tipoMuestreo === "Compuesto" ? "Compuesto" : "Simple",
             tipoAnalisis: datosMuestra.tipoAnalisis === "Fisicoquimico" ? "Fisicoquímico" : datosMuestra.tipoAnalisis,
-            estado: datosMuestra.estado || 'Recibida'
+            estado: datosMuestra.estado || 'Pendiente'
         };
+
+        // Validar estado y observaciones para rechazo
+        if (datosNormalizados.estado === 'Rechazada' && !datosNormalizados.observaciones) {
+            throw new ValidationError('Para rechazar una muestra debe especificar el motivo en las observaciones');
+        }
 
         // Calcular el precio total si no está definido
         if (!datosNormalizados.precioTotal && datosNormalizados.analisisSeleccionados) {
             datosNormalizados.precioTotal = calcularPrecioTotal(datosNormalizados.analisisSeleccionados);
         }
 
-        // Procesar las firmas
-        const firmas = procesarFirmas(datosNormalizados, usuario);
+        // Procesar las firmas - No se requieren para cotización o rechazo
+        const firmas = (datosNormalizados.estado === 'Rechazada' || 
+                       datosNormalizados.estado === 'Cotizada' || 
+                       datosNormalizados.estado === 'Pendiente') ? {} : procesarFirmas(datosNormalizados, usuario);
 
         // Crear el objeto de muestra con los datos normalizados
         const muestra = new Muestra({
@@ -150,7 +165,10 @@ const crearMuestra = async (datosMuestra, usuario) => {
             historial: [crearEntradaHistorial(
                 datosNormalizados.estado,
                 usuario,
-                datosNormalizados.observaciones || 'Muestra registrada inicialmente'
+                datosNormalizados.observaciones || 
+                (datosNormalizados.estado === 'Rechazada' ? 'Muestra rechazada' : 
+                 datosNormalizados.estado === 'Cotizada' ? 'Muestra en proceso de cotización' : 
+                 'Registro inicial de muestra')
             )],
             actualizadoPor: []
         });

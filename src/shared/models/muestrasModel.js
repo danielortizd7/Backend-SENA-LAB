@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const estadosValidos = ["Recibida", "En análisis", "Finalizada", "Rechazada"];
+const estadosValidos = ["Recibida", "En Proceso", "Finalizada", "En Cotizacion", "Rechazada"];
 
 // Constantes para tipos de muestreo
 const TIPOS_MUESTREO = {
@@ -23,8 +23,9 @@ const SUBTIPOS_RESIDUAL = {
 
 const ESTADOS = {
     RECIBIDA: 'Recibida',
-    EN_PROCESO: 'En proceso',
-    COMPLETADA: 'Completada',
+    EN_PROCESO: 'En Proceso',
+    FINALIZADA: 'Finalizada',
+    EN_COTIZACION: 'En Cotizacion',
     RECHAZADA: 'Rechazada'
 };
 
@@ -64,6 +65,32 @@ const tipoAguaSchema = new mongoose.Schema({
     }
 });
 
+// Esquema para historial de estados
+const historialEstadoSchema = new mongoose.Schema({
+    estado: {
+        type: String,
+        required: true,
+        enum: estadosValidos
+    },
+    estadoAnterior: {
+        type: String,
+        required: true,
+        enum: estadosValidos
+    },
+    fecha: {
+        type: Date,
+        default: Date.now
+    },
+    usuario: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Usuario',
+        required: true
+    },
+    observaciones: {
+        type: String
+    }
+}, { _id: false });
+
 // Esquema para datos de usuario
 const datosUsuarioSchema = new mongoose.Schema({
     documento: {
@@ -88,88 +115,27 @@ const datosUsuarioSchema = new mongoose.Schema({
 const firmasSchema = new mongoose.Schema({
     firmaAdministrador: {
         nombre: {
-            type: String,
-            required: true
+            type: String
         },
         documento: {
-            type: String,
-            required: true
+            type: String
         },
         firma: {
-            type: String,
-            required: true
+            type: String
         }
     },
     firmaCliente: {
         nombre: {
-            type: String,
-            required: true
+            type: String
         },
         documento: {
-            type: String,
-            required: true
+            type: String
         },
         firma: {
-            type: String,
-            required: true
+            type: String
         }
     }
 }, { _id: false });
-
-// Esquema para historial de estados
-const historialEstadoSchema = new mongoose.Schema({
-    estado: {
-        type: String,
-        required: true,
-        enum: ['Recibida', 'En análisis','Finalizada', 'Rechazada']
-    },
-    administrador: {
-        type: datosUsuarioSchema,
-        required: true
-    },
-    fechaCambio: {
-        type: Date,
-        required: true
-    },
-    observaciones: {
-        type: String
-    }
-});
-
-// Esquema para rechazo de muestra
-const rechazoSchema = new mongoose.Schema({
-    rechazada: {
-        type: Boolean,
-        default: false
-    },
-    motivo: {
-        type: String
-    },
-    fechaRechazo: {
-        type: Date
-    }
-});
-
-// Esquema para actualizaciones
-const actualizacionSchema = new mongoose.Schema({
-    usuario: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Usuario',
-        required: true
-    },
-    nombre: {
-        type: String,
-        required: true
-    },
-    fecha: {
-        type: Date,
-        required: true
-    },
-    accion: {
-        type: String,
-        required: true
-    }
-});
 
 // Esquema para análisis seleccionado
 const analisisSeleccionadoSchema = new mongoose.Schema({
@@ -212,8 +178,26 @@ const muestraSchema = new mongoose.Schema({
     
     // 3. Tipo de Agua
     tipoDeAgua: {
-        type: tipoAguaSchema,
-        required: true
+        tipo: {
+            type: String,
+            required: true,
+            enum: Object.values(TIPOS_AGUA)
+        },
+        codigo: {
+            type: String,
+            required: true
+        },
+        descripcion: {
+            type: String,
+            required: true
+        },
+        subtipoResidual: {
+            type: String,
+            enum: Object.values(SUBTIPOS_RESIDUAL),
+            required: function() {
+                return this.tipo === TIPOS_AGUA.RESIDUAL;
+            }
+        }
     },
     
     // 4. Tipo de Muestreo
@@ -248,8 +232,6 @@ const muestraSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-
-    
     
     // 9. Plan de muestreo
     planMuestreo: {
@@ -299,8 +281,8 @@ const muestraSchema = new mongoose.Schema({
     estado: {
         type: String,
         required: true,
-        enum: ['Recibida', 'En análisis', 'Finalizada', 'Rechazada'],
-        default: 'Recibida'
+        enum: estadosValidos,
+        default: "Recibida"
     },
     rechazoMuestra: {
         rechazada: {
@@ -315,29 +297,8 @@ const muestraSchema = new mongoose.Schema({
     observaciones: {
         type: String
     },
-    firmas: {
-        firmaAdministrador: {
-            nombre: String,
-            documento: String,
-            firma: {
-                type: String,
-                required: function() {
-                    return this.estado !== 'Rechazada';
-                }
-            }
-        },
-        firmaCliente: {
-            nombre: String,
-            documento: String,
-            firma: {
-                type: String,
-                required: function() {
-                    return this.estado !== 'Rechazada';
-                }
-            }
-        }
-    },
-    historial: [historialEstadoSchema],
+    firmas: firmasSchema,
+    historialEstados: [historialEstadoSchema],
     creadoPor: {
         type: datosUsuarioSchema,
         required: true

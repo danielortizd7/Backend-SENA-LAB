@@ -1,56 +1,86 @@
+const { Muestra, estadosValidos } = require('../../../shared/models/muestrasModel');
+const Resultado = require('../../ingreso-resultados/models/resultadoModel');
 
-const muestrasModel = require("../../../shared/models/muestrasModel");
-const { Muestra } = require("../../../shared/models/muestrasModel");
-const { Resultado } = require("../../ingreso-resultados/models/resultadoModel");
+async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
+    try {
+        // Validar que el estado sea válido
+        if (!estadosValidos.includes(nuevoEstado)) {
+            throw new Error('Estado no válido');
+        }
 
+        // Obtener la muestra
+        const muestra = await Muestra.findById(idMuestra);
+        if (!muestra) {
+            throw new Error('Muestra no encontrada');
+        }
 
-const estadosValidos = [
-  "Recibida",
-  "En análisis",
-  "Finalizada",
-  "Rechazada",
-];
+        const estadoAnterior = muestra.estado;
 
-const cambiarEstadoMuestra = async (cedula, idMuestra, estado) => {
-  try {
-    if (!estadosValidos.includes(estado)) {
-      throw new Error("Estado inválido.");
+        // Validaciones específicas según el estado
+        switch (nuevoEstado) {
+            case 'En Proceso':
+                if (estadoAnterior !== 'Recibida') {
+                    throw new Error('La muestra debe estar en estado Recibida para pasar a En Proceso');
+                }
+                break;
+            case 'Finalizada':
+                const resultados = await Resultado.find({ idMuestra: idMuestra });
+                if (resultados.length === 0) {
+                    throw new Error('No se puede finalizar una muestra sin resultados');
+                }
+                if (estadoAnterior !== 'En Proceso') {
+                    throw new Error('La muestra debe estar en proceso para ser finalizada');
+                }
+                break;
+            case 'En Cotizacion':
+                if (!muestra.analisisSeleccionados || muestra.analisisSeleccionados.length === 0) {
+                    throw new Error('No se puede cotizar una muestra sin análisis seleccionados');
+                }
+                break;
+            case 'Rechazada':
+                // No necesita validaciones específicas, cualquier muestra puede ser rechazada
+                break;
+            default:
+                throw new Error(`Estado no válido: ${nuevoEstado}`);
+        }
+
+        // Actualizar el historial de estados
+        muestra.historialEstados.push({
+            estado: nuevoEstado,
+            estadoAnterior,
+            fecha: new Date(),
+            usuario: usuario._id,
+            observaciones: usuario.observaciones || `Cambio de estado de ${estadoAnterior} a ${nuevoEstado}`
+        });
+
+        // Actualizar el estado actual
+        muestra.estado = nuevoEstado;
+
+        // Si la muestra es rechazada, actualizar el campo de rechazo
+        if (nuevoEstado === 'Rechazada') {
+            muestra.rechazoMuestra = {
+                rechazada: true,
+                motivo: usuario.observaciones || 'Muestra rechazada',
+                fechaRechazo: new Date()
+            };
+        }
+
+        // Guardar los cambios
+        await muestra.save();
+
+        return {
+            success: true,
+            message: 'Estado actualizado correctamente',
+            muestra
+        };
+    } catch (error) {
+        return {
+            success: false,
+            message: error.message || 'Error al cambiar el estado de la muestra'
+        };
     }
+}
 
-    // Buscar la muestra con el ID correcto
-    let muestra = await Muestra.findOne({ id_muestra: idMuestra });
-
-    if (!muestra) {
-      console.warn(`Advertencia: La muestra con ID ${idMuestra} no existe.`);
-      return null;
-    }
-
-    // Agregar el nuevo estado al historial
-    muestra.historial.push({
-      estado,
-      cedulaLaboratorista: cedula,
-      fechaCambio: new Date(),
-    });
-
-    // Si el estado es "Finalizada", verificar si hay un resultado asociado
-    if (estado === "Finalizada") {
-      const resultado = await Resultado.findOne({ id_muestra: idMuestra });
-      if (resultado) {
-        muestra.resultado = resultado;
-      } else {
-        console.warn(`Advertencia: La muestra ${idMuestra} fue finalizada pero no tiene resultado.`);
-      }
-    }
-
-    // Guardar los cambios en la base de datos
-    await muestra.save();
-    console.log(`Estado de la muestra ${idMuestra} cambiado a "${estado}" correctamente.`);
-    
-    return muestra;
-  } catch (error) {
-    console.error("Error al cambiar estado:", error.message);
-    throw new Error(error.message);
-  }
+module.exports = {
+    cambiarEstadoMuestra
 };
-
-module.exports = { cambiarEstadoMuestra };

@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const Resultado = require("../models/resultadoModel");
 const mongoose = require("mongoose");
-const { ResponseHandler } = require("../../../shared/utils/responseHandler");
+const ResponseHandler = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError, AuthorizationError } = require("../../../shared/errors/AppError");
 const { Muestra } = require("../../../shared/models/muestrasModel");
 const { formatPaginationResponse } = require("../../../shared/middleware/paginationMiddleware");
@@ -13,19 +13,24 @@ const formatearFechaHora = (fecha) => {
     if (!fecha) return null;
     
     try {
-        const fechaObj = new Date(fecha);
+        // Crear fecha y ajustar a zona horaria de Colombia (UTC-5)
+        const fechaUTC = new Date(fecha);
+        const fechaColombia = new Date(fechaUTC.getTime() - (5 * 60 * 60 * 1000));
         
-        const dia = fechaObj.getDate().toString().padStart(2, '0');
-        const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
-        const año = fechaObj.getFullYear();
+        // Formatear fecha
+        const dia = fechaColombia.getUTCDate().toString().padStart(2, '0');
+        const mes = (fechaColombia.getUTCMonth() + 1).toString().padStart(2, '0');
+        const año = fechaColombia.getUTCFullYear();
         
-        let horas = fechaObj.getHours();
-        const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
-        const segundos = fechaObj.getSeconds().toString().padStart(2, '0');
+        // Formatear hora en formato 12 horas con AM/PM
+        let horas = fechaColombia.getUTCHours();
+        const minutos = fechaColombia.getUTCMinutes().toString().padStart(2, '0');
+        const segundos = fechaColombia.getUTCSeconds().toString().padStart(2, '0');
         const ampm = horas >= 12 ? 'PM' : 'AM';
         
+        // Convertir a formato 12 horas
         horas = horas % 12;
-        horas = horas ? horas : 12;
+        horas = horas ? horas : 12; // si es 0, convertir a 12
         horas = horas.toString().padStart(2, '0');
         
         return {
@@ -62,13 +67,25 @@ const registrarResultado = async (req, res) => {
             });
         }
 
+        // Crear fecha actual para todos los timestamps
+        const fechaActual = new Date();
+
         // Preparar datos para el servicio
         const datosResultado = {
             idMuestra,
             resultados,
             observaciones,
             cedulaLaboratorista: usuario.documento,
-            nombreLaboratorista: usuario.nombre
+            nombreLaboratorista: usuario.nombre,
+            createdAt: fechaActual,
+            updatedAt: fechaActual,
+            historialCambios: [{
+                nombre: usuario.nombre,
+                cedula: usuario.documento,
+                fecha: fechaActual,
+                observaciones: observaciones || 'Registro inicial de resultados',
+                cambiosRealizados: { resultados }
+            }]
         };
 
         // Usar el servicio para registrar el resultado
@@ -79,8 +96,8 @@ const registrarResultado = async (req, res) => {
             ...resultado.toObject(),
             resultados: Object.fromEntries(resultado.resultados),
             fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
-            createdAt: formatearFechaHora(resultado.createdAt),
-            updatedAt: formatearFechaHora(resultado.updatedAt),
+            createdAt: formatearFechaHora(fechaActual),
+            updatedAt: formatearFechaHora(fechaActual),
             historialCambios: resultado.historialCambios.map(cambio => ({
                 nombre: cambio.nombre,
                 cedula: cambio.cedula,
@@ -388,151 +405,22 @@ const obtenerResultadoPorMuestra = async (req, res) => {
 
 const verificarResultado = async (req, res) => {
     try {
-        const { idMuestra } = req.params;
-        const { observaciones } = req.body;
+        const { idResultado } = req.params;
         const usuario = req.usuario;
 
-        // Validar rol de administrador
-        if (usuario.rol !== 'administrador') {
-            return res.status(403).json({
-                success: false,
-                message: 'No tiene permisos para verificar resultados. Solo los administradores pueden realizar esta acción.',
-                errorCode: 'AUTHORIZATION_ERROR'
-            });
+        // Verificar que el usuario tiene permisos de administrador
+        if (!usuario.roles.includes('admin')) {
+            throw new ValidationError('No tiene permisos para verificar resultados');
         }
 
-        // Buscar el resultado
-        const resultado = await Resultado.findOne({ idMuestra }).lean();
-        if (!resultado) {
-            return res.status(404).json({
-                success: false,
-                message: 'Resultado no encontrado',
-                errorCode: 'NOT_FOUND'
-            });
-        }
-
-        // Verificar que no esté ya verificado
-        if (resultado.verificado) {
-            return res.status(400).json({
-                success: false,
-                message: 'Este resultado ya ha sido verificado',
-                errorCode: 'VALIDATION_ERROR'
-            });
-        }
-
-        // Obtener los últimos valores de cada análisis
-        const ultimoCambio = resultado.historialCambios[resultado.historialCambios.length - 1];
-        const valoresActuales = {};
-        const resultadosFinales = {};
-
-        Object.entries(ultimoCambio.cambiosRealizados.resultados).forEach(([analisis, datos]) => {
-            if (analisis !== 'verificacion' && analisis !== 'resumenValores') {
-                valoresActuales[analisis] = datos.valorNuevo;
-                // Extraer valor numérico y unidad
-                const match = datos.valorNuevo.match(/^([\d.]+)\s*(.*)$/);
-                if (match) {
-                    resultadosFinales[analisis] = {
-                        valor: match[1],
-                        unidad: match[2].trim()
-                    };
-                }
-            }
+        const resultado = await resultadoService.verificarResultado(idResultado, usuario);
+        
+        ResponseHandler.success(res, {
+            mensaje: 'Resultado verificado exitosamente',
+            resultado
         });
-
-        // Crear resumen de la verificación
-        const resumenVerificacion = Object.entries(valoresActuales)
-            .map(([analisis, valor]) => `${analisis}: ${valor}`)
-            .join(', ');
-
-        // Crear observación detallada si no se proporciona una
-        const observacionFinal = observaciones || 
-            `Verificación completada. Valores finales verificados: ${resumenVerificacion}. ` +
-            `Todos los parámetros han sido revisados y cumplen con los estándares establecidos.`;
-
-        // Actualizar el resultado
-        const resultadoActualizado = await Resultado.findOneAndUpdate(
-            { idMuestra },
-            {
-                $set: {
-                verificado: true,
-                    estado: 'Finalizada',
-                    resultados: resultadosFinales,
-                    observaciones: observacionFinal
-                },
-                $push: {
-                    historialCambios: {
-                        nombre: usuario.nombre,
-                        cedula: usuario.documento,
-                        fecha: new Date(),
-                        observaciones: observacionFinal,
-                        cambiosRealizados: {
-                            resultados: {
-                            verificacion: {
-                                    valorAnterior: "No verificado",
-                                    valorNuevo: "Verificado",
-                                    unidad: "Estado"
-                                },
-                                resumenValores: Object.entries(valoresActuales).reduce((acc, [analisis, valor]) => {
-                                    acc[analisis] = {
-                                        valorVerificado: valor,
-                                        estado: "Aprobado"
-                                    };
-                                    return acc;
-                                }, {})
-                            }
-                        }
-                    }
-                }
-            },
-            { new: true }
-        ).lean();
-
-        // Actualizar el estado de la muestra
-        await Muestra.findOneAndUpdate(
-            { id_muestra: idMuestra },
-            { 
-                estado: 'Finalizada',
-                fechaFinalizacion: new Date()
-            }
-        );
-
-        // Transformar el resultado antes de enviarlo
-        const resultadoCompleto = {
-            success: true,
-            message: 'Resultado verificado exitosamente',
-            data: {
-                _id: resultadoActualizado._id,
-                idMuestra: resultadoActualizado.idMuestra,
-                cliente: resultadoActualizado.cliente,
-                tipoDeAgua: resultadoActualizado.tipoDeAgua,
-                lugarMuestreo: resultadoActualizado.lugarMuestreo,
-                fechaHoraMuestreo: formatearFechaHora(resultadoActualizado.fechaHoraMuestreo),
-                tipoAnalisis: resultadoActualizado.tipoAnalisis,
-                estado: resultadoActualizado.estado,
-                resultados: resultadosFinales,
-                observaciones: observacionFinal,
-                verificado: resultadoActualizado.verificado,
-                cedulaLaboratorista: resultadoActualizado.cedulaLaboratorista,
-                nombreLaboratorista: resultadoActualizado.nombreLaboratorista,
-                historialCambios: resultadoActualizado.historialCambios.map(cambio => ({
-                    ...cambio,
-                    fecha: formatearFechaHora(cambio.fecha)
-                })),
-                createdAt: formatearFechaHora(resultadoActualizado.createdAt),
-                updatedAt: formatearFechaHora(resultadoActualizado.updatedAt),
-                resumenVerificacion: valoresActuales,
-                fechaVerificacion: formatearFechaHora(new Date())
-            }
-        };
-
-        return res.status(200).json(resultadoCompleto);
     } catch (error) {
-        console.error('Error al verificar resultado:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error al verificar el resultado',
-            error: error.message
-        });
+        ResponseHandler.error(res, error);
     }
 };
 
@@ -588,64 +476,62 @@ const obtenerTodosResultados = async (req, res) => {
 
 const eliminarResultado = async (req, res) => {
     try {
-        const { id } = req.params;
-        const resultado = await Resultado.findOneAndDelete({ id_muestra: id });
-
-        if (!resultado) {
-            return res.status(404).json({
-                success: false,
-                message: 'Resultado no encontrado',
-                errorCode: 'NOT_FOUND'
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            message: 'Resultado eliminado exitosamente'
+        const { idResultado } = req.params;
+        await resultadoService.eliminarResultado(idResultado);
+        
+        ResponseHandler.success(res, {
+            mensaje: 'Resultado eliminado exitosamente'
         });
     } catch (error) {
-        console.error('Error al eliminar resultado:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error al eliminar el resultado',
-            error: error.message
-        });
+        ResponseHandler.error(res, error);
     }
 };
 
 const obtenerResultadosPorMuestra = async (req, res) => {
     try {
         const { idMuestra } = req.params;
-        const resultados = await Resultado.find({ idMuestra })
-            .select('-__v')
-            .sort({ createdAt: -1 })
-            .lean();
-
-        // Formatear las fechas en cada resultado
-        const resultadosFormateados = resultados.map(resultado => {
-            return {
-                ...resultado,
-                fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
-                createdAt: formatearFechaHora(resultado.createdAt),
-                updatedAt: formatearFechaHora(resultado.updatedAt),
-                historialCambios: resultado.historialCambios?.map(cambio => ({
-                    ...cambio,
-                    fecha: formatearFechaHora(cambio.fecha)
-                })) || []
-            };
-        });
-
-        return res.status(200).json({
-            success: true,
-            data: resultadosFormateados
+        const resultados = await resultadoService.obtenerResultadosPorMuestra(idMuestra);
+        
+        ResponseHandler.success(res, {
+            resultados
         });
     } catch (error) {
-        console.error('Error al obtener resultados por muestra:', error);
-        return res.status(500).json({
-            success: false,
-            message: 'Error al obtener los resultados de la muestra',
-            error: error.message
+        ResponseHandler.error(res, error);
+    }
+};
+
+const actualizarResultado = async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            throw new ValidationError('Error de validación', errors.array());
+        }
+
+        const { idResultado } = req.params;
+        const datosActualizacion = req.body;
+        const usuario = req.usuario;
+
+        const resultado = await resultadoService.actualizarResultado(idResultado, datosActualizacion, usuario);
+        
+        ResponseHandler.success(res, {
+            mensaje: 'Resultado actualizado exitosamente',
+            resultado
         });
+    } catch (error) {
+        ResponseHandler.error(res, error);
+    }
+};
+
+const obtenerResultadoPorId = async (req, res) => {
+    try {
+        const { idResultado } = req.params;
+        const resultado = await resultadoService.obtenerResultadoPorId(idResultado);
+        
+        ResponseHandler.success(res, {
+            resultado
+        });
+    } catch (error) {
+        ResponseHandler.error(res, error);
     }
 };
 
@@ -658,5 +544,7 @@ module.exports = {
     obtenerTodosResultados,
     verificarResultado,
     eliminarResultado,
-    obtenerResultadosPorMuestra
+    obtenerResultadosPorMuestra,
+    actualizarResultado,
+    obtenerResultadoPorId
 };

@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const { TIPOS_ANALISIS, MATRICES, UNIDADES_MEDIDA, METODOS_ANALISIS } = require("../data/analisisData");
+const { TIPOS_ANALISIS, MATRICES, UNIDADES_MEDIDA } = require("../data/analisisData");
 
 // Función para limpiar el precio (remover comas y convertir a número)
 const limpiarPrecio = (precio) => {
@@ -41,8 +41,7 @@ const analisisSchema = new mongoose.Schema({
     },
     metodo: {
         type: String,
-        required: true,
-        enum: METODOS_ANALISIS
+        required: true
     },
     unidad: {
         type: String,
@@ -61,17 +60,8 @@ const analisisSchema = new mongoose.Schema({
         }
     },
     matriz: {
-        type: [{
-            type: String,
-            enum: Object.values(MATRICES)
-        }],
-        required: true,
-        validate: {
-            validator: function(v) {
-                return v && v.length > 0;
-            },
-            message: 'Debe especificar al menos una matriz'
-        }
+        type: [String],
+        required: true
     },
     activo: {
         type: Boolean,
@@ -99,8 +89,7 @@ analisisSchema.pre('save', function(next) {
     next();
 });
 
-// Verificar si el modelo ya existe antes de crearlo
-mongoose.deleteModel('Analisis'); // Eliminar el modelo si existe
+// Eliminar el modelo si existe
 const Analisis = mongoose.model("Analisis", analisisSchema, 'analisis'); // Forzar el nombre de la colección
 
 module.exports = Analisis; 
