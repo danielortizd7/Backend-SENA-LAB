@@ -938,6 +938,17 @@ const actualizarEstadoMuestra = async (req, res) => {
     }
 };
 
+// Obtener muestras por ID de cliente
+const obtenerMuestrasPorCliente = async (req, res, next) => {
+    try {
+        const { documento } = req.params;
+        const muestras = await muestrasService.obtenerMuestrasPorCliente(documento);
+        ResponseHandler.success(res, { muestras }, 'Muestras obtenidas correctamente');
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     // Controladores de Usuario
     validarUsuarioController,
@@ -956,5 +967,6 @@ module.exports = {
     eliminarMuestra,
     crearMuestra,
     obtenerMuestrasPorTipoEstado,
-    actualizarEstadoMuestra
+    actualizarEstadoMuestra,
+    obtenerMuestrasPorCliente
 };
