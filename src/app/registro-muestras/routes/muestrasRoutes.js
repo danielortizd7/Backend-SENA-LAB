@@ -15,27 +15,20 @@ router.get('/tipos-agua', verificarToken, verificarRolAdministrador, muestrasCon
 router.post('/tipos-agua', verificarToken, verificarRolAdministrador, muestrasController.crearTipoAgua);
 router.put('/tipos-agua/:id', verificarToken, verificarRolAdministrador, muestrasController.actualizarTipoAgua);
 
-// Rutas de Muestras
+// Rutas específicas de muestras
+router.get('/cliente/:identificador', verificarToken, muestrasController.obtenerMuestrasPorCliente);
+router.get('/tipo/:tipo', verificarToken, muestrasController.obtenerMuestrasPorTipoEstado);
+
+// ===== RUTAS DE LABORATORIO (verificarLaboratorista) =====
+router.get('/lab', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestras);
+router.get('/lab/:id', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestra);
+
+// Rutas generales de muestras
 router.post('/', verificarToken, verificarRolAdministrador, muestrasController.registrarMuestra);
 router.get('/', paginationMiddleware, muestrasController.obtenerMuestras);
 router.get('/:id', muestrasController.obtenerMuestra);
 router.put('/:id', verificarToken, muestrasController.actualizarMuestra);
 router.delete('/:id', verificarToken, verificarRolAdministrador, muestrasController.eliminarMuestra);
 router.put('/:id/estado', verificarToken, verificarRolAdministrador, muestrasController.actualizarEstadoMuestra);
-
-// ===== RUTAS DE LABORATORIO (verificarLaboratorista) =====
-// Rutas específicas para laboratoristas
-router.get('/lab', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestras);
-router.get('/lab/:id', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestra);
-
-// Rutas para muestras
-router.get('/muestras', verificarToken, muestrasController.obtenerMuestras);
-router.get('/muestras/:id', verificarToken, muestrasController.obtenerMuestra);
-router.post('/muestras', verificarToken, muestrasController.crearMuestra);
-router.put('/muestras/:id', verificarToken, muestrasController.actualizarMuestra);
-router.delete('/muestras/:id', verificarToken, muestrasController.eliminarMuestra);
-router.get('/muestras/tipo/:tipo', verificarToken, muestrasController.obtenerMuestrasPorTipoEstado);
-router.put('/muestras/:id/estado', verificarToken, muestrasController.actualizarEstadoMuestra);
-router.get('/cliente/:documento', verificarToken, muestrasController.obtenerMuestrasPorCliente);
 
 module.exports = router; 

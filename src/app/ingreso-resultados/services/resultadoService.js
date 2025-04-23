@@ -2,6 +2,7 @@ const Resultado = require('../models/resultadoModel');
 const Analisis = require("../../../shared/models/analisisModel");
 const { Muestra } = require("../../../shared/models/muestrasModel");
 const { ValidationError } = require('../../../shared/errors/AppError');
+const mongoose = require('mongoose');
 
 const procesarValorUnidad = (valor, unidad, analisisInfo) => {
     if (!valor) return null;
@@ -88,8 +89,12 @@ const registrarResultado = async (datosEntrada) => {
         const resultado = new Resultado({
             idMuestra: datosEntrada.idMuestra,
             cliente: {
+                _id: muestra.cliente._id || new mongoose.Types.ObjectId(),
                 nombre: muestra.cliente.nombre,
-                documento: muestra.cliente.documento
+                documento: muestra.cliente.documento,
+                email: muestra.cliente.email,
+                telefono: muestra.cliente.telefono,
+                direccion: muestra.cliente.direccion
             },
             tipoDeAgua: muestra.tipoDeAgua,
             lugarMuestreo: muestra.lugarMuestreo,
@@ -102,6 +107,7 @@ const registrarResultado = async (datosEntrada) => {
             cedulaLaboratorista: datosEntrada.cedulaLaboratorista,
             nombreLaboratorista: datosEntrada.nombreLaboratorista,
             historialCambios: [{
+                _id: new mongoose.Types.ObjectId(),
                 nombre: datosEntrada.nombreLaboratorista,
                 cedula: datosEntrada.cedulaLaboratorista,
                 fecha: new Date(),
@@ -185,41 +191,70 @@ const obtenerResultadosPorMuestra = async (idMuestra) => {
 };
 
 const actualizarResultado = async (idResultado, datosActualizacion, usuario) => {
-    const resultado = await Resultado.findById(idResultado);
-    if (!resultado) {
-        throw new ValidationError('Resultado no encontrado');
-    }
-
-    if (resultado.estado === 'Verificado') {
-        throw new ValidationError('No se puede modificar un resultado verificado');
-    }
-
-    // Registrar el cambio en el historial
-    const cambio = {
-        usuario: usuario._id,
-        detalles: {
-            resultadosAnteriores: resultado.resultados,
-            resultadosNuevos: datosActualizacion.resultados
+    try {
+        // Verificar que el resultado existe
+        const resultado = await Resultado.findById(idResultado);
+        if (!resultado) {
+            throw new ValidationError('Resultado no encontrado');
         }
-    };
 
-    if (datosActualizacion.observaciones) {
-        cambio.observaciones = datosActualizacion.observaciones;
-    }
+        if (resultado.estado === 'Verificado') {
+            throw new ValidationError('No se puede modificar un resultado verificado');
+        }
 
-    // Actualizar los datos
-    if (datosActualizacion.resultados) {
-        resultado.resultados = datosActualizacion.resultados;
-    }
-    
-    if (datosActualizacion.observaciones) {
-        resultado.observaciones = datosActualizacion.observaciones;
-    }
+        // Obtener los valores anteriores para el historial
+        const cambiosRealizados = {
+            resultados: {}
+        };
 
-    resultado.historialCambios.push(cambio);
-    
-    await resultado.save();
-    return resultado;
+        // Procesar los cambios en los resultados
+        if (datosActualizacion.resultados) {
+            for (const [parametro, nuevoValor] of Object.entries(datosActualizacion.resultados)) {
+                const valorAnterior = resultado.resultados.get(parametro);
+                
+                cambiosRealizados.resultados[parametro] = {
+                    valorAnterior: valorAnterior ? `${valorAnterior.valor} ${valorAnterior.unidad}` : 'No registrado',
+                    valorNuevo: `${nuevoValor.valor} ${nuevoValor.unidad}`,
+                    unidad: nuevoValor.unidad,
+                    metodo: nuevoValor.metodo
+                };
+
+                // Actualizar el valor en el mapa de resultados
+                resultado.resultados.set(parametro, {
+                    valor: nuevoValor.valor,
+                    unidad: nuevoValor.unidad,
+                    metodo: nuevoValor.metodo,
+                    tipo: nuevoValor.tipo
+                });
+            }
+        }
+
+        // Crear el registro del historial
+        const nuevoHistorial = {
+            _id: new mongoose.Types.ObjectId(),
+            nombre: usuario.nombre || datosActualizacion.nombreLaboratorista,
+            cedula: usuario.cedula || datosActualizacion.cedulaLaboratorista,
+            fecha: new Date(),
+            observaciones: datosActualizacion.observaciones || '',
+            cambiosRealizados: cambiosRealizados
+        };
+
+        // Actualizar observaciones si se proporcionaron
+        if (datosActualizacion.observaciones) {
+            resultado.observaciones = datosActualizacion.observaciones;
+        }
+
+        // Agregar el nuevo registro al historial
+        resultado.historialCambios.push(nuevoHistorial);
+
+        // Guardar los cambios
+        await resultado.save();
+
+        return resultado;
+    } catch (error) {
+        console.error('Error al actualizar el resultado:', error);
+        throw error;
+    }
 };
 
 module.exports = {

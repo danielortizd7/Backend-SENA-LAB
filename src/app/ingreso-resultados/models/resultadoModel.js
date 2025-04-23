@@ -42,17 +42,28 @@ const cambioResultadoSchema = new mongoose.Schema({
 
 // Esquema para datos de usuario
 const datosUsuarioSchema = new mongoose.Schema({
-    documento: {
-        type: String,
-        required: true
+    _id: {
+        type: mongoose.Schema.Types.ObjectId,
+        auto: true
     },
     nombre: {
         type: String,
         required: true
-    }
+    },
+    documento: {
+        type: String,
+        required: true
+    },
+    email: String,
+    telefono: String,
+    direccion: String
 }, { _id: false });
 
 const historialCambioSchema = new mongoose.Schema({
+    _id: {
+        type: mongoose.Schema.Types.ObjectId,
+        auto: true
+    },
     nombre: {
         type: String,
         required: true
@@ -63,17 +74,13 @@ const historialCambioSchema = new mongoose.Schema({
     },
     fecha: {
         type: Date,
-        required: true
+        required: true,
+        default: Date.now
     },
-    observaciones: {
-        type: String,
-        default: "Sin observaciones"
-    },
+    observaciones: String,
     cambiosRealizados: {
-        resultados: {
-            type: Map,
-            of: cambioResultadoSchema
-        }
+        type: mongoose.Schema.Types.Mixed,
+        required: true
     }
 }, { _id: false });
 

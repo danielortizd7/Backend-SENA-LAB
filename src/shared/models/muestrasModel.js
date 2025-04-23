@@ -93,6 +93,10 @@ const historialEstadoSchema = new mongoose.Schema({
 
 // Esquema para datos de usuario
 const datosUsuarioSchema = new mongoose.Schema({
+    _id: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true
+    },
     documento: {
         type: String,
         required: true
@@ -109,7 +113,7 @@ const datosUsuarioSchema = new mongoose.Schema({
         fecha: String,
         hora: String
     }
-}, { _id: false });
+});
 
 // Esquema para las firmas
 const firmasSchema = new mongoose.Schema({

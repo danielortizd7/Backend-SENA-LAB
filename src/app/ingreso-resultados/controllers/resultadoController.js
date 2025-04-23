@@ -67,49 +67,86 @@ const registrarResultado = async (req, res) => {
             });
         }
 
+        // Obtener la muestra para tener los datos completos
+        const muestra = await Muestra.findOne({ id_muestra: idMuestra }).lean();
+        if (!muestra) {
+            return res.status(404).json({
+                success: false,
+                message: 'Muestra no encontrada',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
         // Crear fecha actual para todos los timestamps
         const fechaActual = new Date();
 
         // Preparar datos para el servicio
         const datosResultado = {
             idMuestra,
+            cliente: {
+                documento: muestra.cliente.documento,
+                nombre: muestra.cliente.nombre
+            },
+            tipoDeAgua: muestra.tipoDeAgua,
+            lugarMuestreo: muestra.lugarMuestreo,
+            fechaHoraMuestreo: muestra.fechaHoraMuestreo,
+            tipoAnalisis: muestra.tipoAnalisis,
+            estado: muestra.estado,
             resultados,
             observaciones,
+            verificado: false,
             cedulaLaboratorista: usuario.documento,
             nombreLaboratorista: usuario.nombre,
-            createdAt: fechaActual,
-            updatedAt: fechaActual,
             historialCambios: [{
                 nombre: usuario.nombre,
                 cedula: usuario.documento,
                 fecha: fechaActual,
                 observaciones: observaciones || 'Registro inicial de resultados',
                 cambiosRealizados: { resultados }
-            }]
+            }],
+            createdAt: fechaActual,
+            updatedAt: fechaActual
         };
 
         // Usar el servicio para registrar el resultado
         const resultado = await resultadoService.registrarResultado(datosResultado);
 
+        // Obtener el resultado recién creado con todos los datos
+        const resultadoGuardado = await Resultado.findById(resultado._id)
+            .lean();
+
+        if (!resultadoGuardado) {
+            throw new Error('Error al recuperar el resultado guardado');
+        }
+
         // Formatear el resultado para la respuesta
         const resultadoFormateado = {
-            ...resultado.toObject(),
-            resultados: Object.fromEntries(resultado.resultados),
-            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
-            createdAt: formatearFechaHora(fechaActual),
-            updatedAt: formatearFechaHora(fechaActual),
-            historialCambios: resultado.historialCambios.map(cambio => ({
+            _id: resultadoGuardado._id,
+            idMuestra: resultadoGuardado.idMuestra,
+            cliente: {
+                documento: resultadoGuardado.cliente.documento,
+                nombre: resultadoGuardado.cliente.nombre
+            },
+            tipoDeAgua: resultadoGuardado.tipoDeAgua,
+            lugarMuestreo: resultadoGuardado.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(resultadoGuardado.fechaHoraMuestreo),
+            tipoAnalisis: resultadoGuardado.tipoAnalisis,
+            estado: resultadoGuardado.estado,
+            resultados: resultadoGuardado.resultados,
+            observaciones: resultadoGuardado.observaciones,
+            verificado: resultadoGuardado.verificado,
+            cedulaLaboratorista: resultadoGuardado.cedulaLaboratorista,
+            nombreLaboratorista: resultadoGuardado.nombreLaboratorista,
+            historialCambios: resultadoGuardado.historialCambios.map(cambio => ({
                 nombre: cambio.nombre,
                 cedula: cambio.cedula,
                 fecha: formatearFechaHora(cambio.fecha),
                 observaciones: cambio.observaciones,
                 cambiosRealizados: cambio.cambiosRealizados
-            }))
+            })),
+            createdAt: formatearFechaHora(resultadoGuardado.createdAt),
+            updatedAt: formatearFechaHora(resultadoGuardado.updatedAt)
         };
-
-        // Eliminar campos internos de Mongoose
-        delete resultadoFormateado.__v;
-        delete resultadoFormateado._id;
 
         return res.status(200).json({
             success: true,
@@ -220,6 +257,7 @@ const editarResultado = async (req, res) => {
 
         // Agregar al historial de cambios
         resultado.historialCambios.push({
+            _id: new mongoose.Types.ObjectId(),
             nombre: usuario.nombre,
             cedula: usuario.documento,
             fecha: new Date(),
@@ -233,18 +271,28 @@ const editarResultado = async (req, res) => {
 
         // Formatear el resultado para la respuesta
         const resultadoFormateado = {
-            tipoDeAgua: resultado.tipoDeAgua,
-            cliente: resultado.cliente,
-            lugarMuestreo: resultado.lugarMuestreo,
-            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
-            tipoAnalisis: resultado.tipoAnalisis,
-            estado: resultado.estado,
+            _id: resultado._id,
+            idMuestra: resultado.idMuestra,
+            cliente: {
+                _id: muestra.cliente._id,
+                nombre: muestra.cliente.nombre,
+                documento: muestra.cliente.documento,
+                email: muestra.cliente.email,
+                telefono: muestra.cliente.telefono,
+                direccion: muestra.cliente.direccion
+            },
+            tipoDeAgua: muestra.tipoDeAgua,
+            lugarMuestreo: muestra.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
+            tipoAnalisis: muestra.tipoAnalisis,
+            estado: muestra.estado,
             resultados: Object.fromEntries(resultado.resultados),
             observaciones: resultado.observaciones,
             verificado: resultado.verificado,
             cedulaLaboratorista: resultado.cedulaLaboratorista,
             nombreLaboratorista: resultado.nombreLaboratorista,
             historialCambios: resultado.historialCambios.map(cambio => ({
+                _id: cambio._id,
                 nombre: cambio.nombre,
                 cedula: cambio.cedula,
                 fecha: formatearFechaHora(cambio.fecha),
@@ -542,15 +590,24 @@ const obtenerResultadosPorCliente = async (req, res) => {
         if (!documento) {
             return res.status(400).json({
                 success: false,
-                message: 'El documento del cliente es requerido',
+                message: 'El identificador del cliente es requerido',
                 errorCode: 'VALIDATION_ERROR'
             });
         }
 
+        console.log('Buscando resultados para el cliente:', documento);
+
+        // Buscar todas las muestras del cliente (por documento o por ID)
+        const query = mongoose.isValidObjectId(documento) 
+            ? { 'cliente._id': new mongoose.Types.ObjectId(documento) }
+            : { 'cliente.documento': documento };
+
         // Buscar todas las muestras del cliente
-        const muestras = await Muestra.find({ 'cliente.documento': documento })
-            .select('id_muestra cliente tipoDeAgua lugarMuestreo fechaHoraMuestreo tipoAnalisis estado')
+        const muestras = await Muestra.find(query)
+            .select('_id id_muestra cliente tipoDeAgua lugarMuestreo fechaHoraMuestreo tipoAnalisis estado')
             .lean();
+
+        console.log('Muestras encontradas:', muestras.length);
 
         if (!muestras || muestras.length === 0) {
             return res.status(404).json({
@@ -562,45 +619,91 @@ const obtenerResultadosPorCliente = async (req, res) => {
 
         // Obtener los IDs de las muestras
         const idsMuestras = muestras.map(muestra => muestra.id_muestra);
+        console.log('IDs de muestras a buscar:', idsMuestras);
 
         // Buscar los resultados de las muestras
         const resultados = await Resultado.find({ idMuestra: { $in: idsMuestras } })
-            .select('-__v')
             .lean();
+
+        console.log('Resultados encontrados:', resultados.length);
+
+        if (!resultados || resultados.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontraron resultados para las muestras del cliente',
+                errorCode: 'NOT_FOUND'
+            });
+        }
 
         // Formatear la respuesta
         const resultadosFormateados = resultados.map(resultado => {
             const muestraCorrespondiente = muestras.find(m => m.id_muestra === resultado.idMuestra);
+            
+            if (!muestraCorrespondiente) {
+                console.log('No se encontró muestra correspondiente para el resultado:', resultado.idMuestra);
+                return null;
+            }
+
             return {
-                ...resultado,
+                _id: resultado._id,
+                idMuestra: resultado.idMuestra,
                 muestra: {
+                    _id: muestraCorrespondiente._id,
                     id_muestra: muestraCorrespondiente.id_muestra,
+                    cliente: {
+                        _id: muestraCorrespondiente.cliente._id,
+                        nombre: muestraCorrespondiente.cliente.nombre,
+                        documento: muestraCorrespondiente.cliente.documento,
+                        email: muestraCorrespondiente.cliente.email,
+                        telefono: muestraCorrespondiente.cliente.telefono,
+                        direccion: muestraCorrespondiente.cliente.direccion
+                    },
                     tipoDeAgua: muestraCorrespondiente.tipoDeAgua,
                     lugarMuestreo: muestraCorrespondiente.lugarMuestreo,
                     fechaHoraMuestreo: formatearFechaHora(muestraCorrespondiente.fechaHoraMuestreo),
                     tipoAnalisis: muestraCorrespondiente.tipoAnalisis,
                     estado: muestraCorrespondiente.estado
                 },
-                fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
-                createdAt: formatearFechaHora(resultado.createdAt),
-                updatedAt: formatearFechaHora(resultado.updatedAt),
+                resultados: resultado.resultados,
+                observaciones: resultado.observaciones,
+                verificado: resultado.verificado,
+                cedulaLaboratorista: resultado.cedulaLaboratorista,
+                nombreLaboratorista: resultado.nombreLaboratorista,
                 historialCambios: resultado.historialCambios?.map(cambio => ({
-                    ...cambio,
-                    fecha: formatearFechaHora(cambio.fecha)
-                })) || []
+                    _id: cambio._id,
+                    nombre: cambio.nombre,
+                    cedula: cambio.cedula,
+                    fecha: formatearFechaHora(cambio.fecha),
+                    observaciones: cambio.observaciones,
+                    cambiosRealizados: cambio.cambiosRealizados
+                })) || [],
+                createdAt: formatearFechaHora(resultado.createdAt),
+                updatedAt: formatearFechaHora(resultado.updatedAt)
             };
-        });
+        }).filter(Boolean); // Eliminar cualquier resultado null
+
+        if (resultadosFormateados.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se pudieron formatear los resultados encontrados',
+                errorCode: 'FORMAT_ERROR'
+            });
+        }
 
         return res.status(200).json({
             success: true,
-            data: resultadosFormateados
+            data: {
+                resultados: resultadosFormateados,
+                total: resultadosFormateados.length
+            }
         });
     } catch (error) {
         console.error('Error al obtener resultados por cliente:', error);
         return res.status(500).json({
             success: false,
             message: 'Error al obtener los resultados del cliente',
-            error: error.message
+            error: error.message,
+            errorCode: 'SERVER_ERROR'
         });
     }
 };

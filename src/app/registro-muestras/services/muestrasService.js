@@ -1,6 +1,11 @@
 const { Muestra } = require('../../../shared/models/muestrasModel');
 const { NotFoundError, DatabaseError, ValidationError } = require('../../../shared/errors/AppError');
 const { analisisDisponibles } = require('../../../shared/data/analisisData');
+const mongoose = require('mongoose');
+const axios = require('axios');
+
+// URL base para las peticiones a la API de usuarios
+const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
 
 // Validar rol de usuario
 const validarRolUsuario = (usuario) => {
@@ -114,6 +119,7 @@ const crearEntradaHistorial = (estado, usuario, observaciones) => {
     return {
         estado,
         administrador: {
+            _id: usuario._id || new mongoose.Types.ObjectId(),
             nombre: usuario.nombre,
             documento: usuario.documento,
             email: usuario.email
@@ -134,7 +140,11 @@ const crearMuestra = async (datosMuestra, usuario) => {
             ...datosMuestra,
             tipoMuestreo: datosMuestra.tipoMuestreo === "Compuesto" ? "Compuesto" : "Simple",
             tipoAnalisis: datosMuestra.tipoAnalisis === "Fisicoquimico" ? "Fisicoquímico" : datosMuestra.tipoAnalisis,
-            estado: datosMuestra.estado || 'Pendiente'
+            estado: datosMuestra.estado || 'Pendiente',
+            cliente: {
+                _id: datosMuestra.cliente._id || new mongoose.Types.ObjectId(),
+                ...datosMuestra.cliente
+            }
         };
 
         // Validar estado y observaciones para rechazo
@@ -157,6 +167,7 @@ const crearMuestra = async (datosMuestra, usuario) => {
             ...datosNormalizados,
             firmas,
             creadoPor: {
+                _id: usuario._id || new mongoose.Types.ObjectId(),
                 nombre: usuario.nombre,
                 documento: usuario.documento,
                 email: usuario.email,
@@ -311,21 +322,45 @@ const obtenerMuestrasPorEstado = async (estado) => {
 };
 
 // Obtener muestras por cliente
-const obtenerMuestrasPorCliente = async (documento) => {
+const obtenerMuestrasPorCliente = async (identificador) => {
     try {
-        if (!documento) {
-            throw new ValidationError('El documento del cliente es requerido');
+        console.log('Iniciando búsqueda de muestras para identificador:', identificador);
+        
+        if (!identificador) {
+            console.log('Error: Identificador no proporcionado');
+            throw new ValidationError('Se requiere un identificador (documento o ID) del cliente');
         }
 
-        const muestras = await Muestra.find({ 'cliente.documento': documento })
-            .sort({ fechaHoraMuestreo: -1 });
+        // Construir el filtro de búsqueda
+        let filtro = {
+            $or: [
+                { 'cliente.documento': identificador }
+            ]
+        };
+
+        // Si el identificador es un ObjectId válido, buscar por _id del cliente
+        if (mongoose.Types.ObjectId.isValid(identificador)) {
+            console.log('Identificador válido como ObjectId, añadiendo a filtro de cliente._id');
+            filtro.$or.push({ 'cliente._id': new mongoose.Types.ObjectId(identificador) });
+        }
+
+        console.log('Filtro de búsqueda:', JSON.stringify(filtro, null, 2));
+
+        // Realizar la búsqueda
+        const muestras = await Muestra.find(filtro)
+            .sort({ fechaHoraMuestreo: -1 })
+            .lean(); // Usar lean() para mejor rendimiento
+
+        console.log('Resultado de la búsqueda:', muestras ? `${muestras.length} muestras encontradas` : 'No se encontraron muestras');
 
         if (!muestras || muestras.length === 0) {
+            console.log('No se encontraron muestras para el cliente');
             throw new NotFoundError('No se encontraron muestras para este cliente');
         }
 
         return muestras;
     } catch (error) {
+        console.error('Error en obtenerMuestrasPorCliente:', error);
         if (error instanceof NotFoundError || error instanceof ValidationError) {
             throw error;
         }
