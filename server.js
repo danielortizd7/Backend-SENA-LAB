@@ -18,7 +18,7 @@ const { verificarToken, login } = require('./src/shared/middleware/authMiddlewar
 
 const app = express();
 
-// Conectar a la base de datos correctamente
+// Conectar a la base de datos
 connectDB();
 
 // Configuración de CORS
