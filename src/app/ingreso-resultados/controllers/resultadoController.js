@@ -1,7 +1,7 @@
 const { validationResult } = require('express-validator');
 const Resultado = require("../models/resultadoModel");
 const mongoose = require("mongoose");
-const ResponseHandler = require("../../../shared/utils/responseHandler");
+const { ResponseHandler } = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError, AuthorizationError } = require("../../../shared/errors/AppError");
 const { Muestra } = require("../../../shared/models/muestrasModel");
 const { formatPaginationResponse } = require("../../../shared/middleware/paginationMiddleware");
@@ -453,22 +453,48 @@ const obtenerResultadoPorMuestra = async (req, res) => {
 
 const verificarResultado = async (req, res) => {
     try {
-        const { idResultado } = req.params;
+        const { idMuestra } = req.params;
         const usuario = req.usuario;
+        const { observaciones } = req.body;
 
         // Verificar que el usuario tiene permisos de administrador
-        if (!usuario.roles.includes('admin')) {
-            throw new ValidationError('No tiene permisos para verificar resultados');
+        if (usuario.rol !== 'administrador') {
+            return res.status(403).json({
+                success: false,
+                message: 'No tiene permisos para verificar resultados. Solo los administradores pueden realizar esta acción.',
+                errorCode: 'AUTHORIZATION_ERROR'
+            });
         }
 
-        const resultado = await resultadoService.verificarResultado(idResultado, usuario);
+        const resultado = await resultadoService.verificarResultado(idMuestra, usuario);
         
-        ResponseHandler.success(res, {
-            mensaje: 'Resultado verificado exitosamente',
-            resultado
+        // Formatear el resultado para la respuesta
+        const resultadoFormateado = {
+            _id: resultado._id,
+            idMuestra: resultado.idMuestra,
+            estado: resultado.estado,
+            verificado: resultado.verificado,
+            historialCambios: resultado.historialCambios.map(cambio => ({
+                nombre: cambio.nombre,
+                cedula: cambio.cedula,
+                fecha: formatearFechaHora(cambio.fecha),
+                observaciones: cambio.observaciones,
+                cambiosRealizados: cambio.cambiosRealizados
+            }))
+        };
+
+        return res.status(200).json({
+            success: true,
+            message: 'Resultado verificado exitosamente',
+            data: resultadoFormateado
         });
     } catch (error) {
-        ResponseHandler.error(res, error);
+        console.error('Error al verificar resultado:', error);
+        return res.status(error instanceof ValidationError ? 400 : 500).json({
+            success: false,
+            message: error.message || 'Error al verificar el resultado',
+            errorCode: error instanceof ValidationError ? 'VALIDATION_ERROR' : 'SERVER_ERROR'
+        });
     }
 };
 

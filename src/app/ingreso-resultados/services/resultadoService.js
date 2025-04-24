@@ -142,30 +142,34 @@ const obtenerResultadoPorId = async (idResultado) => {
     return resultado;
 };
 
-const verificarResultado = async (idResultado, usuario) => {
-    const resultado = await Resultado.findById(idResultado);
+const verificarResultado = async (idMuestra, usuario) => {
+    const resultado = await Resultado.findOne({ idMuestra });
     if (!resultado) {
-        throw new ValidationError('Resultado no encontrado');
+        throw new ValidationError('No se encontraron resultados para esta muestra');
     }
 
-    if (resultado.estado === 'Verificado') {
+    if (resultado.verificado) {
         throw new ValidationError('El resultado ya ha sido verificado');
     }
 
-    resultado.estado = 'Verificado';
-    resultado.verificadoPor = usuario._id;
-    resultado.fechaVerificacion = new Date();
-
-    const cambio = {
-        usuario: usuario._id,
-        detalles: {
-            accion: 'Verificación',
-            estadoAnterior: 'Aprobado',
-            estadoNuevo: 'Verificado'
+    // Actualizar el estado del resultado
+    resultado.verificado = true;
+    resultado.estado = 'Finalizada';
+    
+    // Agregar el registro al historial de cambios
+    resultado.historialCambios.push({
+        _id: new mongoose.Types.ObjectId(),
+        nombre: usuario.nombre,
+        cedula: usuario.documento,
+        fecha: new Date(),
+        observaciones: 'Verificación de resultados',
+        cambiosRealizados: {
+            estado: {
+                valorAnterior: resultado.estado,
+                valorNuevo: 'Finalizada'
+            }
         }
-    };
-
-    resultado.historialCambios.push(cambio);
+    });
     
     await resultado.save();
     return resultado;
