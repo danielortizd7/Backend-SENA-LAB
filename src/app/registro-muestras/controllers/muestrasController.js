@@ -611,10 +611,22 @@ const registrarMuestra = async (req, res, next) => {
                 motivo: null,
                 fechaRechazo: null
             },
+            firmas: {
+                firmaAdministrador: {
+                    nombre: datosAdministrador.nombre,
+                    documento: datosAdministrador.documento || req.usuario.documento,
+                    firma: datos.firmas?.firmaAdministrador?.firma || null
+                },
+                firmaCliente: {
+                    nombre: datosCliente.nombre,
+                    documento: datosCliente.documento,
+                    firma: datos.firmas?.firmaCliente?.firma || null
+                }
+            },
             creadoPor: {
                 _id: new mongoose.Types.ObjectId(),
                 nombre: datosAdministrador.nombre,
-                documento: datosAdministrador.documento,
+                documento: datosAdministrador.documento || req.usuario.documento,
                 email: datosAdministrador.email,
                 fechaCreacion: formatearFechaHora(fecha)
             },
