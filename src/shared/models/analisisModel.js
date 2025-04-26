@@ -60,8 +60,17 @@ const analisisSchema = new mongoose.Schema({
         }
     },
     matriz: {
-        type: [String],
-        required: true
+        type: [{
+            type: String,
+            enum: Object.values(MATRICES)
+        }],
+        required: true,
+        validate: {
+            validator: function(v) {
+                return v && v.length > 0;
+            },
+            message: 'Debe especificar al menos una matriz'
+        }
     },
     activo: {
         type: Boolean,
@@ -89,7 +98,9 @@ analisisSchema.pre('save', function(next) {
     next();
 });
 
-// Eliminar el modelo si existe
+if (mongoose.models.Analisis) {
+    mongoose.deleteModel('Analisis'); // Eliminar el modelo si existe
+}
 const Analisis = mongoose.model("Analisis", analisisSchema, 'analisis'); // Forzar el nombre de la colección
 
 module.exports = Analisis; 
