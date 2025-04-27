@@ -18,9 +18,9 @@ async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
 
         // Validaciones específicas según el estado
         switch (nuevoEstado) {
-            case 'En Proceso':
+            case 'En análisis':
                 if (estadoAnterior !== 'Recibida') {
-                    throw new Error('La muestra debe estar en estado Recibida para pasar a En Proceso');
+                    throw new Error('La muestra debe estar en estado Recibida para pasar a En análisis');
                 }
                 break;
             case 'Finalizada':
@@ -28,8 +28,8 @@ async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
                 if (resultados.length === 0) {
                     throw new Error('No se puede finalizar una muestra sin resultados');
                 }
-                if (estadoAnterior !== 'En Proceso') {
-                    throw new Error('La muestra debe estar en proceso para ser finalizada');
+                if (estadoAnterior !== 'En análisis') {
+                    throw new Error('La muestra debe estar en análisis para ser finalizada');
                 }
                 break;
             case 'En Cotizacion':

@@ -29,103 +29,55 @@ const procesarValorUnidad = (valor, unidad, analisisInfo) => {
     };
 };
 
-const registrarResultado = async (datosEntrada) => {
+const registrarResultado = async (datosResultado) => {
     try {
-        // Verificar que la muestra existe
-        const muestra = await Muestra.findOne({ id_muestra: datosEntrada.idMuestra });
+        // Validar que la muestra existe
+        const muestra = await Muestra.findOne({ id_muestra: datosResultado.idMuestra });
         if (!muestra) {
             throw new ValidationError('La muestra no existe');
         }
 
-        // Obtener información de los análisis desde la base de datos
+        // Obtener información de los análisis
         const analisisInfo = await Analisis.find({
-            nombre: { $in: Object.keys(datosEntrada.resultados) }
+            nombre: { $in: Object.keys(datosResultado.resultados) }
         });
 
-        // Crear un mapa de análisis para fácil acceso
+        if (!analisisInfo.length) {
+            throw new ValidationError('No se encontraron los análisis especificados');
+        }
+
+        // Crear un mapa de nombre a _id de análisis
         const analisisMap = analisisInfo.reduce((acc, analisis) => {
             acc[analisis.nombre] = analisis;
             return acc;
         }, {});
 
-        // Validar que todos los análisis existen en la base de datos
-        for (const nombre of Object.keys(datosEntrada.resultados)) {
-            if (!analisisMap[nombre]) {
-                throw new ValidationError(`El análisis ${nombre} no existe en la base de datos`);
+        // Procesar y validar los resultados usando los IDs como claves
+        const resultadosValidados = new Map();
+        
+        for (const [nombreAnalisis, datos] of Object.entries(datosResultado.resultados)) {
+            const analisis = analisisMap[nombreAnalisis];
+            if (!analisis) {
+                throw new ValidationError(`El análisis ${nombreAnalisis} no existe en la base de datos`);
+            }
+
+            const resultadoProcesado = procesarValorUnidad(datos.valor, datos.unidad, analisis);
+            if (resultadoProcesado) {
+                // Usar el _id del análisis como clave en lugar del nombre
+                resultadosValidados.set(analisis._id, resultadoProcesado);
             }
         }
 
-        // Validar que los análisis correspondan a los seleccionados en la muestra
-        const analisisNoSeleccionados = Object.keys(datosEntrada.resultados).filter(
-            analisis => !muestra.analisisSeleccionados.some(a => a.nombre === analisis)
-        );
-
-        if (analisisNoSeleccionados.length > 0) {
-            throw new ValidationError(
-                `Los siguientes análisis no fueron seleccionados originalmente: ${analisisNoSeleccionados.join(', ')}`
-            );
-        }
-
-        // Procesar los resultados
-        const resultadosMap = new Map();
-        const cambiosIniciales = {};
-
-        for (const [nombre, datosAnalisis] of Object.entries(datosEntrada.resultados)) {
-            const analisis = analisisMap[nombre];
-            const valorProcesado = procesarValorUnidad(datosAnalisis.valor, datosAnalisis.unidad, analisis);
-
-            if (valorProcesado) {
-                resultadosMap.set(nombre, valorProcesado);
-                cambiosIniciales[nombre] = {
-                    valorAnterior: "No registrado",
-                    valorNuevo: `${datosAnalisis.valor} ${datosAnalisis.unidad}`,
-                    unidad: datosAnalisis.unidad,
-                    metodo: analisis.metodo
-                };
-            }
-        }
-
-        // Crear el resultado
-        const resultado = new Resultado({
-            idMuestra: datosEntrada.idMuestra,
-            cliente: {
-                _id: muestra.cliente._id || new mongoose.Types.ObjectId(),
-                nombre: muestra.cliente.nombre,
-                documento: muestra.cliente.documento,
-                email: muestra.cliente.email,
-                telefono: muestra.cliente.telefono,
-                direccion: muestra.cliente.direccion
-            },
-            tipoDeAgua: muestra.tipoDeAgua,
-            lugarMuestreo: muestra.lugarMuestreo,
-            fechaHoraMuestreo: muestra.fechaHoraMuestreo,
-            tipoAnalisis: muestra.tipoAnalisis,
-            estado: 'En análisis',
-            resultados: resultadosMap,
-            observaciones: datosEntrada.observaciones || "",
-            verificado: false,
-            cedulaLaboratorista: datosEntrada.cedulaLaboratorista,
-            nombreLaboratorista: datosEntrada.nombreLaboratorista,
-            historialCambios: [{
-                _id: new mongoose.Types.ObjectId(),
-                nombre: datosEntrada.nombreLaboratorista,
-                cedula: datosEntrada.cedulaLaboratorista,
-                fecha: new Date(),
-                observaciones: datosEntrada.observaciones || "Registro inicial",
-                cambiosRealizados: {
-                    resultados: cambiosIniciales
-                }
-            }]
+        // Crear el nuevo resultado con los datos validados
+        const nuevoResultado = new Resultado({
+            ...datosResultado,
+            resultados: resultadosValidados
         });
 
-        await resultado.save();
-
-        // Actualizar el estado de la muestra
-        await muestra.updateOne({ estado: 'En análisis' });
-
-        return resultado;
+        await nuevoResultado.save();
+        return nuevoResultado;
     } catch (error) {
-        console.error("Error al registrar el resultado:", error);
+        console.error('Error al registrar el resultado:', error);
         throw error;
     }
 };
@@ -142,34 +94,30 @@ const obtenerResultadoPorId = async (idResultado) => {
     return resultado;
 };
 
-const verificarResultado = async (idMuestra, usuario) => {
-    const resultado = await Resultado.findOne({ idMuestra });
+const verificarResultado = async (idResultado, usuario) => {
+    const resultado = await Resultado.findById(idResultado);
     if (!resultado) {
-        throw new ValidationError('No se encontraron resultados para esta muestra');
+        throw new ValidationError('Resultado no encontrado');
     }
 
-    if (resultado.verificado) {
+    if (resultado.estado === 'Verificado') {
         throw new ValidationError('El resultado ya ha sido verificado');
     }
 
-    // Actualizar el estado del resultado
-    resultado.verificado = true;
-    resultado.estado = 'Finalizada';
-    
-    // Agregar el registro al historial de cambios
-    resultado.historialCambios.push({
-        _id: new mongoose.Types.ObjectId(),
-        nombre: usuario.nombre,
-        cedula: usuario.documento,
-        fecha: new Date(),
-        observaciones: 'Verificación de resultados',
-        cambiosRealizados: {
-            estado: {
-                valorAnterior: resultado.estado,
-                valorNuevo: 'Finalizada'
-            }
+    resultado.estado = 'Verificado';
+    resultado.verificadoPor = usuario._id;
+    resultado.fechaVerificacion = new Date();
+
+    const cambio = {
+        usuario: usuario._id,
+        detalles: {
+            accion: 'Verificación',
+            estadoAnterior: 'Aprobado',
+            estadoNuevo: 'Verificado'
         }
-    });
+    };
+
+    resultado.historialCambios.push(cambio);
     
     await resultado.save();
     return resultado;

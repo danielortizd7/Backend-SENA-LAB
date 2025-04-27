@@ -4,7 +4,6 @@ const cors = require("cors");
 const path = require("path");
 const connectDB = require("./src/config/database.js");
 const { ResponseHandler } = require('./src/shared/utils/responseHandler');
-const { registrarAccion } = require('./src/shared/middleware/auditMiddleware');
 
 // Importar rutas
 const muestrasRoutes = require("./src/app/registro-muestras/routes/muestrasRoutes");
@@ -18,7 +17,7 @@ const { verificarToken, login } = require('./src/shared/middleware/authMiddlewar
 
 const app = express();
 
-// Conectar a la base de datos
+// Conectar a la base de datos correctamente
 connectDB();
 
 // Configuración de CORS
@@ -99,7 +98,7 @@ app.use([
     "/api/firma-digital",
     "/api/auditoria",
     "/api/analisis"
-], verificarToken, registrarAccion);
+], verificarToken);
 
 // Rutas protegidas
 app.use("/api/muestras", muestrasRoutes);
