@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const estadosValidos = ["Recibida", "En Proceso", "Finalizada", "En Cotizacion", "Rechazada"];
+const estadosValidos = ["Recibida", "En análisis", "Finalizada", "En Cotizacion", "Rechazada"];
 
 // Constantes para tipos de muestreo
 const TIPOS_MUESTREO = {
@@ -23,7 +23,7 @@ const SUBTIPOS_RESIDUAL = {
 
 const ESTADOS = {
     RECIBIDA: 'Recibida',
-    EN_PROCESO: 'En Proceso',
+    EN_ANALISIS: 'En análisis',
     FINALIZADA: 'Finalizada',
     EN_COTIZACION: 'En Cotizacion',
     RECHAZADA: 'Rechazada'

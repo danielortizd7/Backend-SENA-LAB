@@ -10,6 +10,7 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { formatPaginationResponse } = require('../../../shared/middleware/paginationMiddleware');
+const AuditoriaService = require('../../auditoria/services/auditoriaService');
 
 // URL base para las peticiones a la API de usuarios
 const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
@@ -611,22 +612,10 @@ const registrarMuestra = async (req, res, next) => {
                 motivo: null,
                 fechaRechazo: null
             },
-            firmas: {
-                firmaAdministrador: {
-                    nombre: datosAdministrador.nombre,
-                    documento: datosAdministrador.documento || req.usuario.documento,
-                    firma: datos.firmas?.firmaAdministrador?.firma || null
-                },
-                firmaCliente: {
-                    nombre: datosCliente.nombre,
-                    documento: datosCliente.documento,
-                    firma: datos.firmas?.firmaCliente?.firma || null
-                }
-            },
             creadoPor: {
                 _id: new mongoose.Types.ObjectId(),
                 nombre: datosAdministrador.nombre,
-                documento: datosAdministrador.documento || req.usuario.documento,
+                documento: datosAdministrador.documento,
                 email: datosAdministrador.email,
                 fechaCreacion: formatearFechaHora(fecha)
             },
@@ -648,6 +637,29 @@ const registrarMuestra = async (req, res, next) => {
 
         // Guardar la muestra
         const muestraGuardada = await muestra.save();
+         //AUDITORIAS
+         setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccionMuestra({
+                    usuario: req.usuario,
+                    metodo: req.method,
+                   /* ruta: req.originalUrl,*/
+                    descripcion: 'Registro de nueva muestra',
+                 //   idMuestra: muestraGuardada._id,
+                    tipoMuestra: muestraGuardada.tipoDeAgua.tipo,
+                    estadoMuestra: muestraGuardada.estado,
+                    datosCompletos: muestraGuardada.toObject(),
+                  /*  cambios: {
+                        anteriores: null,
+                        nuevos: nuevaMuestra.toObject()
+                    },
+                    ip: req.ip,
+                    userAgent: req.headers['user-agent']*/
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         // Preparar la respuesta simplificada
         const respuesta = {
@@ -804,6 +816,27 @@ const actualizarMuestra = async (req, res, next) => {
                 hora: `${horas}:${minutos}:${segundos}`
             };
         };
+
+         // AUDITORÍA
+         setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccionMuestra({
+                    usuario,
+                    metodo: req.method,
+                    descripcion: 'Actualización de muestra',
+                    idMuestra: muestra._id,
+                    tipoMuestra: muestra.tipoDeAgua?.tipo,
+                    estadoMuestra: muestra.estado,
+                    datosCompletos: muestra.toObject(),
+                    cambios: {
+                        anteriores: muestraOriginal,
+                        nuevos: muestra.toObject()
+                    }
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         // Preparar la respuesta
         const respuesta = {

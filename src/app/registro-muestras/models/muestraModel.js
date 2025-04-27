@@ -4,7 +4,7 @@ const historialEstadoSchema = new mongoose.Schema({
   estado: {
     type: String,
     required: true,
-    enum: ["Recibida", "En Proceso", "Finalizada", "Cotizada", "Aprobada", "Rechazada"]
+    enum: ["Recibida", "En análisis", "Finalizada", "Cotizada", "Aprobada", "Rechazada"]
   },
   fecha: {
     type: Date,
@@ -21,8 +21,8 @@ const muestraSchema = new mongoose.Schema({
   estado: {
     type: String,
     required: true,
-    enum: ["Recibida ", "En Proceso", "Finalizada", "Cotizada", "Aprobada", "Rechazada"],
-    default: "Recibida "
+    enum: ["Recibida", "En análisis", "Finalizada", "Cotizada", "Aprobada", "Rechazada"],
+    default: "Recibida"
   },
   historialEstados: [historialEstadoSchema],
 });
