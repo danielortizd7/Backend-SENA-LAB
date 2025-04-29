@@ -12,6 +12,7 @@ const emailService = require('./service/emailService');
 const path = require('path');
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(helmet({
