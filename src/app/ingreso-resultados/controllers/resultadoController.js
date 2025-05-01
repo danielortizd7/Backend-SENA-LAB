@@ -90,17 +90,6 @@ const registrarResultado = async (req, res) => {
                 continue;
             }
 
-            // Validar el rango si no es un resultado cualitativo
-            if (analisis.rango !== 'Ausencia/Presencia') {
-                const [minimo, maximo] = analisis.rango.split('-').map(v => parseFloat(v.trim()));
-                
-                if (valor < minimo || valor > maximo) {
-                    erroresValidacion.push(
-                        `El valor ${valor} para ${nombreAnalisis} está fuera del rango permitido (${minimo} - ${maximo} ${analisis.unidad})`
-                    );
-                }
-            }
-
             // Validar la unidad
             if (datos.unidad !== analisis.unidad) {
                 erroresValidacion.push(
@@ -319,17 +308,6 @@ const editarResultado = async (req, res) => {
             if (isNaN(valor) && analisis.rango !== 'Ausencia/Presencia') {
                 erroresValidacion.push(`El valor para ${nombreAnalisis} debe ser numérico`);
                 continue;
-            }
-
-            // Validar el rango si no es un resultado cualitativo
-            if (analisis.rango !== 'Ausencia/Presencia') {
-                const [minimo, maximo] = analisis.rango.split('-').map(v => parseFloat(v.trim()));
-                
-                if (valor < minimo || valor > maximo) {
-                    erroresValidacion.push(
-                        `El valor ${valor} para ${nombreAnalisis} está fuera del rango permitido (${minimo} - ${maximo} ${analisis.unidad})`
-                    );
-                }
             }
 
             // Validar la unidad
