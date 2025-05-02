@@ -50,7 +50,7 @@ app.use(cors({
         'X-Requested-With',
         'X-User-Role'
     ],
-    exposedHeaders: ['Content-Type', 'Authorization'],
+    exposedHeaders: ['Content-Disposition', 'Content-Type'],
     credentials: true,
     maxAge: 86400 // Cache preflight request for 24 hours
 }));

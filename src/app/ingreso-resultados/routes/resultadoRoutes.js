@@ -49,4 +49,15 @@ router.post("/verificar/:idMuestra",
   resultadoController.verificarResultado
 );
 
+// ===== RUTAS PARA PDFs DE RESULTADOS =====
+// Ver PDF de resultados
+router.get("/:idMuestra/pdf", 
+  resultadoController.generarPDFResultados
+);
+
+// Descargar PDF de resultados
+router.get("/:idMuestra/pdf/download", 
+  resultadoController.descargarPDFResultados
+);
+
 module.exports = router;

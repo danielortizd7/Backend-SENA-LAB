@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { AuthenticationError } = require('../../../shared/errors/AppError');
 
-const USUARIOS_API = process.env.VITE_BACKEND_URL || 'https://back-usuarios-f.onrender.com';
+const USUARIOS_API = process.env.VITE_BACKEND_URL || 'https://backend-sena-lab-1-qpzp.onrender.com';
 const ROL_ADMIN_ID = '67d8c23082d1ef13162bdc18';
 
 const verificarRolUsuario = async (usuario) => {
