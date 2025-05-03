@@ -8,6 +8,9 @@ const { formatPaginationResponse } = require("../../../shared/middleware/paginat
 const Analisis = require("../../../shared/models/analisisModel");
 const resultadoService = require("../services/resultadoService");
 const AuditoriaService = require('../../auditoria/services/auditoriaService');
+const PDFDocument = require('pdfkit');
+const path = require('path');
+const fs = require('fs');
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
@@ -965,17 +968,119 @@ const obtenerResultadosPorCliente = async (req, res) => {
     }
 };
 
+const generarPDFResultados = async (req, res) => {
+    try {
+        const { idMuestra } = req.params;
+        
+        // Obtener el resultado completo de la muestra con todos los datos necesarios
+        const resultado = await obtenerResultadoCompleto(idMuestra);
+        
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontraron resultados para esta muestra',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Configurar headers para PDF
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename=resultados_${idMuestra}.pdf`);
+
+        // Importar el generador de PDF
+        const generarPDF = require('../../../shared/utils/generarPDFResultados');
+        
+        // Generar el PDF
+        const doc = await generarPDF(resultado);
+        
+        // Pipe el documento a la respuesta
+        doc.pipe(res);
+
+    } catch (error) {
+        console.error('Error al generar PDF de resultados:', error);
+        if (!res.headersSent) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error al generar el PDF de resultados',
+                error: error.message,
+                errorCode: 'INTERNAL_ERROR'
+            });
+        }
+    }
+};
+
+const descargarPDFResultados = async (req, res) => {
+    try {
+        const { idMuestra } = req.params;
+        
+        // Obtener el resultado completo de la muestra con todos los datos necesarios
+        const resultado = await obtenerResultadoCompleto(idMuestra);
+        
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontraron resultados para esta muestra',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Configurar headers para descarga
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=resultados_${idMuestra}.pdf`);
+
+        // Importar el generador de PDF
+        const generarPDF = require('../../../shared/utils/generarPDFResultados');
+        
+        // Generar el PDF
+        const doc = await generarPDF(resultado);
+        
+        // Pipe el documento a la respuesta
+        doc.pipe(res);
+
+    } catch (error) {
+        console.error('Error al descargar PDF de resultados:', error);
+        if (!res.headersSent) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error al descargar el PDF de resultados',
+                error: error.message,
+                errorCode: 'INTERNAL_ERROR'
+            });
+        }
+    }
+};
+
+// Función auxiliar para obtener el resultado completo con todos los datos necesarios
+const obtenerResultadoCompleto = async (idMuestra) => {
+    const resultado = await Resultado.findOne({ idMuestra }).lean();
+    if (!resultado) return null;
+
+    // Formatear las fechas
+    return {
+        ...resultado,
+        fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+        createdAt: formatearFechaHora(resultado.createdAt),
+        updatedAt: formatearFechaHora(resultado.updatedAt),
+        historialCambios: resultado.historialCambios?.map(cambio => ({
+            ...cambio,
+            fecha: formatearFechaHora(cambio.fecha)
+        })) || []
+    };
+};
+
 module.exports = {
     registrarResultado,
     editarResultado,
     obtenerResultados,
     obtenerResultado,
     obtenerResultadoPorMuestra,
-    obtenerTodosResultados,
     verificarResultado,
+    obtenerTodosResultados,
     eliminarResultado,
     obtenerResultadosPorMuestra,
     actualizarResultado,
     obtenerResultadoPorId,
-    obtenerResultadosPorCliente
+    obtenerResultadosPorCliente,
+    generarPDFResultados,
+    descargarPDFResultados
 };
