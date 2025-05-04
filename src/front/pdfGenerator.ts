@@ -28,12 +28,55 @@ const getAuthHeaders = () => ({
 });
 
 /**
+ * Verifica si la respuesta es un PDF válido
+ */
+const isValidPDFResponse = (response: any): boolean => {
+    const contentType = response.headers['content-type'];
+    // Solo valida que sea PDF y que haya datos
+    return contentType && contentType.includes('application/pdf') && response.data;
+};
+
+/**
+ * Maneja la visualización de un PDF en una nueva ventana (ventana pre-abierta)
+ */
+const openPDFInNewWindow = (pdfBlob: Blob, preOpenedWindow?: Window | null): void => {
+    const pdfUrl = window.URL.createObjectURL(pdfBlob);
+    const win = preOpenedWindow || window.open('', '_blank');
+    if (win) {
+        win.location.href = pdfUrl;
+        setTimeout(() => {
+            window.URL.revokeObjectURL(pdfUrl);
+        }, 100);
+    } else {
+        // Si el navegador bloqueó la ventana, descarga
+        downloadPDF(pdfBlob, 'resultados.pdf');
+    }
+};
+
+/**
+ * Maneja la descarga de un PDF
+ */
+const downloadPDF = (pdfBlob: Blob, filename: string): void => {
+    const downloadUrl = window.URL.createObjectURL(pdfBlob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = filename;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+        window.URL.revokeObjectURL(downloadUrl);
+    }, 100);
+};
+
+/**
  * Servicio para manejar la generación y descarga de PDFs
  */
 export const PDFService = {
     /**
      * Genera y obtiene el PDF de una muestra (sin resultados)
-     * @param idMuestra - ID de la muestra
      */
     async generarPDFMuestra(idMuestra: string): Promise<void> {
         try {
@@ -45,29 +88,24 @@ export const PDFService = {
                 headers: getAuthHeaders()
             });
 
-            if (response.data) {
-                const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
-                const pdfUrl = window.URL.createObjectURL(pdfBlob);
-                window.open(pdfUrl, '_blank');
-
-                setTimeout(() => {
-                    window.URL.revokeObjectURL(pdfUrl);
-                }, 100);
-            } else {
-                throw new Error('La respuesta del servidor está vacía');
+            if (!isValidPDFResponse(response)) {
+                throw new Error('La respuesta del servidor no es un PDF válido');
             }
+
+            const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+            openPDFInNewWindow(pdfBlob);
         } catch (error: any) {
-            console.error('Error al generar PDF de muestra:', error.response || error);
-            const errorMessage = error.response?.data?.message || 
-                               error.response?.statusText || 
-                               'No se pudo generar el PDF de la muestra';
-            throw new Error(errorMessage);
+            console.error('Error al generar PDF de muestra:', error);
+            throw new Error(
+                error.response?.data?.message || 
+                error.response?.statusText || 
+                'No se pudo generar el PDF de la muestra'
+            );
         }
     },
 
     /**
      * Descarga el PDF de una muestra
-     * @param idMuestra - ID de la muestra
      */
     async descargarPDFMuestra(idMuestra: string): Promise<void> {
         try {
@@ -79,87 +117,57 @@ export const PDFService = {
                 headers: getAuthHeaders()
             });
 
-            if (!response.data || response.data.size === 0) {
-                throw new Error('El PDF descargado está vacío');
+            if (!isValidPDFResponse(response)) {
+                throw new Error('La respuesta del servidor no es un PDF válido');
             }
 
             const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
-            const downloadUrl = window.URL.createObjectURL(pdfBlob);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `Muestra_${idMuestra}.pdf`;
-            
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            setTimeout(() => {
-                window.URL.revokeObjectURL(downloadUrl);
-            }, 100);
+            downloadPDF(pdfBlob, `Muestra_${idMuestra}.pdf`);
         } catch (error: any) {
             console.error('Error al descargar PDF de muestra:', error);
-            const errorMessage = error.response?.data?.message || 
-                               error.response?.statusText || 
-                               error.message ||
-                               'No se pudo descargar el PDF de la muestra';
-            throw new Error(errorMessage);
+            throw new Error(
+                error.response?.data?.message || 
+                error.response?.statusText || 
+                'No se pudo descargar el PDF de la muestra'
+            );
         }
     },
 
     /**
      * Genera y obtiene el PDF de resultados de una muestra
-     * @param idMuestra - ID de la muestra
      */
     async generarPDFResultados(idMuestra: string): Promise<void> {
+        let preOpenedWindow: Window | null = null;
         try {
+            // Abrir la ventana antes de la petición para evitar bloqueo
+            preOpenedWindow = window.open('', '_blank');
             console.log('Generando PDF de resultados:', idMuestra);
             const response = await axios({
                 url: API_URLS.RESULTADOS.GENERAR(idMuestra),
                 method: 'GET',
                 responseType: 'blob',
-                headers: {
-                    ...getAuthHeaders(),
-                    'Accept': 'application/pdf',
-                }
+                headers: getAuthHeaders()
             });
 
-            // Verificar que la respuesta no esté vacía y sea un PDF
-            if (!response.data || response.data.size === 0) {
-                throw new Error('El PDF generado está vacío');
-            }
-
-            // Verificar el tipo de contenido
-            const contentType = response.headers['content-type'];
-            if (!contentType || !contentType.includes('application/pdf')) {
-                console.warn('Tipo de contenido inesperado:', contentType);
+            if (!isValidPDFResponse(response)) {
+                throw new Error('La respuesta del servidor no es un PDF válido');
             }
 
             const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
-            
-            // Verificar que el blob no esté vacío
-            if (pdfBlob.size === 0) {
-                throw new Error('El PDF generado está vacío');
-            }
-
-            const pdfUrl = window.URL.createObjectURL(pdfBlob);
-            window.open(pdfUrl, '_blank');
-
-            setTimeout(() => {
-                window.URL.revokeObjectURL(pdfUrl);
-            }, 100);
+            openPDFInNewWindow(pdfBlob, preOpenedWindow);
         } catch (error: any) {
+            if (preOpenedWindow) preOpenedWindow.close();
             console.error('Error al generar PDF de resultados:', error);
-            const errorMessage = error.response?.data?.message || 
-                               error.response?.statusText || 
-                               error.message ||
-                               'No se pudo generar el PDF de resultados';
-            throw new Error(errorMessage);
+            throw new Error(
+                error.response?.data?.message || 
+                error.response?.statusText || 
+                'No se pudo generar el PDF de resultados'
+            );
         }
     },
 
     /**
      * Descarga el PDF de resultados de una muestra
-     * @param idMuestra - ID de la muestra
      */
     async descargarPDFResultados(idMuestra: string): Promise<void> {
         try {
@@ -168,49 +176,22 @@ export const PDFService = {
                 url: API_URLS.RESULTADOS.DESCARGAR(idMuestra),
                 method: 'GET',
                 responseType: 'blob',
-                headers: {
-                    ...getAuthHeaders(),
-                    'Accept': 'application/pdf',
-                }
+                headers: getAuthHeaders()
             });
 
-            // Verificar la respuesta
-            if (!response.data || response.data.size === 0) {
-                throw new Error('El PDF descargado está vacío');
-            }
-
-            // Verificar el tipo de contenido
-            const contentType = response.headers['content-type'];
-            if (!contentType || !contentType.includes('application/pdf')) {
-                console.warn('Tipo de contenido inesperado:', contentType);
+            if (!isValidPDFResponse(response)) {
+                throw new Error('La respuesta del servidor no es un PDF válido');
             }
 
             const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
-            
-            // Verificar el tamaño del blob
-            if (pdfBlob.size === 0) {
-                throw new Error('El PDF descargado está vacío');
-            }
-
-            const downloadUrl = window.URL.createObjectURL(pdfBlob);
-            const link = document.createElement('a');
-            link.href = downloadUrl;
-            link.download = `Resultados_Muestra_${idMuestra}.pdf`;
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            setTimeout(() => {
-                window.URL.revokeObjectURL(downloadUrl);
-            }, 100);
+            downloadPDF(pdfBlob, `Resultados_Muestra_${idMuestra}.pdf`);
         } catch (error: any) {
             console.error('Error al descargar PDF de resultados:', error);
-            const errorMessage = error.response?.data?.message || 
-                               error.response?.statusText || 
-                               error.message ||
-                               'No se pudo descargar el PDF de resultados';
-            throw new Error(errorMessage);
+            throw new Error(
+                error.response?.data?.message || 
+                error.response?.statusText || 
+                'No se pudo descargar el PDF de resultados'
+            );
         }
     },
 };
