@@ -104,7 +104,7 @@ usuarioSchema.statics.obtenerPorId = async function(id) {
 
 usuarioSchema.statics.obtenerTodos = async function() {
   return await this.find({ })
-    .select('-password -detalles')
+    .select('-password')
     .populate('rol', '_id name')
     .exec();
 };
