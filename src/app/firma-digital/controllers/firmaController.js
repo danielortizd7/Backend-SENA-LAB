@@ -2,7 +2,7 @@ const path = require("path");
 const fs = require("fs");
 const { validationResult } = require('express-validator');
 const { Muestra } = require("../../../shared/models/muestrasModel");
-const generarPDF = require("../../../shared/utils/generarPDF");
+const generarPDF = require("../../../shared/utils/generarPDFMuestras");
 const ResponseHandler = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError } = require("../../../shared/errors/AppError");
 

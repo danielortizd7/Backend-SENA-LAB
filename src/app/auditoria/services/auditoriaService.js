@@ -1,6 +1,6 @@
 const Auditoria = require("../models/auditoriaModel");
 const AuditoriaMuestras = require('../models/auditoriaModelMuestras');
-const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
+const generarPDF = require('../../../shared/utils/generarPDFMuestras');
 
 class AuditoriaService {
   async registrarAccion(datosAuditoria) {
@@ -141,7 +141,7 @@ static async generarPDFRegistro(id) {
       if (!registro) {
           throw new Error('Registro de auditoría no encontrado');
       }
-      const pdfPath = await generarPDFAuditoria(registro);
+      const pdfPath = await generarPDF(registro);
       return pdfPath;
   } catch (error) {
       console.error('Error generando PDF de auditoría:', error);
