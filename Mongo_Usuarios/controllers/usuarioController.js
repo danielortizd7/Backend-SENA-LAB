@@ -150,8 +150,8 @@ class UsuarioController {
               case 'cliente':
                 nuevoUsuario.detalles = {
                   tipo: "cliente",
-                  razonSocial: datosEspecificos.razonSocial || "",
-                  tipo_cliente: datosEspecificos.tipo_cliente || "",
+                  razonSocial:  req.body.detalles?.razonSocial || datosEspecificos.razonSocial || "",
+                  tipo_cliente: req.body.detalles?.tipo_cliente || datosEspecificos.tipo_cliente || "",
                   opciones_tipo_cliente: [
                     "empresa",
                     "emprendedor",
@@ -183,6 +183,9 @@ class UsuarioController {
                 _id: resultado._id,
                 email,
                 nombre,
+                documento,
+                telefono,
+                direccion,
                 tipo,
                 detalles: {
                     tipo_cliente: req.body.detalles?.tipo_cliente || "",
