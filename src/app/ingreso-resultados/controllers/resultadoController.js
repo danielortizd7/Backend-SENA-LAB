@@ -8,9 +8,10 @@ const { formatPaginationResponse } = require("../../../shared/middleware/paginat
 const Analisis = require("../../../shared/models/analisisModel");
 const resultadoService = require("../services/resultadoService");
 const AuditoriaService = require('../../auditoria/services/auditoriaService');
-const PDFDocument = require('pdfkit');
+const report = require('jsreport');
 const path = require('path');
 const fs = require('fs');
+const generarPDFUtil = require('../../../shared/utils/generarPDFResultados');
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
@@ -968,7 +969,7 @@ const obtenerResultadosPorCliente = async (req, res) => {
     }
 };
 
-const generarPDFResultados = async (req, res) => {
+const generarPDFResultadosHandler = async (req, res) => {
     try {
         const { idMuestra } = req.params;
         
@@ -987,14 +988,11 @@ const generarPDFResultados = async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename=resultados_${idMuestra}.pdf`);
 
-        // Importar el generador de PDF
-        const generarPDF = require('../../../shared/utils/generarPDFResultados');
+        // Generar el PDF y obtener el buffer
+        const pdfBuffer = await generarPDFUtil(resultado);
         
-        // Generar el PDF
-        const doc = await generarPDF(resultado);
-        
-        // Pipe el documento a la respuesta
-        doc.pipe(res);
+        // Enviar el buffer como respuesta
+        res.end(pdfBuffer);
 
     } catch (error) {
         console.error('Error al generar PDF de resultados:', error);
@@ -1009,7 +1007,7 @@ const generarPDFResultados = async (req, res) => {
     }
 };
 
-const descargarPDFResultados = async (req, res) => {
+const descargarPDFResultadosHandler = async (req, res) => {
     try {
         const { idMuestra } = req.params;
         
@@ -1028,14 +1026,11 @@ const descargarPDFResultados = async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=resultados_${idMuestra}.pdf`);
 
-        // Importar el generador de PDF
-        const generarPDF = require('../../../shared/utils/generarPDFResultados');
+        // Generar el PDF y obtener el buffer
+        const pdfBuffer = await generarPDFUtil(resultado);
         
-        // Generar el PDF
-        const doc = await generarPDF(resultado);
-        
-        // Pipe el documento a la respuesta
-        doc.pipe(res);
+        // Enviar el buffer como respuesta
+        res.end(pdfBuffer);
 
     } catch (error) {
         console.error('Error al descargar PDF de resultados:', error);
@@ -1081,6 +1076,6 @@ module.exports = {
     actualizarResultado,
     obtenerResultadoPorId,
     obtenerResultadosPorCliente,
-    generarPDFResultados,
-    descargarPDFResultados
+    generarPDFResultados: generarPDFResultadosHandler,
+    descargarPDFResultados: descargarPDFResultadosHandler
 };
