@@ -1,20 +1,14 @@
 import axios, { AxiosError } from 'axios';
 
-// ----- Configuración de URLs -----
-const ENV = process.env.NODE_ENV || 'development';
-const BASE_URLS = {
-    development: "http://localhost:5000/api",
-    production: "https://backend-sena-lab-1-qpzp.onrender.com/api",
-    test: "http://localhost:5000/api"
-};
+const BASE_URL = "https://backend-registro-muestras.onrender.com/api";
 
 const API_URLS = {
-    MUESTRAS: {
-        GENERAR: (idMuestra: string) => `${BASE_URLS[ENV]}/firma-digital/generar-pdf/${idMuestra}`,
+    FIRMA_DIGITAL: {
+        GENERAR_PDF: (idMuestra: string) => `${BASE_URL}/firma-digital/generar-pdf/${idMuestra}`,
     },
     RESULTADOS: {
-        GENERAR: (idMuestra: string) => `${BASE_URLS[ENV]}/ingreso-resultados/${idMuestra}/pdf`,
-        DESCARGAR: (idMuestra: string) => `${BASE_URLS[ENV]}/ingreso-resultados/${idMuestra}/pdf/download`,
+        GENERAR: (idMuestra: string) => `${BASE_URL}/ingreso-resultados/${idMuestra}/pdf`,
+        DESCARGAR: (idMuestra: string) => `${BASE_URL}/ingreso-resultados/${idMuestra}/pdf/download`,
     }
 };
 
@@ -144,7 +138,7 @@ export const PDFService = {
             console.log('Generando PDF de muestra:', idMuestra);
             const response = await retryOperation(() => 
                 axiosInstance({
-                    url: API_URLS.MUESTRAS.GENERAR(idMuestra),
+                    url: API_URLS.FIRMA_DIGITAL.GENERAR_PDF(idMuestra),
                     method: 'GET',
                     responseType: 'blob',
                     headers: getAuthHeaders()
@@ -175,7 +169,7 @@ export const PDFService = {
             console.log('Descargando PDF de muestra:', idMuestra);
             const response = await retryOperation(() => 
                 axiosInstance({
-                    url: API_URLS.MUESTRAS.GENERAR(idMuestra),
+                    url: API_URLS.FIRMA_DIGITAL.GENERAR_PDF(idMuestra),
                     method: 'GET',
                     responseType: 'blob',
                     headers: getAuthHeaders()
