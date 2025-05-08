@@ -39,6 +39,7 @@ const generarReportePDF = async (req, res) => {
         return res.sendFile(filePath);
 
     } catch (error) {
+        console.error('Error al generar PDF de muestra:', error, error.stack);
         return res.status(500).json({
             success: false,
             message: "Error al generar el PDF",

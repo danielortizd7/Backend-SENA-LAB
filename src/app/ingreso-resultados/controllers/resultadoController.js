@@ -1002,7 +1002,7 @@ const generarPDFResultadosHandler = async (req, res) => {
         return res.sendFile(filePath);
 
     } catch (error) {
-        console.error('Error al generar PDF de resultados:', error);
+        console.error('Error al generar PDF de resultados:', error, error.stack);
         if (!res.headersSent) {
             return res.status(500).json({
                 success: false,
@@ -1047,7 +1047,7 @@ const descargarPDFResultadosHandler = async (req, res) => {
         return res.sendFile(filePath);
 
     } catch (error) {
-        console.error('Error al descargar PDF de resultados:', error);
+        console.error('Error al descargar PDF de resultados:', error, error.stack);
         if (!res.headersSent) {
             return res.status(500).json({
                 success: false,
