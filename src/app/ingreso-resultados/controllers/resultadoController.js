@@ -984,15 +984,22 @@ const generarPDFResultadosHandler = async (req, res) => {
             });
         }
 
+        // Generar el PDF y obtener el nombre del archivo
+        const nombreArchivo = await generarPDFUtil(resultado);
+        const filePath = path.resolve('/tmp', nombreArchivo);
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'PDF no encontrado',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
         // Configurar headers para PDF
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename=resultados_${idMuestra}.pdf`);
-
-        // Generar el PDF y obtener el buffer
-        const pdfBuffer = await generarPDFUtil(resultado);
-        
-        // Enviar el buffer como respuesta
-        res.end(pdfBuffer);
+        // Enviar el archivo PDF
+        return res.sendFile(filePath);
 
     } catch (error) {
         console.error('Error al generar PDF de resultados:', error);
@@ -1022,15 +1029,22 @@ const descargarPDFResultadosHandler = async (req, res) => {
             });
         }
 
+        // Generar el PDF y obtener el nombre del archivo
+        const nombreArchivo = await generarPDFUtil(resultado);
+        const filePath = path.resolve('/tmp', nombreArchivo);
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'PDF no encontrado',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
         // Configurar headers para descarga
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=resultados_${idMuestra}.pdf`);
-
-        // Generar el PDF y obtener el buffer
-        const pdfBuffer = await generarPDFUtil(resultado);
-        
-        // Enviar el buffer como respuesta
-        res.end(pdfBuffer);
+        // Enviar el archivo PDF
+        return res.sendFile(filePath);
 
     } catch (error) {
         console.error('Error al descargar PDF de resultados:', error);

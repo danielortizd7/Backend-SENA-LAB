@@ -19,10 +19,10 @@ const generarReportePDF = async (req, res) => {
         }
 
         // Generar el PDF con la muestra completa
-        const rutaPDF = await generarPDF(muestra);
+        const nombreArchivo = await generarPDF(muestra);
 
-        // Construir la ruta completa del archivo
-        const filePath = path.join(process.cwd(), "public", rutaPDF);
+        // Construir la ruta completa del archivo en /tmp
+        const filePath = path.resolve('/tmp', nombreArchivo);
 
         // Verificar si el archivo existe
         if (!fs.existsSync(filePath)) {

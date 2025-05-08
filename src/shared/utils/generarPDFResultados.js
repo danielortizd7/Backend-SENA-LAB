@@ -44,7 +44,7 @@ const formatearFecha = (fechaObj) => {
   return 'N/A';
 };
 
-const generarPDFResultados = async (resultado, outputPath = null) => {
+const generarPDFResultados = async (resultado) => {
   if (!resultado || typeof resultado !== 'object') {
     throw new Error('Datos de resultado inválidos');
   }
@@ -169,12 +169,15 @@ const generarPDFResultados = async (resultado, outputPath = null) => {
     data: dataParaReporte
   });
 
-  if (outputPath) {
-    fs.writeFileSync(outputPath, response.content);
-    return outputPath;
+  // Guardar siempre en /tmp
+  const nombreArchivo = `resultados_${resultado.id_muestra || resultado._id || Date.now()}.pdf`;
+  const rutaArchivo = path.join('/tmp', nombreArchivo);
+  // Asegurarse de que /tmp existe
+  if (!fs.existsSync('/tmp')) {
+    fs.mkdirSync('/tmp', { recursive: true });
   }
-
-  return response.content;
+  fs.writeFileSync(rutaArchivo, response.content);
+  return nombreArchivo;
 };
 
 module.exports = generarPDFResultados;

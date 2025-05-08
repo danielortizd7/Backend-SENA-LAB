@@ -76,11 +76,12 @@ const generarPDF = async (muestra) => {
     try {
         const jsreport = await initializeJsReport();
         const nombreArchivo = `muestra_${muestra.id_muestra}.pdf`;
-        const rutaArchivo = path.join(process.cwd(), "public", "pdfs", nombreArchivo);
-        if (!fs.existsSync(path.dirname(rutaArchivo))) {
-            fs.mkdirSync(path.dirname(rutaArchivo), { recursive: true });
+        const rutaArchivo = path.join('/tmp', nombreArchivo);
+        // Asegurarse de que /tmp existe
+        if (!fs.existsSync('/tmp')) {
+            fs.mkdirSync('/tmp', { recursive: true });
         }
-        const logoPath = path.resolve(process.cwd(), "public", "assets", "logoSena.png");
+        const logoPath = path.resolve(__dirname, '../public/assets/logoSena.png');
         let logoBase64 = null;
         if (fs.existsSync(logoPath)) {
             const logoBuffer = fs.readFileSync(logoPath);
@@ -122,7 +123,7 @@ const generarPDF = async (muestra) => {
             data: datosPlanos
         });
         fs.writeFileSync(rutaArchivo, response.content);
-        return `/pdfs/${nombreArchivo}`;
+        return nombreArchivo;
     } catch (error) {
         throw error;
     }
