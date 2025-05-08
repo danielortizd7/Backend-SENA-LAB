@@ -14,7 +14,8 @@ const initializeJsReport = async () => {
                     launchOptions: {
                         args: ['--no-sandbox']
                     }
-                }
+                },
+                express: { enabled: false }
             },
             logger: {
                 file: { transport: 'file', level: 'off' },
