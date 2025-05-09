@@ -1,5 +1,5 @@
 const PdfPrinter = require('pdfmake');
-const pdfFonts = require('../../../pdfmakeFonts/vfs_fonts');
+const pdfFonts = require('../../../pdfmakefonts/vfs_fonts');
 const fs = require('node:fs');
 
 // Soporte para diferentes formas de exportación de vfs_fonts.js
