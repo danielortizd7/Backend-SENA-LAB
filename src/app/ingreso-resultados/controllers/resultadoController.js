@@ -8,10 +8,9 @@ const { formatPaginationResponse } = require("../../../shared/middleware/paginat
 const Analisis = require("../../../shared/models/analisisModel");
 const resultadoService = require("../services/resultadoService");
 const AuditoriaService = require('../../auditoria/services/auditoriaService');
-const report = require('jsreport');
 const path = require('path');
 const fs = require('fs');
-const generarPDFUtil = require('../../../shared/utils/generarPDFResultados');
+const { generarPDF } = require('../../../shared/utils/generarPDFResultados');
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
@@ -989,7 +988,7 @@ const generarPDFResultadosHandler = async (req, res) => {
         res.setHeader('Content-Disposition', `inline; filename=resultados_${idMuestra}.pdf`);
 
         // Generar el PDF y obtener el buffer
-        const pdfBuffer = await generarPDFUtil(resultado);
+        const pdfBuffer = await generarPDF(resultado);
         
         // Enviar el buffer como respuesta
         res.end(pdfBuffer);
@@ -1027,7 +1026,7 @@ const descargarPDFResultadosHandler = async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=resultados_${idMuestra}.pdf`);
 
         // Generar el PDF y obtener el buffer
-        const pdfBuffer = await generarPDFUtil(resultado);
+        const pdfBuffer = await generarPDF(resultado);
         
         // Enviar el buffer como respuesta
         res.end(pdfBuffer);
