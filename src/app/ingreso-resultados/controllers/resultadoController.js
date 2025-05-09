@@ -8,10 +8,9 @@ const { formatPaginationResponse } = require("../../../shared/middleware/paginat
 const Analisis = require("../../../shared/models/analisisModel");
 const resultadoService = require("../services/resultadoService");
 const AuditoriaService = require('../../auditoria/services/auditoriaService');
-const report = require('jsreport');
 const path = require('path');
 const fs = require('fs');
-const generarPDFUtil = require('../../../shared/utils/generarPDFResultados');
+const { generarPDF } = require('../../../shared/utils/generarPDFResultados');
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
@@ -984,25 +983,18 @@ const generarPDFResultadosHandler = async (req, res) => {
             });
         }
 
-        // Generar el PDF y obtener el nombre del archivo
-        const nombreArchivo = await generarPDFUtil(resultado);
-        const filePath = path.resolve('/tmp', nombreArchivo);
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({
-                success: false,
-                message: 'PDF no encontrado',
-                errorCode: 'NOT_FOUND'
-            });
-        }
-
         // Configurar headers para PDF
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename=resultados_${idMuestra}.pdf`);
-        // Enviar el archivo PDF
-        return res.sendFile(filePath);
+
+        // Generar el PDF y obtener el buffer
+        const pdfBuffer = await generarPDF(resultado);
+        
+        // Enviar el buffer como respuesta
+        res.end(pdfBuffer);
 
     } catch (error) {
-        console.error('Error al generar PDF de resultados:', error, error.stack);
+        console.error('Error al generar PDF de resultados:', error);
         if (!res.headersSent) {
             return res.status(500).json({
                 success: false,
@@ -1029,25 +1021,18 @@ const descargarPDFResultadosHandler = async (req, res) => {
             });
         }
 
-        // Generar el PDF y obtener el nombre del archivo
-        const nombreArchivo = await generarPDFUtil(resultado);
-        const filePath = path.resolve('/tmp', nombreArchivo);
-        if (!fs.existsSync(filePath)) {
-            return res.status(404).json({
-                success: false,
-                message: 'PDF no encontrado',
-                errorCode: 'NOT_FOUND'
-            });
-        }
-
         // Configurar headers para descarga
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=resultados_${idMuestra}.pdf`);
-        // Enviar el archivo PDF
-        return res.sendFile(filePath);
+
+        // Generar el PDF y obtener el buffer
+        const pdfBuffer = await generarPDF(resultado);
+        
+        // Enviar el buffer como respuesta
+        res.end(pdfBuffer);
 
     } catch (error) {
-        console.error('Error al descargar PDF de resultados:', error, error.stack);
+        console.error('Error al descargar PDF de resultados:', error);
         if (!res.headersSent) {
             return res.status(500).json({
                 success: false,

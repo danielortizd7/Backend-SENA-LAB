@@ -1,183 +1,294 @@
-const report = require('jsreport');
-const path = require('path');
-const fs = require('fs');
-const Handlebars = require('handlebars');
+const PdfPrinter = require('pdfmake');
+const pdfFonts = require('../../../pdfmakeFonts/vfs_fonts');
+const fs = require('node:fs');
 
-// Helper global para saltos de línea
-Handlebars.registerHelper('newlineToBr', function(text) {
-  if (!text) return '';
-  return new Handlebars.SafeString(text.replace(/\n/g, '<br>'));
+// Soporte para diferentes formas de exportación de vfs_fonts.js
+const vfs = pdfFonts.vfs || pdfFonts;
+
+if (!vfs['Roboto-Regular.ttf']) {
+  throw new Error('No se encontró la fuente Roboto-Regular.ttf en pdfFonts. Verifica que tu archivo vfs_fonts.js contenga las fuentes necesarias.');
+}
+
+const printer = new PdfPrinter({
+  Roboto: {
+    normal: Buffer.from(vfs['Roboto-Regular.ttf'], 'base64'),
+    bold: Buffer.from(vfs['Roboto-Medium.ttf'], 'base64'),
+    italics: Buffer.from(vfs['Roboto-Italic.ttf'], 'base64'),
+    bolditalics: Buffer.from(vfs['Roboto-MediumItalic.ttf'], 'base64'),
+  }
 });
 
-// Instancia única de jsreport
-let jsreportInstance = null;
-let jsreportInitPromise = null;
-
-const initializeJsReport = async () => {
-  if (!jsreportInstance) {
-    jsreportInstance = report({
-      extensions: {
-        express: { enabled: false }
-      },
-      logger: {
-        file: { transport: 'file', level: 'off' },
-        error: { transport: 'file', level: 'off' },
-        console: { transport: 'console', level: 'off' }
-      }
-    });
-    jsreportInitPromise = jsreportInstance.init();
-    await jsreportInitPromise;
-  } else if (jsreportInitPromise) {
-    await jsreportInitPromise;
-  }
-  return jsreportInstance;
-};
-
-// Formateo de fecha
-const formatearFecha = (fechaObj) => {
-  if (fechaObj?.fecha && fechaObj?.hora) {
-    return `${fechaObj.fecha} ${fechaObj.hora}`;
-  }
-  if (fechaObj) {
-    return new Date(fechaObj).toLocaleString();
-  }
-  return 'N/A';
-};
-
-const generarPDFResultados = async (resultado) => {
-  if (!resultado || typeof resultado !== 'object') {
-    throw new Error('Datos de resultado inválidos');
-  }
-
-  const jsreport = await initializeJsReport();
-
-  const templatePath = path.join(__dirname, '../templates/resultados.html');
-  const templateContent = fs.readFileSync(templatePath, 'utf8');
-
-  let aprobadorNombre = '';
-  let aprobadorCedula = '';
-  if (Array.isArray(resultado.historialCambios)) {
-    const verificacion = resultado.historialCambios.find(
-      cambio => cambio.cambiosRealizados?.verificacion?.nuevo === true
-    );
-    if (verificacion) {
-      aprobadorNombre = verificacion.nombre || '';
-      aprobadorCedula = verificacion.cedula || '';
+function generarDocumentDefinition(resultado, logoBase64) {
+  const formatDate = (dateObj) => {
+    if (!dateObj) return 'N/A';
+    if (dateObj.fecha && dateObj.hora) {
+      return `${dateObj.fecha} ${dateObj.hora}`;
     }
-  }
-
-  const logoBuffer = fs.readFileSync(path.join(__dirname, '../../../public/assets/logoSena.png'));
-  const logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
-
-  const resultadosArray = resultado.resultados instanceof Map
-    ? Array.from(resultado.resultados.entries()).map(([nombre, datos]) => ({
-        nombre,
-        nombreFormateado: { ph: 'PH', conductividad: 'CONDUCTIVIDAD' }[nombre] || nombre.toUpperCase(),
-        unidad: datos.unidad || '#N/D',
-        valor: datos.valor || '#N/D',
-        metodo: datos.metodo || '#N/D',
-        tipo: datos.tipo?.toUpperCase() || '#N/D'
-      }))
-    : Object.entries(resultado.resultados).map(([nombre, datos]) => ({
-        nombre,
-        nombreFormateado: { ph: 'PH', conductividad: 'CONDUCTIVIDAD' }[nombre] || nombre.toUpperCase(),
-        unidad: datos.unidad || '#N/D',
-        valor: datos.valor || '#N/D',
-        metodo: datos.metodo || '#N/D',
-        tipo: datos.tipo?.toUpperCase() || '#N/D'
-      }));
-
-  // Separar historial de cambios: verificación y previos
-  let cambioVerificacion = null;
-  let historialPrevioVerificacion = [];
-  if (Array.isArray(resultado.historialCambios)) {
-    const idxVerif = resultado.historialCambios.findIndex(c => c.cambiosRealizados?.verificacion?.nuevo === true);
-    if (idxVerif !== -1) {
-      cambioVerificacion = resultado.historialCambios[idxVerif];
-      historialPrevioVerificacion = resultado.historialCambios.slice(0, idxVerif);
-    } else {
-      historialPrevioVerificacion = resultado.historialCambios;
-    }
-  }
-
-  const historialCambiosReverso = [...(historialPrevioVerificacion || [])]
-    .reverse()
-    .map(cambio => ({
-      ...cambio,
-      fechaFormateada: cambio.fecha?.fecha && cambio.fecha?.hora
-        ? `${cambio.fecha.fecha} ${cambio.fecha.hora}`
-        : formatearFecha(cambio.fecha),
-      cambiosResultadosArray: Object.entries(cambio.cambiosRealizados?.resultados || {}).map(
-        ([parametro, datos]) => ({
-          parametro,
-          valorAnterior: datos.valorAnterior || '-',
-          valorNuevo: datos.valorNuevo || '-',
-          unidad: datos.unidad || '-'
-        })
-      )
-    }));
-
-  const dataParaReporte = {
-    resultado: {
-      ...resultado,
-      fechaRecepcion: formatearFecha(resultado.createdAt),
-      ultimaActualizacion: formatearFecha(resultado.updatedAt),
-      fechaMuestreo: formatearFecha(resultado.fechaHoraMuestreo),
-      tipoAnalisisStr: Array.isArray(resultado.tipoAnalisis)
-        ? resultado.tipoAnalisis.join(', ')
-        : resultado.tipoAnalisis,
-      resultadosArray,
-      historialCambiosReverso,
-      cambioVerificacion: cambioVerificacion ? {
-        ...cambioVerificacion,
-        fechaFormateada: cambioVerificacion.fecha?.fecha && cambioVerificacion.fecha?.hora
-          ? `${cambioVerificacion.fecha.fecha} ${cambioVerificacion.fecha.hora}`
-          : formatearFecha(cambioVerificacion.fecha)
-      } : null
-    },
-    aprobadorNombre,
-    aprobadorCedula,
-    logoPath: logoBase64,
-    disclaimers: [
-      'El laboratorio NO EMITE OPINIONES NI DECLARACIONES con el cumplimiento o no cumplimiento de los requisitos y/o especificaciones; el laboratorio no declara conformidad.',
-      'El Laboratorio no es responsable por lo datos reportados cuando la información es proporcionada por el cliente...',
-      'El resultado hace referencia única y exclusivamente a la muestra indicada en este informe...',
-      'El laboratorio no se responsabiliza de los perjuicios que puedan derivarse del uso inadecuado de la información...'
-    ],
-    clarifications: [
-      'El laboratorio prohíbe la reproducción parcial o total de este informe sin previa autorización.',
-      'Algunos ensayos fueron realizados en las instalaciones del cliente.',
-      'Cualquier solicitud de verificación debe realizarse en un periodo máximo de 5 días hábiles...',
-      'El Laboratorio de Análisis Ambientales no subcontrata ensayos.'
-    ]
+    return new Date(dateObj).toLocaleString();
   };
 
-  const helpers = `
-    function newlineToBr(text) {
-      if (!text) return '';
-      return text.replace(/\\n/g, '<br>');
-    }
-  `;
+  const resultadosArray = Array.isArray(resultado.resultadosArray)
+    ? resultado.resultadosArray.map(item => [
+        { text: item.nombreFormateado || '', style: 'tableBody' },
+        { text: item.unidad || '', style: 'tableBody' },
+        { text: item.valor || '', style: 'tableBody' },
+        { text: item.metodo || '', style: 'tableBody' },
+        { text: item.tipo || '', style: 'tableBody' },
+      ])
+    : [];
 
-  const response = await jsreport.render({
-    template: {
-      content: templateContent,
-      engine: 'handlebars',
-      recipe: 'chrome-pdf',
-      helpers
+  const historialCambiosReverso = (resultado.historialCambiosReverso || []).map((cambio, idx) => ({
+    stack: [
+      { text: `CAMBIO #${idx + 1}`, style: 'historialCambioTitulo' },
+      { text: `Realizado por: ${cambio.nombre || 'No disponible'} | Fecha: ${cambio.fechaFormateada || formatDate(cambio.fecha)}`, style: 'historialCambioInfo' },
+      { text: `Observaciones: ${cambio.observaciones || 'Sin observaciones'}`, style: 'historialCambioInfo' },
+      cambio.cambiosResultadosArray && cambio.cambiosResultadosArray.length > 0 ? {
+        table: {
+          widths: ['*', '*', '*', '*'],
+          body: [
+            [
+              { text: 'Análisis', style: 'tableHeader' },
+              { text: 'Valor Anterior', style: 'tableHeader' },
+              { text: 'Valor Nuevo', style: 'tableHeader' },
+              { text: 'Unidad', style: 'tableHeader' },
+            ],
+            ...cambio.cambiosResultadosArray.map(item => [
+              { text: item.parametro || '', style: 'tableBody' },
+              { text: item.valorAnterior || '-', style: 'tableBody' },
+              { text: item.valorNuevo || '-', style: 'tableBody' },
+              { text: item.unidad || '-', style: 'tableBody' },
+            ]),
+          ],
+        },
+        layout: 'lightHorizontalLines',
+        margin: [0, 5, 0, 10],
+      } : null,
+    ].filter(Boolean),
+    margin: [0, 0, 0, 10],
+  }));
+
+  const disclaimers = (resultado.disclaimers || [
+    'El laboratorio NO EMITE OPINIONES NI DECLARACIONES con el cumplimiento o no cumplimiento de los requisitos y/o especificaciones; el laboratorio no declara conformidad.',
+    'El Laboratorio no es responsable por lo datos reportados cuando la información es proporcionada por el cliente...',
+    'El resultado hace referencia única y exclusivamente a la muestra indicada en este informe...',
+    'El laboratorio no se responsabiliza de los perjuicios que puedan derivarse del uso inadecuado de la información...'
+  ]).map(disclaimer => ({ text: disclaimer, style: 'listItem' }));
+  const clarifications = (resultado.clarifications || [
+    'El laboratorio prohíbe la reproducción parcial o total de este informe sin previa autorización.',
+    'Algunos ensayos fueron realizados en las instalaciones del cliente.',
+    'Cualquier solicitud de verificación debe realizarse en un periodo máximo de 5 días hábiles...',
+    'El Laboratorio de Análisis Ambientales no subcontrata ensayos.'
+  ]).map(clarification => ({ text: clarification, style: 'listItem' }));
+
+  return {
+    pageSize: 'A4',
+    pageMargins: [50, 50, 50, 50],
+    content: [
+      {
+        table: {
+          widths: ['20%', '60%', '20%'],
+          body: [
+            [
+              (logoBase64 && typeof logoBase64 === 'string' && logoBase64.startsWith('data:image'))
+                ? { image: logoBase64, width: 80, alignment: 'center', margin: [0, 10, 0, 10] }
+                : { text: '', alignment: 'center', margin: [0, 10, 0, 10] },
+              {
+                stack: [
+                  { text: 'LABORATORIO DE ANÁLISIS AMBIENTALES', style: 'headerTitle', alignment: 'center', margin: [0, 4, 0, 0] },
+                  { text: 'CENTRO DE TELEINFORMÁTICA Y PRODUCCIÓN INDUSTRIAL', style: 'headerSubtitle', alignment: 'center', margin: [0, 0, 0, 4] },
+                  { text: 'INFORME DE RESULTADOS DE ENSAYOS', style: 'mainReportTitle', alignment: 'center', margin: [0, 0, 0, 0] },
+                ],
+                fillColor: '#003366',
+                color: 'white',
+                alignment: 'center',
+                margin: [0, 0, 0, 0],
+                border: [false, false, false, false],
+              },
+              { text: 'Código:\nLAA-F-047-03', style: 'codigo', alignment: 'center', margin: [0, 10, 0, 10], border: [true, true, true, true] },
+            ],
+          ],
+        },
+        layout: {
+          hLineWidth: function () { return 1; },
+          vLineWidth: function () { return 1; },
+          hLineColor: function () { return '#222'; },
+          vLineColor: function () { return '#222'; },
+        },
+        margin: [0, 0, 0, 18],
+      },
+      { text: 'INFORMACIÓN GENERAL', style: 'sectionBar' },
+      {
+        table: {
+          widths: ['30%', '*'],
+          body: [
+            [{ text: 'ID Muestra', style: 'bold' }, resultado.idMuestra || 'N/A'],
+            [{ text: 'Estado', style: 'bold' }, resultado.estado || 'N/A'],
+            [{ text: 'Verificado', style: 'bold' }, resultado.verificado ? 'Sí' : 'No'],
+            [{ text: 'Fecha de Recepción', style: 'bold' }, formatDate(resultado.createdAt)],
+            [{ text: 'Última Actualización', style: 'bold' }, formatDate(resultado.updatedAt)],
+          ],
+        },
+        layout: 'lightHorizontalLines',
+        margin: [0, 0, 0, 15],
+      },
+      { text: 'INFORMACIÓN DEL CLIENTE', style: 'sectionBar' },
+      {
+        table: {
+          widths: ['30%', '*'],
+          body: [
+            [{ text: 'Nombre', style: 'bold' }, resultado.cliente?.nombre || 'N/A'],
+            [{ text: 'Documento', style: 'bold' }, resultado.cliente?.documento || 'N/A'],
+            [{ text: 'Dirección', style: 'bold' }, resultado.cliente?.direccion || 'N/A'],
+            [{ text: 'Teléfono', style: 'bold' }, resultado.cliente?.telefono || 'N/A'],
+            [{ text: 'Email', style: 'bold' }, resultado.cliente?.email || 'N/A'],
+          ],
+        },
+        layout: 'lightHorizontalLines',
+        margin: [0, 0, 0, 15],
+      },
+      { text: 'INFORMACIÓN DE LA MUESTRA', style: 'sectionBar' },
+      {
+        table: {
+          widths: ['30%', '*'],
+          body: [
+            [{ text: 'Tipo de Agua', style: 'bold' }, `${resultado.tipoDeAgua?.tipo || 'N/A'} (${resultado.tipoDeAgua?.descripcion || 'N/A'})`],
+            [{ text: 'Lugar de Muestreo', style: 'bold' }, resultado.lugarMuestreo || 'N/A'],
+            [{ text: 'Fecha de Muestreo', style: 'bold' }, formatDate(resultado.fechaHoraMuestreo)],
+            [{ text: 'Tipo de Análisis', style: 'bold' }, Array.isArray(resultado.tipoAnalisis) ? resultado.tipoAnalisis.join(', ') : resultado.tipoAnalisis || 'N/A'],
+          ],
+        },
+        layout: 'lightHorizontalLines',
+        margin: [0, 0, 0, 15],
+      },
+      { text: 'RESULTADOS DE ANÁLISIS', style: 'sectionBar' },
+      { text: `Realizado por: ${resultado.cambioVerificacion?.nombre || 'No disponible'} | Fecha: ${resultado.cambioVerificacion?.fechaFormateada || ''}`, margin: [0, 0, 0, 5] },
+      { text: `Observaciones: ${resultado.cambioVerificacion?.observaciones || 'Sin observaciones'}`, margin: [0, 0, 0, 8] },
+      {
+        table: {
+          widths: ['*', '*', '*', '*', '*'],
+          body: [
+            [
+              { text: 'ANÁLISIS', style: 'tableHeader' },
+              { text: 'UNIDAD', style: 'tableHeader' },
+              { text: 'VALOR', style: 'tableHeader' },
+              { text: 'MÉTODO', style: 'tableHeader' },
+              { text: 'TIPO', style: 'tableHeader' },
+            ],
+            ...resultadosArray,
+            resultadosArray.length === 0 ? [{ text: 'No hay resultados de análisis.', colSpan: 5, style: 'italic', alignment: 'center' }] : [],
+          ],
+        },
+        layout: {
+          hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 1 : 0.5; },
+          vLineWidth: function (i, node) { return (i === 0 || i === node.table.widths.length) ? 1 : 0.5; },
+          hLineColor: function (i, node) { return (i === 0 || i === node.table.body.length) ? '#222' : '#ddd'; },
+          vLineColor: function (i, node) { return (i === 0 || i === node.table.widths.length) ? '#222' : '#ddd'; },
+          fillColor: function (rowIndex, node, columnIndex) { return rowIndex === 0 ? '#4CAF50' : null; },
+          fillOpacity: 0.7,
+          textColor: function (rowIndex) { return rowIndex === 0 ? 'white' : 'black'; },
+        },
+        margin: [0, 0, 0, 20],
+      },
+      ...(historialCambiosReverso.length > 0 ? [
+        { text: 'HISTORIAL DE CAMBIOS', style: 'sectionBar', pageBreak: 'before' },
+        ...historialCambiosReverso.flatMap(item => item.stack)
+      ] : []),
+      { text: 'OBSERVACIONES', style: 'observacionesTitulo', margin: [0, 30, 0, 5], pageBreak: 'before' },
+      { text: 'Agradecemos el diligenciamiento de la siguiente encuesta de satisfacción: https://forms.office.com/r/ePtNQrxCMD', style: 'observacionesContenido', margin: [0, 0, 0, 15] },
+      { text: 'DESCARGO DE RESPONSABILIDAD', style: 'descargoTitulo', margin: [0, 20, 0, 5] },
+      { ul: disclaimers, style: 'descargoContenido', margin: [0, 0, 0, 15] },
+      { text: 'ACLARACIONES', style: 'aclaracionesTitulo', margin: [0, 20, 0, 5] },
+      { ul: clarifications, style: 'aclaracionesContenido', margin: [0, 0, 0, 30] },
+      {
+        columns: [
+          {
+            stack: [
+              { text: 'ELABORADO POR:', style: 'firmaLabel' },
+              { text: resultado.nombreLaboratorista || 'N/A', style: 'firmaInfo' },
+              { text: `Cédula: ${resultado.cedulaLaboratorista || 'N/A'}`, style: 'firmaInfo' },
+              { text: 'ROL: Laboratorista', style: 'firmaInfo' },
+            ],
+            width: '*',
+            alignment: 'center',
+          },
+          {
+            stack: [
+              { text: 'APROBADO POR:', style: 'firmaLabel' },
+              { text: resultado.aprobadorNombre || 'Director Técnico', style: 'firmaInfo' },
+              { text: `Cédula: ${resultado.aprobadorCedula || 'N/A'}`, style: 'firmaInfo' },
+              { text: 'ROL: Administrador', style: 'firmaInfo' },
+            ],
+            width: '*',
+            alignment: 'center',
+          },
+        ],
+        margin: [0, 40, 0, 0],
+      },
+      { text: 'FIN DEL INFORME DE ENSAYO', style: 'footerTitulo', alignment: 'center', margin: [0, 40, 0, 10] },
+      { text: 'LABORATORIO DE ANÁLISIS AMBIENTALES (a)\nCARRERA 9 NÚMERO 71N - 60, POPAYÁN, CAUCA\nCORREO ELECTRÓNICO: LABAMBIENTALCIP@SENA.EDU.CO\nTELÉFONO / WHATSAPP: 324 6128123', style: 'contacto', alignment: 'center', margin: [0, 10] },
+    ],
+    styles: {
+      headerTitle: { fontSize: 14, bold: true, color: 'white', alignment: 'center', margin: [0, 2, 0, 0], letterSpacing: 1 },
+      headerSubtitle: { fontSize: 11, color: 'white', alignment: 'center', margin: [0, 0, 0, 2], letterSpacing: 1 },
+      mainReportTitle: { fontSize: 12, bold: true, color: 'white', alignment: 'center', margin: [0, 2, 0, 2], letterSpacing: 1 },
+      sectionBar: { fontSize: 11, bold: true, color: 'white', fillColor: '#4CAF50', margin: [0, 12, 0, 4], alignment: 'left', padding: [8, 4, 0, 4], textTransform: 'uppercase', letterSpacing: 1 },
+      sectionTitle: { fontSize: 14, bold: true, background: '#4CAF50', color: 'white', padding: 5, margin: [0, 15, 0, 5] },
+      tableHeader: { bold: true, fontSize: 9, color: 'white', fillColor: '#4CAF50', alignment: 'center', textTransform: 'uppercase', letterSpacing: 1, margin: [0, 4, 0, 4] },
+      tableBody: { fontSize: 8, color: '#222', margin: [0, 2, 0, 2] },
+      bold: { bold: true },
+      italic: { italics: true },
+      historialCambioTitulo: { fontSize: 10, bold: true, margin: [0, 7, 0, 2], textTransform: 'uppercase' },
+      historialCambioInfo: { fontSize: 8, margin: [0, 0, 0, 2] },
+      firmaLabel: { fontSize: 9, bold: true, margin: [0, 12, 0, 2], alignment: 'center', textTransform: 'uppercase' },
+      firmaInfo: { fontSize: 8, alignment: 'center' },
+      footerTitulo: { fontSize: 11, bold: true, fillColor: '#4CAF50', color: 'white', padding: 12, alignment: 'center', margin: [0, 16, 0, 16], textTransform: 'uppercase', letterSpacing: 1 },
+      contacto: { fontSize: 8, alignment: 'center', color: '#222', textTransform: 'uppercase' },
+      observacionesTitulo: { fontSize: 10, bold: true, fillColor: '#4CAF50', color: 'white', padding: 10, alignment: 'left', margin: [0, 12, 0, 4], textTransform: 'uppercase', letterSpacing: 1 },
+      observacionesContenido: { fontSize: 9, color: '#222', border: [true, true, true, true], borderColor: '#4CAF50', borderWidth: 1, padding: [12, 18], marginBottom: 18, alignment: 'justify' },
+      descargoTitulo: { fontSize: 10, bold: true, fillColor: '#4CAF50', color: 'white', padding: 10, alignment: 'left', margin: [0, 12, 0, 4], textTransform: 'uppercase', letterSpacing: 1 },
+      descargoContenido: { fontSize: 9, color: '#222', border: [true, true, true, true], borderColor: '#4CAF50', borderWidth: 1, padding: [12, 18], marginBottom: 18 },
+      aclaracionesTitulo: { fontSize: 10, bold: true, fillColor: '#4CAF50', color: 'white', padding: 10, alignment: 'left', margin: [0, 12, 0, 4], textTransform: 'uppercase', letterSpacing: 1 },
+      aclaracionesContenido: { fontSize: 9, color: '#222', border: [true, true, true, true], borderColor: '#4CAF50', borderWidth: 1, padding: [12, 18], marginBottom: 18 },
+      listItem: { fontSize: 9, margin: [0, 0, 0, 6] },
+      codigo: { fontSize: 8, alignment: 'center', color: '#003366', bold: true },
     },
-    data: dataParaReporte
-  });
+    defaultStyle: {
+      fontSize: 10,
+      font: 'Roboto',
+    },
+  };
+}
 
-  // Guardar siempre en /tmp
-  const nombreArchivo = `resultados_${resultado.id_muestra || resultado._id || Date.now()}.pdf`;
-  const rutaArchivo = path.join('/tmp', nombreArchivo);
-  // Asegurarse de que /tmp existe
-  if (!fs.existsSync('/tmp')) {
-    fs.mkdirSync('/tmp', { recursive: true });
+const generarPDFResultadosPdfMake = async (resultado, logoBase64) => {
+  try {
+    const documentDefinition = generarDocumentDefinition(resultado, logoBase64);
+    const pdfDoc = printer.createPdfKitDocument(documentDefinition);
+    const chunks = [];
+    pdfDoc.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+    return new Promise((resolve, reject) => {
+      pdfDoc.on('end', () => {
+        const pdfBuffer = Buffer.concat(chunks);
+        resolve(pdfBuffer);
+      });
+      pdfDoc.on('error', reject);
+      pdfDoc.end();
+    });
+  } catch (error) {
+    console.error('Error al generar PDF con pdfmake:', error);
+    throw error;
   }
-  fs.writeFileSync(rutaArchivo, response.content);
-  return nombreArchivo;
 };
 
-module.exports = generarPDFResultados;
+// Validación extra para prevenir errores en tablas
+function safeTableCell(cell) {
+  if (cell === undefined || cell === null) return { text: '' };
+  if (typeof cell === 'string') return { text: cell };
+  if (typeof cell === 'object' && !Array.isArray(cell)) return cell;
+  return { text: String(cell) };
+}
+
+module.exports = {
+  generarPDF: generarPDFResultadosPdfMake
+};

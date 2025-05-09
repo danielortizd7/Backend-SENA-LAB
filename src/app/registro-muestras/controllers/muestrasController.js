@@ -903,40 +903,58 @@ const eliminarMuestra = async (req, res, next) => {
 };
 
 // Crear una nueva muestra
-const crearMuestra = async (req, res, next) => {
+const crearMuestra = async (req, res) => {
     try {
         const muestra = await muestrasService.crearMuestra(req.body, req.user);
-        ResponseHandler.success(res, { muestra }, 'Muestra creada exitosamente', 201);
+        res.status(201).json(muestra);
     } catch (error) {
-        next(error);
+        if (error instanceof ValidationError) {
+            res.status(400).json({ error: error.message });
+        } else if (error instanceof DatabaseError) {
+            res.status(500).json({ error: 'Error al crear la muestra' });
+        } else {
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
     }
 };
 
 // Obtener muestras por tipo y estado
-const obtenerMuestrasPorTipoEstado = async (req, res, next) => {
+const obtenerMuestrasPorTipoEstado = async (req, res) => {
     try {
         const { tipo, estado } = req.query;
         const muestras = await muestrasService.obtenerMuestras(tipo, estado);
-        ResponseHandler.success(res, { muestras }, 'Muestras obtenidas correctamente');
+        res.json(muestras);
     } catch (error) {
-        next(error);
+        if (error instanceof ValidationError) {
+            res.status(400).json({ error: error.message });
+        } else if (error instanceof DatabaseError) {
+            res.status(500).json({ error: 'Error al obtener las muestras' });
+        } else {
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
     }
 };
 
-const actualizarEstadoMuestra = async (req, res, next) => {
+const actualizarEstadoMuestra = async (req, res) => {
     try {
         const { id } = req.params;
         const { estado } = req.body;
 
         // Validar que el estado sea válido
         if (!estadosValidos.includes(estado)) {
-            throw new ValidationError('Estado no válido');
+            return res.status(400).json({
+                success: false,
+                message: 'Estado no válido'
+            });
         }
 
         // Obtener la muestra
         const muestra = await Muestra.findById(id);
         if (!muestra) {
-            throw new NotFoundError('Muestra no encontrada');
+            return res.status(404).json({
+                success: false,
+                message: 'Muestra no encontrada'
+            });
         }
 
         const estadoAnterior = muestra.estado;
@@ -964,30 +982,17 @@ const actualizarEstadoMuestra = async (req, res, next) => {
 
         await muestra.save();
 
-        // Registrar auditoría
-        setImmediate(async () => {
-            try {
-                await AuditoriaService.registrarAccionMuestra({
-                    usuario: req.usuario,
-                    metodo: req.method,
-                    descripcion: `Cambio de estado de muestra a ${estado}`,
-                    idMuestra: muestra._id,
-                    tipoMuestra: muestra.tipoDeAgua?.tipo,
-                    estadoMuestra: estado,
-                    datosCompletos: muestra.toObject(),
-                    cambios: {
-                        anteriores: { estado: estadoAnterior },
-                        nuevos: { estado }
-                    }
-                });
-            } catch (error) {
-                console.error('[AUDITORIA ERROR]', error.message);
-            }
+        res.json({
+            success: true,
+            message: 'Estado de la muestra actualizado correctamente',
+            data: muestra
         });
-
-        ResponseHandler.success(res, { muestra }, 'Estado de la muestra actualizado correctamente');
     } catch (error) {
-        next(error);
+        console.error('Error al actualizar estado de la muestra:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al actualizar el estado de la muestra'
+        });
     }
 };
 
