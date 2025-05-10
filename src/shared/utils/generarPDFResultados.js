@@ -27,45 +27,54 @@ function generarDocumentDefinition(resultado, logoBase64) {
     return new Date(dateObj).toLocaleString();
   };
 
-  const resultadosArray = Array.isArray(resultado.resultadosArray)
-    ? resultado.resultadosArray.map(item => [
-        { text: item.nombreFormateado || '', style: 'tableBody' },
-        { text: item.unidad || '', style: 'tableBody' },
-        { text: item.valor || '', style: 'tableBody' },
-        { text: item.metodo || '', style: 'tableBody' },
-        { text: item.tipo || '', style: 'tableBody' },
-      ])
-    : [];
-
-  const historialCambiosReverso = (resultado.historialCambiosReverso || []).map((cambio, idx) => ({
-    stack: [
-      { text: `CAMBIO #${idx + 1}`, style: 'historialCambioTitulo' },
-      { text: `Realizado por: ${cambio.nombre || 'No disponible'} | Fecha: ${cambio.fechaFormateada || formatDate(cambio.fecha)}`, style: 'historialCambioInfo' },
-      { text: `Observaciones: ${cambio.observaciones || 'Sin observaciones'}`, style: 'historialCambioInfo' },
-      cambio.cambiosResultadosArray && cambio.cambiosResultadosArray.length > 0 ? {
-        table: {
-          widths: ['*', '*', '*', '*'],
-          body: [
-            [
-              { text: 'Análisis', style: 'tableHeader' },
-              { text: 'Valor Anterior', style: 'tableHeader' },
-              { text: 'Valor Nuevo', style: 'tableHeader' },
-              { text: 'Unidad', style: 'tableHeader' },
-            ],
-            ...cambio.cambiosResultadosArray.map(item => [
-              { text: item.parametro || '', style: 'tableBody' },
-              { text: item.valorAnterior || '-', style: 'tableBody' },
-              { text: item.valorNuevo || '-', style: 'tableBody' },
-              { text: item.unidad || '-', style: 'tableBody' },
-            ]),
-          ],
-        },
-        layout: 'lightHorizontalLines',
-        margin: [0, 5, 0, 10],
-      } : null,
-    ].filter(Boolean),
-    margin: [0, 0, 0, 10],
+  // Transformar el objeto de resultados a un array
+  const resultadosArray = Object.entries(resultado.resultados || {}).map(([nombre, datos]) => ({
+    nombreFormateado: nombre,
+    unidad: datos.unidad,
+    valor: datos.valor,
+    metodo: datos.metodo,
+    tipo: datos.tipo
   }));
+
+  // Preparar el historial de cambios con la transformación de resultados
+  const historialCambiosReverso = (resultado.historialCambios || []).map((cambio, idx) => {
+    const cambiosResultadosArray = Object.entries(cambio.cambiosRealizados?.resultados || {}).map(([parametro, detalles]) => ({
+      parametro: parametro,
+      valorAnterior: detalles.valorAnterior,
+      valorNuevo: detalles.valorNuevo,
+      unidad: detalles.unidad
+    }));
+
+    return {
+      stack: [
+        { text: `CAMBIO #${idx + 1}`, style: 'historialCambioTitulo' },
+        { text: `Realizado por: ${cambio.nombre || 'No disponible'} | Fecha: ${cambio.fechaFormateada || formatDate(cambio.fecha)}`, style: 'historialCambioInfo' },
+        { text: `Observaciones: ${cambio.observaciones || 'Sin observaciones'}`, style: 'historialCambioInfo' },
+        cambiosResultadosArray && cambiosResultadosArray.length > 0 ? {
+          table: {
+            widths: ['*', '*', '*', '*'],
+            body: [
+              [
+                { text: 'Análisis', style: 'tableHeader' },
+                { text: 'Valor Anterior', style: 'tableHeader' },
+                { text: 'Valor Nuevo', style: 'tableHeader' },
+                { text: 'Unidad', style: 'tableHeader' },
+              ],
+              ...cambiosResultadosArray.map(item => [
+                { text: item.parametro || '', style: 'tableBody' },
+                { text: item.valorAnterior || '-', style: 'tableBody' },
+                { text: item.valorNuevo || '-', style: 'tableBody' },
+                { text: item.unidad || '-', style: 'tableBody' },
+              ]),
+            ],
+          },
+          layout: 'lightHorizontalLines',
+          margin: [0, 5, 0, 10],
+        } : null,
+      ].filter(Boolean),
+      margin: [0, 0, 0, 10],
+    };
+  }).reverse(); // Invertir el orden para mostrar el historial del más reciente al más antiguo
 
   const disclaimers = (resultado.disclaimers || [
     'El laboratorio NO EMITE OPINIONES NI DECLARACIONES con el cumplimiento o no cumplimiento de los requisitos y/o especificaciones; el laboratorio no declara conformidad.',
@@ -79,6 +88,12 @@ function generarDocumentDefinition(resultado, logoBase64) {
     'Cualquier solicitud de verificación debe realizarse en un periodo máximo de 5 días hábiles...',
     'El Laboratorio de Análisis Ambientales no subcontrata ensayos.'
   ]).map(clarification => ({ text: clarification, style: 'listItem' }));
+
+  // Intentar obtener la información del verificador del último historial de cambios
+  const ultimoCambioVerificacion = resultado.historialCambios?.slice(-1)[0];
+  const realizadoPorNombre = ultimoCambioVerificacion?.nombre || resultado.nombreLaboratorista || 'No disponible';
+  const realizadoPorFecha = ultimoCambioVerificacion?.fechaFormateada || formatDate(ultimoCambioVerificacion?.fecha) || '';
+  const realizadoPorObservaciones = ultimoCambioVerificacion?.observaciones || resultado.observaciones || 'Sin observaciones';
 
   return {
     pageSize: 'A4',
@@ -161,8 +176,8 @@ function generarDocumentDefinition(resultado, logoBase64) {
         margin: [0, 0, 0, 15],
       },
       { text: 'RESULTADOS DE ANÁLISIS', style: 'sectionBar' },
-      { text: `Realizado por: ${resultado.cambioVerificacion?.nombre || 'No disponible'} | Fecha: ${resultado.cambioVerificacion?.fechaFormateada || ''}`, margin: [0, 0, 0, 5] },
-      { text: `Observaciones: ${resultado.cambioVerificacion?.observaciones || 'Sin observaciones'}`, margin: [0, 0, 0, 8] },
+      { text: `Realizado por: ${realizadoPorNombre} | Fecha: ${realizadoPorFecha}`, margin: [0, 0, 0, 5] },
+      { text: `Observaciones: ${realizadoPorObservaciones}`, margin: [0, 0, 0, 8] },
       {
         table: {
           widths: ['*', '*', '*', '*', '*'],
@@ -174,8 +189,16 @@ function generarDocumentDefinition(resultado, logoBase64) {
               { text: 'MÉTODO', style: 'tableHeader' },
               { text: 'TIPO', style: 'tableHeader' },
             ],
-            ...resultadosArray,
-            resultadosArray.length === 0 ? [{ text: 'No hay resultados de análisis.', colSpan: 5, style: 'italic', alignment: 'center' }] : [],
+            ...(resultadosArray.length > 0 
+                ? resultadosArray.map(item => [
+                    { text: item.nombreFormateado || '', style: 'tableBody' },
+                    { text: item.unidad || '', style: 'tableBody' },
+                    { text: item.valor || '', style: 'tableBody' },
+                    { text: item.metodo || '', style: 'tableBody' },
+                    { text: item.tipo || '', style: 'tableBody' },
+                ])
+                : [[{ text: 'No hay resultados de análisis.', colSpan: 5, style: 'italic', alignment: 'center' }, '', '', '', '']]
+            ),
           ],
         },
         layout: {
@@ -289,6 +312,20 @@ function safeTableCell(cell) {
   return { text: String(cell) };
 }
 
+// Helper to load logo as base64
+function loadLogoAsBase64(logoPath) {
+  try {
+    const imageBuffer = fs.readFileSync(logoPath);
+    const ext = logoPath.split('.').pop().toLowerCase();
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+    return `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
+  } catch (err) {
+    console.error('No se pudo cargar el logo:', err);
+    return null;
+  }
+}
+
 module.exports = {
-  generarPDF: generarPDFResultadosPdfMake
+  generarPDF: generarPDFResultadosPdfMake,
+  loadLogoAsBase64
 };

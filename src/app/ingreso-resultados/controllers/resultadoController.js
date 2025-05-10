@@ -10,7 +10,7 @@ const resultadoService = require("../services/resultadoService");
 const AuditoriaService = require('../../auditoria/services/auditoriaService');
 const path = require('path');
 const fs = require('fs');
-const { generarPDF } = require('../../../shared/utils/generarPDFResultados');
+const { generarPDF, loadLogoAsBase64 } = require('../../../shared/utils/generarPDFResultados');
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
@@ -983,12 +983,16 @@ const generarPDFResultadosHandler = async (req, res) => {
             });
         }
 
+        // Cargar el logo como base64
+        const logoPath = require('path').resolve(process.cwd(), 'public', 'assets', 'logoSena.png');
+        const logoBase64 = loadLogoAsBase64(logoPath);
+
         // Configurar headers para PDF
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename=resultados_${idMuestra}.pdf`);
 
         // Generar el PDF y obtener el buffer
-        const pdfBuffer = await generarPDF(resultado);
+        const pdfBuffer = await generarPDF(resultado, logoBase64);
         
         // Enviar el buffer como respuesta
         res.end(pdfBuffer);
