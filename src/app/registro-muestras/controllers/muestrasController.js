@@ -640,21 +640,22 @@ const registrarMuestra = async (req, res, next) => {
          //AUDITORIAS
          setImmediate(async () => {
             try {
-                await AuditoriaService.registrarAccionMuestra({
+                await AuditoriaService.registrarAccion({
                     usuario: req.usuario,
-                    metodo: req.method,
-                   /* ruta: req.originalUrl,*/
-                    descripcion: 'Registro de nueva muestra',
-                 //   idMuestra: muestraGuardada._id,
-                    tipoMuestra: muestraGuardada.tipoDeAgua.tipo,
-                    estadoMuestra: muestraGuardada.estado,
-                    datosCompletos: muestraGuardada.toObject(),
-                  /*  cambios: {
-                        anteriores: null,
-                        nuevos: nuevaMuestra.toObject()
+                    accion: {
+                        descripcion: 'registro nueva muestra'
                     },
-                    ip: req.ip,
-                    userAgent: req.headers['user-agent']*/
+                    detalles: {
+                        id_muestra: muestraGuardada.id_muestra,
+                        cliente: muestraGuardada.cliente,
+                        tipoDeAgua: muestraGuardada.tipoDeAgua,
+                        lugarMuestreo: muestraGuardada.lugarMuestreo,
+                        fechaHoraMuestreo: muestraGuardada.fechaHoraMuestreo,
+                        tipoAnalisis: Array.isArray(muestraGuardada.tipoAnalisis) ? muestraGuardada.tipoAnalisis[0] : muestraGuardada.tipoAnalisis,
+                        estado: muestraGuardada.estado,
+                        analisisSeleccionados: muestraGuardada.analisisSeleccionados
+                    },
+                    fecha: new Date()
                 });
             } catch (error) {
                 console.error('[AUDITORIA ERROR]', error.message);
@@ -820,18 +821,22 @@ const actualizarMuestra = async (req, res, next) => {
          // AUDITORÍA
          setImmediate(async () => {
             try {
-                await AuditoriaService.registrarAccionMuestra({
+                await AuditoriaService.registrarAccion({
                     usuario,
-                    metodo: req.method,
-                    descripcion: 'Actualización de muestra',
-                    idMuestra: muestra._id,
-                    tipoMuestra: muestra.tipoDeAgua?.tipo,
-                    estadoMuestra: muestra.estado,
-                    datosCompletos: muestra.toObject(),
-                    cambios: {
-                        anteriores: muestraOriginal,
-                        nuevos: muestra.toObject()
-                    }
+                    accion: {
+                        descripcion: 'actualización de resultado'
+                    },
+                    detalles: {
+                        idMuestra: muestra._id,
+                        tipoMuestra: muestra.tipoDeAgua?.tipo,
+                        estadoMuestra: muestra.estado,
+                        datosCompletos: muestra.toObject(),
+                        cambios: {
+                            antes: muestraOriginal,
+                            despues: muestra.toObject()
+                        }
+                    },
+                    fecha: new Date()
                 });
             } catch (error) {
                 console.error('[AUDITORIA ERROR]', error.message);

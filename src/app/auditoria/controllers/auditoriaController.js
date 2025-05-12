@@ -68,6 +68,50 @@ class AuditoriaController {
     }
   }
 
+  async obtenerAuditoriasSemanales(req, res) {
+    try {
+      const { fechaInicio, fechaFin } = req.query;
+      if (!fechaInicio || !fechaFin) {
+        return res.status(400).json({
+          success: false,
+          message: 'Se requieren fechaInicio y fechaFin para la consulta'
+        });
+      }
+      const registros = await auditoriaService.obtenerAuditoriasSemanales(fechaInicio, fechaFin);
+      res.json({
+        success: true,
+        data: registros
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  async obtenerAuditoriasMensuales(req, res) {
+    try {
+      const { fechaInicio, fechaFin } = req.query;
+      if (!fechaInicio || !fechaFin) {
+        return res.status(400).json({
+          success: false,
+          message: 'Se requieren fechaInicio y fechaFin para la consulta'
+        });
+      }
+      const registros = await auditoriaService.obtenerAuditoriasMensuales(fechaInicio, fechaFin);
+      res.json({
+        success: true,
+        data: registros
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
   async exportarRegistros(req, res) {
     try {
       const {

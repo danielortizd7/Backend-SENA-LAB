@@ -31,6 +31,20 @@ router.get(
     auditoriaController.filtrarRegistros
 );
 
+// Nueva ruta para obtener auditorías semanales
+router.get(
+    "/semanales",
+    verificarPermiso(PERMISOS.VER_AUDITORIA),
+    auditoriaController.obtenerAuditoriasSemanales
+);
+
+// Nueva ruta para obtener auditorías mensuales
+router.get(
+    "/mensuales",
+    verificarPermiso(PERMISOS.VER_AUDITORIA),
+    auditoriaController.obtenerAuditoriasMensuales
+);
+
 // Nueva ruta para generar PDF de un registro de auditoría
 router.get(
     "/registros/:id/pdf",
@@ -38,4 +52,4 @@ router.get(
     auditoriaController.generarPDFRegistro
 );
 
-module.exports = router; 
+module.exports = router;

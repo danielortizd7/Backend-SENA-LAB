@@ -1,13 +1,16 @@
 const { validationResult } = require('express-validator');
 const Resultado = require("../models/resultadoModel");
 const mongoose = require("mongoose");
-const ResponseHandler = require("../../../shared/utils/responseHandler");
+const { ResponseHandler } = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError, AuthorizationError } = require("../../../shared/errors/AppError");
 const { Muestra } = require("../../../shared/models/muestrasModel");
 const { formatPaginationResponse } = require("../../../shared/middleware/paginationMiddleware");
 const Analisis = require("../../../shared/models/analisisModel");
 const resultadoService = require("../services/resultadoService");
 const AuditoriaService = require('../../auditoria/services/auditoriaService');
+const path = require('path');
+const fs = require('fs');
+const { generarPDF, loadLogoAsBase64 } = require('../../../shared/utils/generarPDFResultados');
 
 // Función para formatear fechas en zona horaria colombiana
 const formatearFechaHora = (fecha) => {
@@ -68,8 +71,48 @@ const registrarResultado = async (req, res) => {
             });
         }
 
+        // Obtener todos los análisis necesarios para la validación
+        const analisisDisponibles = await Analisis.find({
+            nombre: { $in: Object.keys(resultados) }
+        });
+
+        // Validar los rangos para cada resultado
+        const erroresValidacion = [];
+        for (const [nombreAnalisis, datos] of Object.entries(resultados)) {
+            const analisis = analisisDisponibles.find(a => a.nombre === nombreAnalisis);
+            
+            if (!analisis) {
+                erroresValidacion.push(`El análisis ${nombreAnalisis} no existe en la base de datos`);
+                continue;
+            }
+
+            // Validar que el valor sea numérico (excepto para resultados cualitativos)
+            const valor = parseFloat(datos.valor);
+            if (isNaN(valor) && analisis.rango !== 'Ausencia/Presencia') {
+                erroresValidacion.push(`El valor para ${nombreAnalisis} debe ser numérico`);
+                continue;
+            }
+
+            // Validar la unidad
+            if (datos.unidad !== analisis.unidad) {
+                erroresValidacion.push(
+                    `La unidad para ${nombreAnalisis} debe ser ${analisis.unidad}`
+                );
+            }
+        }
+
+        // Si hay errores de validación, retornar error
+        if (erroresValidacion.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Error en la validación de resultados',
+                errors: erroresValidacion,
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
+
         // Obtener la muestra para tener los datos completos
-        const muestra = await Muestra.findOne({ id_muestra: idMuestra }).lean();
+        const muestra = await Muestra.findOne({ id_muestra: idMuestra });
         if (!muestra) {
             return res.status(404).json({
                 success: false,
@@ -78,15 +121,48 @@ const registrarResultado = async (req, res) => {
             });
         }
 
-        // Crear fecha actual para todos los timestamps
-        const fechaActual = new Date();
+        // Actualizar el estado de la muestra a "En análisis"
+        const estadoAnterior = muestra.estado;
+        muestra.estado = "En análisis";
+        
+        // Crear el registro del historial de estados
+        const nuevoEstado = {
+            estado: "En análisis",
+            estadoAnterior: estadoAnterior,
+            fecha: new Date(),
+            observaciones: "Cambio automático al registrar resultados"
+        };
+
+        // Si tenemos el ID del usuario lo agregamos, si no, usamos la información básica
+        if (usuario._id) {
+            nuevoEstado.usuario = usuario._id;
+        } else {
+            // Crear un nuevo ObjectId para el usuario si no existe
+            nuevoEstado.usuario = new mongoose.Types.ObjectId();
+        }
+
+        muestra.historialEstados.push(nuevoEstado);
+
+        try {
+            await muestra.save();
+        } catch (error) {
+            console.error('Error al guardar la muestra:', error);
+            return res.status(400).json({
+                success: false,
+                message: 'Error al actualizar el estado de la muestra',
+                error: error.message
+            });
+        }
 
         // Preparar datos para el servicio
         const datosResultado = {
             idMuestra,
             cliente: {
                 documento: muestra.cliente.documento,
-                nombre: muestra.cliente.nombre
+                nombre: muestra.cliente.nombre,
+                email: muestra.cliente.email,
+                telefono: muestra.cliente.telefono,
+                direccion: muestra.cliente.direccion
             },
             tipoDeAgua: muestra.tipoDeAgua,
             lugarMuestreo: muestra.lugarMuestreo,
@@ -97,74 +173,77 @@ const registrarResultado = async (req, res) => {
             observaciones,
             verificado: false,
             cedulaLaboratorista: usuario.documento,
-            nombreLaboratorista: usuario.nombre,
-            historialCambios: [{
-                nombre: usuario.nombre,
-                cedula: usuario.documento,
-                fecha: fechaActual,
-                observaciones: observaciones || 'Registro inicial de resultados',
-                cambiosRealizados: { resultados }
-            }],
-            createdAt: fechaActual,
-            updatedAt: fechaActual
+            nombreLaboratorista: usuario.nombre
         };
 
         // Usar el servicio para registrar el resultado
         const resultado = await resultadoService.registrarResultado(datosResultado);
 
-         // Registrar auditoría de registro de muestra
-         setImmediate(async () => {
-            try {
-                await AuditoriaService.registrarAccionMuestra({
-                    usuario,
-                    metodo: 'POST',
-                    descripcion: 'Registro de resultado y muestra',
-                    idMuestra,
-                    tipoMuestra: resultado.tipoDeAgua,
-                    estadoMuestra: resultado.estado,
-                    datosCompletos: resultado
-                });
-            } catch (error) {
-                console.error('[AUDITORIA ERROR]', error.message);
-            }
+        // Obtener los análisis para mapear IDs a nombres
+        const analisisInfo = await Analisis.find({
+            _id: { $in: Array.from(resultado.resultados.keys()) }
         });
 
-        // Obtener el resultado recién creado con todos los datos
-        const resultadoGuardado = await Resultado.findById(resultado._id)
-            .lean();
-
-        if (!resultadoGuardado) {
-            throw new Error('Error al recuperar el resultado guardado');
-        }
+        const analisisMap = analisisInfo.reduce((acc, analisis) => {
+            acc[analisis._id] = analisis;
+            return acc;
+        }, {});
 
         // Formatear el resultado para la respuesta
         const resultadoFormateado = {
-            _id: resultadoGuardado._id,
-            idMuestra: resultadoGuardado.idMuestra,
-            cliente: {
-                documento: resultadoGuardado.cliente.documento,
-                nombre: resultadoGuardado.cliente.nombre
-            },
-            tipoDeAgua: resultadoGuardado.tipoDeAgua,
-            lugarMuestreo: resultadoGuardado.lugarMuestreo,
-            fechaHoraMuestreo: formatearFechaHora(resultadoGuardado.fechaHoraMuestreo),
-            tipoAnalisis: resultadoGuardado.tipoAnalisis,
-            estado: resultadoGuardado.estado,
-            resultados: resultadoGuardado.resultados,
-            observaciones: resultadoGuardado.observaciones,
-            verificado: resultadoGuardado.verificado,
-            cedulaLaboratorista: resultadoGuardado.cedulaLaboratorista,
-            nombreLaboratorista: resultadoGuardado.nombreLaboratorista,
-            historialCambios: resultadoGuardado.historialCambios.map(cambio => ({
+            _id: resultado._id,
+            idMuestra: resultado.idMuestra,
+            cliente: resultado.cliente,
+            tipoDeAgua: resultado.tipoDeAgua,
+            lugarMuestreo: resultado.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+            tipoAnalisis: resultado.tipoAnalisis,
+            estado: resultado.estado,
+            resultados: Object.fromEntries(
+                Array.from(resultado.resultados.entries()).map(([id, valor]) => [
+                    analisisMap[id].nombre,
+                    valor
+                ])
+            ),
+            observaciones: resultado.observaciones,
+            verificado: resultado.verificado,
+            cedulaLaboratorista: resultado.cedulaLaboratorista,
+            nombreLaboratorista: resultado.nombreLaboratorista,
+            historialCambios: resultado.historialCambios.map(cambio => ({
                 nombre: cambio.nombre,
                 cedula: cambio.cedula,
                 fecha: formatearFechaHora(cambio.fecha),
                 observaciones: cambio.observaciones,
                 cambiosRealizados: cambio.cambiosRealizados
             })),
-            createdAt: formatearFechaHora(resultadoGuardado.createdAt),
-            updatedAt: formatearFechaHora(resultadoGuardado.updatedAt)
+            createdAt: formatearFechaHora(resultado.createdAt),
+            updatedAt: formatearFechaHora(resultado.updatedAt)
         };
+
+        // Registrar auditoría
+        setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccion({
+                    usuario,
+                    accion: {
+                        descripcion: 'registro de resultado'
+                    },
+                    detalles: {
+                        id_muestra: idMuestra,
+                        cliente: resultado.cliente,
+                        tipoDeAgua: resultado.tipoDeAgua,
+                        lugarMuestreo: resultado.lugarMuestreo,
+                        fechaHoraMuestreo: resultado.fechaHoraMuestreo,
+                        tipoAnalisis: Array.isArray(resultado.tipoAnalisis) ? resultado.tipoAnalisis[0] : resultado.tipoAnalisis,
+                        estado: resultado.estado,
+                        resultados: resultado.resultados
+                    },
+                    fecha: new Date()
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         return res.status(200).json({
             success: true,
@@ -211,55 +290,99 @@ const editarResultado = async (req, res) => {
             });
         }
 
-        
-        // Guardar valores anteriores para auditoría
-        const valoresAnteriores = resultado.toObject();
+        // Verificar si el resultado ya está verificado
+        if (resultado.verificado || muestra.estado === "Finalizada") {
+            return res.status(403).json({
+                success: false,
+                message: 'No se puede editar un resultado que ya ha sido verificado o finalizado',
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
 
-
-        // Obtener información de los análisis
-        const analisisInfo = await Analisis.find({
+        // Obtener información de los análisis y validar rangos
+        const analisisDisponibles = await Analisis.find({
             nombre: { $in: Object.keys(resultados) }
         });
 
-        const analisisMap = analisisInfo.reduce((acc, analisis) => {
-            acc[analisis.nombre] = analisis;
-            return acc;
-        }, {});
+        // Validar los rangos para cada resultado
+        const erroresValidacion = [];
+        for (const [nombreAnalisis, datos] of Object.entries(resultados)) {
+            const analisis = analisisDisponibles.find(a => a.nombre === nombreAnalisis);
+            
+            if (!analisis) {
+                erroresValidacion.push(`El análisis ${nombreAnalisis} no existe en la base de datos`);
+                continue;
+            }
 
-        // Validar y procesar los nuevos resultados
+            // Validar que el valor sea numérico (excepto para resultados cualitativos)
+            const valor = parseFloat(datos.valor);
+            if (isNaN(valor) && analisis.rango !== 'Ausencia/Presencia') {
+                erroresValidacion.push(`El valor para ${nombreAnalisis} debe ser numérico`);
+                continue;
+            }
+
+            // Validar la unidad
+            if (datos.unidad !== analisis.unidad) {
+                erroresValidacion.push(
+                    `La unidad para ${nombreAnalisis} debe ser ${analisis.unidad}`
+                );
+            }
+        }
+
+        // Si hay errores de validación, retornar error
+        if (erroresValidacion.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Error en la validación de resultados',
+                errors: erroresValidacion,
+                errorCode: 'VALIDATION_ERROR'
+            });
+        }
+
+        // Guardar valores anteriores para auditoría
+        const valoresAnteriores = resultado.toObject();
         const cambiosRealizados = {};
-        
-        for (const [nombre, datos] of Object.entries(resultados)) {
-            const analisis = analisisMap[nombre];
+
+        // Procesar y validar los nuevos resultados
+        for (const [nombreAnalisis, datos] of Object.entries(resultados)) {
+            const analisis = analisisDisponibles.find(a => a.nombre === nombreAnalisis);
             if (!analisis) {
                 return res.status(400).json({
                     success: false,
-                    message: `El análisis ${nombre} no existe en la base de datos`,
+                    message: `El análisis ${nombreAnalisis} no existe en la base de datos`,
                     errorCode: 'VALIDATION_ERROR'
                 });
             }
 
-            // Obtener el valor anterior
-            const valorAnteriorObj = resultado.resultados.get(nombre);
-            const valorAnterior = valorAnteriorObj ? 
-                `${valorAnteriorObj.valor} ${valorAnteriorObj.unidad}` : 
-                "No registrado";
-
-            // Validar el nuevo valor
+            // Validar el valor según el tipo de análisis
             if (analisis.rango && analisis.rango !== 'Ausencia/Presencia') {
                 const valor = Number(datos.valor);
-                
                 if (isNaN(valor)) {
                     return res.status(400).json({
                         success: false,
-                        message: `El valor para ${nombre} debe ser numérico`,
+                        message: `El valor para ${nombreAnalisis} debe ser numérico`,
                         errorCode: 'VALIDATION_ERROR'
                     });
                 }
             }
 
-            // Actualizar el valor
-            resultado.resultados.set(nombre, {
+            // Validar la unidad
+            if (datos.unidad !== analisis.unidad) {
+                return res.status(400).json({
+                    success: false,
+                    message: `La unidad para ${nombreAnalisis} debe ser ${analisis.unidad}`,
+                    errorCode: 'VALIDATION_ERROR'
+                });
+            }
+
+            // Obtener el valor anterior
+            const valorAnteriorObj = resultado.resultados.get(analisis._id);
+            const valorAnterior = valorAnteriorObj ? 
+                `${valorAnteriorObj.valor} ${valorAnteriorObj.unidad}` : 
+                "No registrado";
+
+            // Actualizar el resultado usando el ID como clave
+            resultado.resultados.set(analisis._id, {
                 valor: datos.valor,
                 unidad: datos.unidad,
                 metodo: analisis.metodo,
@@ -267,7 +390,7 @@ const editarResultado = async (req, res) => {
             });
 
             // Registrar el cambio
-            cambiosRealizados[nombre] = {
+            cambiosRealizados[nombreAnalisis] = {
                 valorAnterior,
                 valorNuevo: `${datos.valor} ${datos.unidad}`,
                 unidad: datos.unidad,
@@ -275,6 +398,7 @@ const editarResultado = async (req, res) => {
             };
         }
 
+        // Actualizar observaciones
         resultado.observaciones = observaciones;
         resultado.verificado = false;
 
@@ -292,54 +416,27 @@ const editarResultado = async (req, res) => {
 
         await resultado.save();
 
-         // Registrar auditoría con valores anteriores y nuevos
-         setImmediate(async () => {
-            try {
-                await AuditoriaService.registrarAccion({
-                    usuario,
-                    accion: {
-                        tipo: 'PUT',
-                        descripcion: 'Actualización de resultado'
-                    },
-                    detalles: {
-                        idMuestra,
-                        cambios: {
-                            antes: valoresAnteriores,
-                            despues: resultado.toObject()
-                        }
-                    },
-                    fecha: new Date()
-                });
-            } catch (error) {
-                console.error('[AUDITORIA ERROR]', error.message);
-            }
-        });
-
-
         // Formatear el resultado para la respuesta
         const resultadoFormateado = {
             _id: resultado._id,
             idMuestra: resultado.idMuestra,
-            cliente: {
-                _id: muestra.cliente._id,
-                nombre: muestra.cliente.nombre,
-                documento: muestra.cliente.documento,
-                email: muestra.cliente.email,
-                telefono: muestra.cliente.telefono,
-                direccion: muestra.cliente.direccion
-            },
-            tipoDeAgua: muestra.tipoDeAgua,
-            lugarMuestreo: muestra.lugarMuestreo,
-            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
-            tipoAnalisis: muestra.tipoAnalisis,
-            estado: muestra.estado,
-            resultados: Object.fromEntries(resultado.resultados),
+            cliente: resultado.cliente,
+            tipoDeAgua: resultado.tipoDeAgua,
+            lugarMuestreo: resultado.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+            tipoAnalisis: resultado.tipoAnalisis,
+            estado: resultado.estado,
+            resultados: Object.fromEntries(
+                Array.from(resultado.resultados.entries()).map(([id, valor]) => [
+                    analisisDisponibles.find(a => a._id === id || a._id.toString() === id.toString())?.nombre || id,
+                    valor
+                ])
+            ),
             observaciones: resultado.observaciones,
             verificado: resultado.verificado,
             cedulaLaboratorista: resultado.cedulaLaboratorista,
             nombreLaboratorista: resultado.nombreLaboratorista,
             historialCambios: resultado.historialCambios.map(cambio => ({
-                _id: cambio._id,
                 nombre: cambio.nombre,
                 cedula: cambio.cedula,
                 fecha: formatearFechaHora(cambio.fecha),
@@ -349,6 +446,34 @@ const editarResultado = async (req, res) => {
             createdAt: formatearFechaHora(resultado.createdAt),
             updatedAt: formatearFechaHora(resultado.updatedAt)
         };
+
+        // Registrar auditoría
+        setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccion({
+                    usuario,
+                    accion: {
+                        descripcion: 'actualización de resultado'
+                    },
+                    detalles: {
+                        id_muestra: idMuestra,
+                        cliente: resultado.cliente,
+                        tipoDeAgua: resultado.tipoDeAgua,
+                        lugarMuestreo: resultado.lugarMuestreo,
+                        fechaHoraMuestreo: resultado.fechaHoraMuestreo,
+                        tipoAnalisis: Array.isArray(resultado.tipoAnalisis) ? resultado.tipoAnalisis[0] : resultado.tipoAnalisis,
+                        estado: resultado.estado,
+                        cambios: {
+                            antes: valoresAnteriores.resultados,
+                            despues: resultado.resultados
+                        }
+                    },
+                    fecha: new Date()
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         return res.status(200).json({
             success: true,
@@ -500,22 +625,123 @@ const obtenerResultadoPorMuestra = async (req, res) => {
 
 const verificarResultado = async (req, res) => {
     try {
-        const { idResultado } = req.params;
+        const { idMuestra } = req.params;
         const usuario = req.usuario;
+        const { observaciones } = req.body;
 
         // Verificar que el usuario tiene permisos de administrador
-        if (!usuario.roles.includes('admin')) {
-            throw new ValidationError('No tiene permisos para verificar resultados');
+        if (usuario.rol !== 'administrador') {
+            return res.status(403).json({
+                success: false,
+                message: 'No tiene permisos para verificar resultados. Solo los administradores pueden realizar esta acción.',
+                errorCode: 'AUTHORIZATION_ERROR'
+            });
         }
 
-        const resultado = await resultadoService.verificarResultado(idResultado, usuario);
+        // Buscar el resultado y la muestra
+        const [resultado, muestra] = await Promise.all([
+            Resultado.findOne({ idMuestra }),
+            Muestra.findOne({ id_muestra: idMuestra })
+        ]);
+
+        if (!resultado || !muestra) {
+            return res.status(404).json({
+                success: false,
+                message: 'Resultado o muestra no encontrada',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Actualizar el estado de verificación del resultado y el estado
+        resultado.verificado = true;
+        resultado.estado = "Finalizada"; // También actualizamos el estado en el resultado
         
-        ResponseHandler.success(res, {
-            mensaje: 'Resultado verificado exitosamente',
-            resultado
+        // Agregar al historial de cambios del resultado
+        resultado.historialCambios.push({
+            _id: new mongoose.Types.ObjectId(),
+            nombre: usuario.nombre,
+            cedula: usuario.documento,
+            fecha: new Date(),
+            observaciones: observaciones || "Verificación de resultados",
+            cambiosRealizados: {
+                verificacion: {
+                    anterior: false,
+                    nuevo: true
+                },
+                estado: {
+                    anterior: muestra.estado,
+                    nuevo: "Finalizada"
+                }
+            }
         });
+
+        // Actualizar el estado de la muestra a "Finalizada"
+        const estadoAnterior = muestra.estado;
+        muestra.estado = "Finalizada";
+
+        // Crear el registro del historial de estados
+        const nuevoEstado = {
+            estado: "Finalizada",
+            estadoAnterior: estadoAnterior,
+            fecha: new Date(),
+            observaciones: "Cambio automático al verificar resultados"
+        };
+
+        // Si tenemos el ID del usuario lo agregamos, si no, creamos uno nuevo
+        if (usuario._id) {
+            nuevoEstado.usuario = usuario._id;
+        } else {
+            nuevoEstado.usuario = new mongoose.Types.ObjectId();
+        }
+
+        muestra.historialEstados.push(nuevoEstado);
+
+        // Guardar ambos cambios
+        try {
+            await Promise.all([
+                resultado.save(),
+                muestra.save()
+            ]);
+        } catch (error) {
+            console.error('Error al guardar los cambios:', error);
+            return res.status(400).json({
+                success: false,
+                message: 'Error al guardar los cambios',
+                error: error.message
+            });
+        }
+
+        // Formatear el resultado para la respuesta
+        const resultadoFormateado = {
+            _id: resultado._id,
+            idMuestra: resultado.idMuestra,
+            estado: resultado.estado,
+            verificado: resultado.verificado,
+            historialCambios: resultado.historialCambios.map(cambio => ({
+                _id: cambio._id,
+                nombre: cambio.nombre,
+                cedula: cambio.cedula,
+                fecha: formatearFechaHora(cambio.fecha),
+                observaciones: cambio.observaciones,
+                cambiosRealizados: cambio.cambiosRealizados
+            })),
+            createdAt: formatearFechaHora(resultado.createdAt),
+            updatedAt: formatearFechaHora(resultado.updatedAt)
+        };
+
+        return res.status(200).json({
+            success: true,
+            message: 'Resultado verificado y muestra finalizada exitosamente',
+            data: resultadoFormateado
+        });
+
     } catch (error) {
-        ResponseHandler.error(res, error);
+        console.error('Error al verificar resultado:', error);
+        return res.status(error instanceof ValidationError ? 400 : 500).json({
+            success: false,
+            message: error.message || 'Error al verificar el resultado',
+            errorCode: error instanceof ValidationError ? 'VALIDATION_ERROR' : 'SERVER_ERROR'
+        });
     }
 };
 
@@ -755,17 +981,117 @@ const obtenerResultadosPorCliente = async (req, res) => {
     }
 };
 
+const generarPDFResultadosHandler = async (req, res) => {
+    try {
+        const { idMuestra } = req.params;
+        
+        // Obtener el resultado completo de la muestra con todos los datos necesarios
+        const resultado = await obtenerResultadoCompleto(idMuestra);
+        
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontraron resultados para esta muestra',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Cargar el logo como base64
+        const logoPath = require('path').resolve(process.cwd(), 'public', 'assets', 'logoSena.png');
+        const logoBase64 = loadLogoAsBase64(logoPath);
+
+        // Configurar headers para PDF
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename=resultados_${idMuestra}.pdf`);
+
+        // Generar el PDF y obtener el buffer
+        const pdfBuffer = await generarPDF(resultado, logoBase64);
+        
+        // Enviar el buffer como respuesta
+        res.end(pdfBuffer);
+
+    } catch (error) {
+        console.error('Error al generar PDF de resultados:', error);
+        if (!res.headersSent) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error al generar el PDF de resultados',
+                error: error.message,
+                errorCode: 'INTERNAL_ERROR'
+            });
+        }
+    }
+};
+
+const descargarPDFResultadosHandler = async (req, res) => {
+    try {
+        const { idMuestra } = req.params;
+        
+        // Obtener el resultado completo de la muestra con todos los datos necesarios
+        const resultado = await obtenerResultadoCompleto(idMuestra);
+        
+        if (!resultado) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontraron resultados para esta muestra',
+                errorCode: 'NOT_FOUND'
+            });
+        }
+
+        // Configurar headers para descarga
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=resultados_${idMuestra}.pdf`);
+
+        // Generar el PDF y obtener el buffer
+        const pdfBuffer = await generarPDF(resultado);
+        
+        // Enviar el buffer como respuesta
+        res.end(pdfBuffer);
+
+    } catch (error) {
+        console.error('Error al descargar PDF de resultados:', error);
+        if (!res.headersSent) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error al descargar el PDF de resultados',
+                error: error.message,
+                errorCode: 'INTERNAL_ERROR'
+            });
+        }
+    }
+};
+
+// Función auxiliar para obtener el resultado completo con todos los datos necesarios
+const obtenerResultadoCompleto = async (idMuestra) => {
+    const resultado = await Resultado.findOne({ idMuestra }).lean();
+    if (!resultado) return null;
+
+    // Formatear las fechas
+    return {
+        ...resultado,
+        fechaHoraMuestreo: formatearFechaHora(resultado.fechaHoraMuestreo),
+        createdAt: formatearFechaHora(resultado.createdAt),
+        updatedAt: formatearFechaHora(resultado.updatedAt),
+        historialCambios: resultado.historialCambios?.map(cambio => ({
+            ...cambio,
+            fecha: formatearFechaHora(cambio.fecha)
+        })) || []
+    };
+};
+
 module.exports = {
     registrarResultado,
     editarResultado,
     obtenerResultados,
     obtenerResultado,
     obtenerResultadoPorMuestra,
-    obtenerTodosResultados,
     verificarResultado,
+    obtenerTodosResultados,
     eliminarResultado,
     obtenerResultadosPorMuestra,
     actualizarResultado,
     obtenerResultadoPorId,
-    obtenerResultadosPorCliente
+    obtenerResultadosPorCliente,
+    generarPDFResultados: generarPDFResultadosHandler,
+    descargarPDFResultados: descargarPDFResultadosHandler
 };
