@@ -150,6 +150,32 @@ class AuditoriaController {
     }
   }
 
+  async exportarExcel(req, res) {
+    try {
+      const {
+        fechaInicio,
+        fechaFin
+      } = req.query;
+
+      const filtros = {
+        fechaInicio,
+        fechaFin
+      };
+
+      const buffer = await auditoriaService.generarExcelAuditorias(filtros);
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename=auditorias.xlsx');
+
+      res.send(buffer);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
   async filtrarRegistros(req, res) {
     try {
       const {

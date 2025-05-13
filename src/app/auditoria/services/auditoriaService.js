@@ -1,7 +1,33 @@
 const AuditoriaUnified = require("../models/auditoriaModelUnified");
 const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
+const excelService = require('./excelService');
 
 class AuditoriaService {
+  construirQueryFiltros(filtros = {}) {
+    const query = {};
+
+    if (filtros.fechaInicio && filtros.fechaFin) {
+      query.fecha = {
+        $gte: new Date(filtros.fechaInicio),
+        $lte: new Date(filtros.fechaFin)
+      };
+    }
+
+    if (filtros.usuario) {
+      query['usuario.documento'] = filtros.usuario;
+    }
+
+    if (filtros.accion) {
+      query['accion.descripcion'] = filtros.accion;
+    }
+
+    if (filtros.idMuestra) {
+      query['detalles.idMuestra'] = filtros.idMuestra;
+    }
+
+    return query;
+  }
+
   async registrarAccion(datosAuditoria) {
     try {
       const nuevoId = await AuditoriaUnified.generarNuevoId();
@@ -31,35 +57,15 @@ class AuditoriaService {
     }
   }
 
-  // Función para obtener auditorías semanales
+  // Función para obtener auditorías semanales (modificada para devolver registros detallados)
   async obtenerAuditoriasSemanales(fechaInicio, fechaFin) {
     try {
-      const registros = await AuditoriaUnified.aggregate([
-        {
-          $match: {
-            fecha: {
-              $gte: new Date(fechaInicio),
-              $lte: new Date(fechaFin)
-            }
-          }
-        },
-        {
-          $group: {
-            _id: {
-              semana: { $isoWeek: "$fecha" },
-              año: { $isoWeekYear: "$fecha" },
-              accion: "$accion.descripcion"
-            },
-            total: { $sum: 1 }
-          }
-        },
-        {
-          $sort: {
-            "_id.año": 1,
-            "_id.semana": 1
-          }
+      const registros = await AuditoriaUnified.find({
+        fecha: {
+          $gte: new Date(fechaInicio),
+          $lte: new Date(fechaFin)
         }
-      ]);
+      }).sort({ fecha: 1 }).lean();
       return registros;
     } catch (error) {
       console.error('Error obteniendo auditorías semanales:', error);
@@ -67,35 +73,15 @@ class AuditoriaService {
     }
   }
 
-  // Función para obtener auditorías mensuales
+  // Función para obtener auditorías mensuales (modificada para devolver registros detallados)
   async obtenerAuditoriasMensuales(fechaInicio, fechaFin) {
     try {
-      const registros = await AuditoriaUnified.aggregate([
-        {
-          $match: {
-            fecha: {
-              $gte: new Date(fechaInicio),
-              $lte: new Date(fechaFin)
-            }
-          }
-        },
-        {
-          $group: {
-            _id: {
-              mes: { $month: "$fecha" },
-              año: { $year: "$fecha" },
-              accion: "$accion.descripcion"
-            },
-            total: { $sum: 1 }
-          }
-        },
-        {
-          $sort: {
-            "_id.año": 1,
-            "_id.mes": 1
-          }
+      const registros = await AuditoriaUnified.find({
+        fecha: {
+          $gte: new Date(fechaInicio),
+          $lte: new Date(fechaFin)
         }
-      ]);
+      }).sort({ fecha: 1 }).lean();
       return registros;
     } catch (error) {
       console.error('Error obteniendo auditorías mensuales:', error);
@@ -151,7 +137,7 @@ class AuditoriaService {
     }
   }
 
-  static async filtrarRegistros(filtros = {}, pagina = 1, limite = 10) {
+  async filtrarRegistros(filtros = {}, pagina = 1, limite = 10) {
     const filtrosLimpios = Object.fromEntries(
       Object.entries(filtros).filter(([_, v]) => v !== undefined)
     );
@@ -212,6 +198,17 @@ class AuditoriaService {
       return await AuditoriaUnified.find(query).sort({ fecha: -1 });
     } catch (error) {
       throw new Error(`Error al exportar registros: ${error.message}`);
+    }
+  }
+
+  async generarExcelAuditorias(filtros = {}) {
+    try {
+      const registros = await this.exportarRegistros(filtros);
+      const buffer = await excelService.generarExcelAuditorias(registros);
+      return buffer;
+    } catch (error) {
+      console.error('Error generando Excel de auditorías:', error);
+      throw error;
     }
   }
 }

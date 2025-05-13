@@ -23,6 +23,14 @@ router.get(
     auditoriaController.exportarRegistros
 );
 
+// Nueva ruta para exportar auditorías en Excel
+router.get(
+    "/exportar-excel",
+    verificarPermiso(PERMISOS.EXPORTAR_AUDITORIA),
+    auditoriaValidators.obtenerRegistros,
+    auditoriaController.exportarExcel
+);
+
 // Filtrar registros de auditoría
 router.get(
     "/filtrar",
