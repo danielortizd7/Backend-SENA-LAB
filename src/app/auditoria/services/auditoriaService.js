@@ -57,7 +57,7 @@ class AuditoriaService {
     }
   }
 
-  // Función para obtener auditorías semanales (modificada para devolver registros detallados)
+  // Función para obtener auditorías semanales 
   async obtenerAuditoriasSemanales(fechaInicio, fechaFin) {
     try {
       const registros = await AuditoriaUnified.find({
@@ -73,7 +73,7 @@ class AuditoriaService {
     }
   }
 
-  // Función para obtener auditorías mensuales (modificada para devolver registros detallados)
+  // Función para obtener auditorías mensuales 
   async obtenerAuditoriasMensuales(fechaInicio, fechaFin) {
     try {
       const registros = await AuditoriaUnified.find({

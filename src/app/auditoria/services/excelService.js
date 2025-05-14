@@ -21,40 +21,38 @@ class ExcelService {
       { header: 'Cambios Antes', key: 'cambiosAntes', width: 40 },
       { header: 'Cambios Después', key: 'cambiosDespues', width: 40 },
       { header: 'Fecha Auditoría', key: 'fecha', width: 25 },
-     // { header: 'Estado Auditoría', key: 'estadoAuditoria', width: 15 },
-      //{ header: 'Mensaje', key: 'mensaje', width: 40 },
-      //{ header: 'Duración', key: 'duracion', width: 10 },
-     // { header: 'Error Código', key: 'errorCodigo', width: 20 },
-      //{ header: 'Error Mensaje', key: 'errorMensaje', width: 40 },
-     // { header: 'Error Stack', key: 'errorStack', width: 50 }
+
     ];
 
     registros.forEach(reg => {
+      // Filtrar cliente para que solo contenga nombre y documento
+      let clienteFiltrado = '';
+      if (reg.detalles && reg.detalles.cliente) {
+        clienteFiltrado = JSON.stringify({
+          nombre: reg.detalles.cliente.nombre,
+          documento: reg.detalles.cliente.documento
+        });
+      }
       sheet.addRow({
         _id: reg._id || '',
-        usuarioId: reg.usuario && reg.usuario.id ? reg.usuario.id : '',
         usuarioNombre: reg.usuario && reg.usuario.nombre ? reg.usuario.nombre : '',
-        usuarioRol: reg.usuario && reg.usuario.rol ? reg.usuario.rol : '',
+      //  usuarioRol: reg.usuario && reg.usuario.rol ? reg.usuario.rol : '',
         usuarioDocumento: reg.usuario && reg.usuario.documento ? reg.usuario.documento : '',
         accionDescripcion: reg.accion && reg.accion.descripcion ? reg.accion.descripcion : '',
         idMuestra: reg.detalles && reg.detalles.id_muestra ? reg.detalles.id_muestra : '',
-        cliente: reg.detalles && reg.detalles.cliente ? JSON.stringify(reg.detalles.cliente) : '',
-        tipoDeAgua: reg.detalles && reg.detalles.tipoDeAgua ? JSON.stringify(reg.detalles.tipoDeAgua) : '',
-        lugarMuestreo: reg.detalles && reg.detalles.lugarMuestreo ? reg.detalles.lugarMuestreo : '',
+        cliente: clienteFiltrado,
         fechaHoraMuestreo: reg.detalles && reg.detalles.fechaHoraMuestreo ? new Date(reg.detalles.fechaHoraMuestreo).toLocaleString() : '',
         tipoAnalisis: reg.detalles && reg.detalles.tipoAnalisis ? reg.detalles.tipoAnalisis : '',
         estado: reg.detalles && reg.detalles.estado ? reg.detalles.estado : '',
-        analisisSeleccionados: reg.detalles && reg.detalles.analisisSeleccionados ? JSON.stringify(reg.detalles.analisisSeleccionados) : '',
-        resultados: reg.detalles && reg.detalles.resultados ? JSON.stringify(reg.detalles.resultados) : '',
-        cambiosAntes: reg.detalles && reg.detalles.cambios && reg.detalles.cambios.antes ? JSON.stringify(reg.detalles.cambios.antes) : '',
-        cambiosDespues: reg.detalles && reg.detalles.cambios && reg.detalles.cambios.despues ? JSON.stringify(reg.detalles.cambios.despues) : '',
-        fecha: reg.fecha ? new Date(reg.fecha).toLocaleString() : '',
-        estadoAuditoria: reg.estado || '',
-        mensaje: reg.mensaje || '',
-        duracion: reg.duracion || 0,
-        errorCodigo: reg.error && reg.error.codigo ? reg.error.codigo : '',
-        errorMensaje: reg.error && reg.error.mensaje ? reg.error.mensaje : '',
-        errorStack: reg.error && reg.error.stack ? reg.error.stack : ''
+        analisisSeleccionados: reg.detalles && reg.detalles.analisisSeleccionados ? reg.detalles.analisisSeleccionados.map(a => a.nombre).join(', ') : '',
+       // resultados: reg.detalles && reg.detalles.resultados ? JSON.stringify(reg.detalles.resultados) : '',
+        cambiosAntes: reg.detalles && reg.detalles.cambios && reg.detalles.cambios.antes ? 
+          (typeof reg.detalles.cambios.antes === 'object' ? Object.entries(reg.detalles.cambios.antes).map(([k, v]) => `${k}: ${v.valor}`).join(', ') : reg.detalles.cambios.antes) 
+          : '',
+        cambiosDespues: reg.detalles && reg.detalles.cambios && reg.detalles.cambios.despues ? 
+          (typeof reg.detalles.cambios.despues === 'object' ? Object.entries(reg.detalles.cambios.despues).map(([k, v]) => `${k}: ${v.valor}`).join(', ') : reg.detalles.cambios.despues) 
+          : '',
+        fecha: reg.fecha ? new Date(reg.fecha).toLocaleString() : ''
       });
     });
 

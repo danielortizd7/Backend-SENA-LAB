@@ -1,14 +1,23 @@
 const auditoriaService = require("../services/auditoriaService");
+const fs = require('fs');
+const path = require('path');
 
 class AuditoriaController {
   async obtenerRegistroPorId(req, res) {
     try {
-      const registro = await auditoriaService.obtenerRegistroAuditoria(req.params.id);
+      let registro = await auditoriaService.obtenerRegistroAuditoria(req.params.id);
       if (!registro) {
         return res.status(404).json({
           success: false,
           message: 'Registro de auditoría no encontrado'
         });
+      }
+      // Filtrar cliente para que solo contenga nombre y documento
+      if (registro.detalles && registro.detalles.cliente) {
+        registro.detalles.cliente = {
+          nombre: registro.detalles.cliente.nombre,
+          documento: registro.detalles.cliente.documento
+        };
       }
       res.json({
         success: true,
@@ -56,9 +65,20 @@ class AuditoriaController {
         parseInt(limite)
       );
 
+      // Filtrar cliente para que solo contenga nombre y documento
+      const resultadoFiltrado = resultado.map(registro => {
+        if (registro.detalles && registro.detalles.cliente) {
+          registro.detalles.cliente = {
+            nombre: registro.detalles.cliente.nombre,
+            documento: registro.detalles.cliente.documento
+          };
+        }
+        return registro;
+      });
+
       res.json({
         success: true,
-        data: resultado
+        data: resultadoFiltrado
       });
     } catch (error) {
       res.status(500).json({
@@ -78,9 +98,21 @@ class AuditoriaController {
         });
       }
       const registros = await auditoriaService.obtenerAuditoriasSemanales(fechaInicio, fechaFin);
+
+      // Filtrar cliente para que solo contenga nombre y documento
+      const registrosFiltrados = registros.map(registro => {
+        if (registro.detalles && registro.detalles.cliente) {
+          registro.detalles.cliente = {
+            nombre: registro.detalles.cliente.nombre,
+            documento: registro.detalles.cliente.documento
+          };
+        }
+        return registro;
+      });
+
       res.json({
         success: true,
-        data: registros
+        data: registrosFiltrados
       });
     } catch (error) {
       res.status(500).json({
@@ -100,9 +132,21 @@ class AuditoriaController {
         });
       }
       const registros = await auditoriaService.obtenerAuditoriasMensuales(fechaInicio, fechaFin);
+
+      // Filtrar cliente para que solo contenga nombre y documento
+      const registrosFiltrados = registros.map(registro => {
+        if (registro.detalles && registro.detalles.cliente) {
+          registro.detalles.cliente = {
+            nombre: registro.detalles.cliente.nombre,
+            documento: registro.detalles.cliente.documento
+          };
+        }
+        return registro;
+      });
+
       res.json({
         success: true,
-        data: registros
+        data: registrosFiltrados
       });
     } catch (error) {
       res.status(500).json({
@@ -164,10 +208,20 @@ class AuditoriaController {
 
       const buffer = await auditoriaService.generarExcelAuditorias(filtros);
 
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', 'attachment; filename=auditorias.xlsx');
+      // Guardar archivo en carpeta public/excelAuditorias con nombre único
+      const timestamp = Date.now();
+      const fileName = `auditorias_${timestamp}.xlsx`;
+const filePath = path.join(__dirname, '../../../../public/excelAuditorias', fileName);
 
-      res.send(buffer);
+      fs.writeFileSync(filePath, buffer);
+
+      // Devolver URL pública del archivo
+      const fileUrl = `/excelAuditorias/${fileName}`;
+
+      res.json({
+        success: true,
+        fileUrl
+      });
     } catch (error) {
       res.status(500).json({
         success: false,
@@ -200,9 +254,20 @@ class AuditoriaController {
 
       const resultado = await auditoriaService.filtrarRegistros(filtros);
 
+      // Filtrar cliente para que solo contenga nombre y documento
+      const resultadoFiltrado = resultado.map(registro => {
+        if (registro.detalles && registro.detalles.cliente) {
+          registro.detalles.cliente = {
+            nombre: registro.detalles.cliente.nombre,
+            documento: registro.detalles.cliente.documento
+          };
+        }
+        return registro;
+      });
+
       res.json({
         success: true,
-        data: resultado
+        data: resultadoFiltrado
       });
     } catch (error) {
       res.status(500).json({
