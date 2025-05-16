@@ -60,4 +60,12 @@ router.get(
     auditoriaController.generarPDFRegistro
 );
 
+// Nueva ruta para visualizar auditorías en Excel (inline)
+router.get(
+    "/exportar-excel-visualizar",
+    verificarPermiso(PERMISOS.EXPORTAR_AUDITORIA),
+    auditoriaValidators.obtenerRegistros,
+    auditoriaController.exportarExcelVisualizar
+);
+
 module.exports = router;

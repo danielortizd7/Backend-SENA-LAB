@@ -1,6 +1,8 @@
 const auditoriaService = require("../services/auditoriaService");
 const fs = require('fs');
 const path = require('path');
+const GenerarExcelAuditoria = require('../../../shared/utils/generarExelAuditoria');
+const generarExcelAuditoria = new GenerarExcelAuditoria();
 
 class AuditoriaController {
   async obtenerRegistroPorId(req, res) {
@@ -206,22 +208,35 @@ class AuditoriaController {
         fechaFin
       };
 
-      const buffer = await auditoriaService.generarExcelAuditorias(filtros);
+      // Obtener los registros desde el servicio
+      const registros = await auditoriaService.exportarRegistros(filtros);
 
-      // Guardar archivo en carpeta public/excelAuditorias con nombre único
-      const timestamp = Date.now();
-      const fileName = `auditorias_${timestamp}.xlsx`;
-const filePath = path.join(__dirname, '../../../../public/excelAuditorias', fileName);
-
-      fs.writeFileSync(filePath, buffer);
-
-      // Devolver URL pública del archivo
-      const fileUrl = `/excelAuditorias/${fileName}`;
-
-      res.json({
-        success: true,
-        fileUrl
+      // Generar el Excel con los registros
+      let buffer = await generarExcelAuditoria.generarExcelAuditorias(registros);
+      // Enviar el archivo directamente como attachment
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="auditorias.xlsx"');
+      res.send(buffer);
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
       });
+    }
+  }
+
+  async exportarExcelVisualizar(req, res) {
+    try {
+      const { fechaInicio, fechaFin } = req.query;
+      const filtros = { fechaInicio, fechaFin };
+      const registros = await auditoriaService.exportarRegistros(filtros);
+      let buffer = await generarExcelAuditoria.generarExcelAuditorias(registros);
+      if (buffer instanceof ArrayBuffer) {
+        buffer = Buffer.from(buffer);
+      }
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'inline; filename="auditorias.xlsx"');
+      res.send(buffer);
     } catch (error) {
       res.status(500).json({
         success: false,

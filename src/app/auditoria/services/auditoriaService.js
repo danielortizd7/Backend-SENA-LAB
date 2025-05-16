@@ -1,6 +1,6 @@
 const AuditoriaUnified = require("../models/auditoriaModelUnified");
 const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
-const excelService = require('./excelService');
+const excelService = require('../../../shared/utils/generarExelAuditoria');
 
 class AuditoriaService {
   construirQueryFiltros(filtros = {}) {
