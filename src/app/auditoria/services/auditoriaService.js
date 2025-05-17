@@ -1,6 +1,7 @@
 const AuditoriaUnified = require("../models/auditoriaModelUnified");
 const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
 const excelService = require('../../../shared/utils/generarExelAuditoria');
+const { Muestra } = require("../../../shared/models/muestrasModel");
 
 class AuditoriaService {
   construirQueryFiltros(filtros = {}) {
@@ -210,6 +211,64 @@ class AuditoriaService {
       console.error('Error generando Excel de auditorías:', error);
       throw error;
     }
+  }
+
+  // === FUNCIONES PARA DASHBOARD DE AUDITORÍA ===
+  async obtenerMuestrasParaAuditoria() {
+    // Trae las muestras con los campos relevantes para la auditoría
+    const muestras = await Muestra.find({}, {
+      id_muestra: 1,
+      "cliente.nombre": 1,
+      "cliente.documento": 1,
+      fechaHoraMuestreo: 1,
+      estado: 1,
+      analisisSeleccionados: 1
+    }).lean();
+    if (!muestras || muestras.length === 0) return [];
+    return muestras.map(m => ({
+      id: m.id_muestra || '',
+      cliente: m.cliente?.nombre || '',
+      fechaIngreso: m.fechaHoraMuestreo ? new Date(m.fechaHoraMuestreo).toLocaleString() : '',
+      estado: m.estado || '',
+      parametros: Array.isArray(m.analisisSeleccionados) ? m.analisisSeleccionados.map(a => a.nombre) : []
+    }));
+  }
+
+  async obtenerParametrosParaAuditoria() {
+    // Trae todos los parámetros únicos de todas las muestras
+    const muestras = await Muestra.find({}, { analisisSeleccionados: 1 }).lean();
+    if (!muestras || muestras.length === 0) return [];
+    const set = new Set();
+    muestras.forEach(m => {
+      (m.analisisSeleccionados || []).forEach(a => set.add(a.nombre));
+    });
+    return Array.from(set).map((nombre, idx) => ({ id: nombre, nombre }));
+  }
+
+  async obtenerHistorialAuditoria() {
+    // Trae el historial de acciones relevantes agrupadas por parámetro
+    const auditorias = await AuditoriaUnified.find({}, {
+      fecha: 1,
+      accion: 1,
+      detalles: 1
+    }).sort({ fecha: 1 }).lean();
+    if (!auditorias || auditorias.length === 0) return [];
+    // Cada entrada: { parametro, fecha, descripcion, cambios }
+    const historial = [];
+    auditorias.forEach(a => {
+      if (a.detalles && Array.isArray(a.detalles.analisisSeleccionados)) {
+        a.detalles.analisisSeleccionados.forEach(param => {
+          historial.push({
+            parametro: param.nombre,
+            fecha: a.fecha ? new Date(a.fecha).toLocaleString() : '',
+            descripcion: a.accion?.descripcion || '',
+            cambios: a.detalles?.cambios?.despues || null,
+            tipo: a.accion?.descripcion === 'registro nueva muestra' ? 'creacion' : 'modificacion'
+          });
+        });
+      }
+    });
+    return historial;
   }
 }
 

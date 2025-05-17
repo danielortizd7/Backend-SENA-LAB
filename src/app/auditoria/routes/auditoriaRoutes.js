@@ -68,4 +68,11 @@ router.get(
     auditoriaController.exportarExcelVisualizar
 );
 
+// Nueva ruta para obtener datos iniciales de auditoría
+router.get(
+    "/datos",
+    verificarPermiso(PERMISOS.VER_AUDITORIA),
+    auditoriaController.obtenerDatosAuditoria
+);
+
 module.exports = router;

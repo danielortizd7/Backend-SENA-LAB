@@ -231,11 +231,14 @@ class AuditoriaController {
       const filtros = { fechaInicio, fechaFin };
       const registros = await auditoriaService.exportarRegistros(filtros);
       let buffer = await generarExcelAuditoria.generarExcelAuditorias(registros);
-      if (buffer instanceof ArrayBuffer) {
-        buffer = Buffer.from(buffer);
-      }
+      
+      // Set proper headers for inline viewing
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'inline; filename="auditorias.xlsx"');
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Pragma', 'no-cache');
+      
       res.send(buffer);
     } catch (error) {
       res.status(500).json({
@@ -300,6 +303,29 @@ class AuditoriaController {
       res.json({
         success: true,
         pdfUrl: pdfPath
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  // Nuevo endpoint para datos iniciales de auditoría
+  async obtenerDatosAuditoria(req, res) {
+    try {
+      // Obtener todas las muestras y registros de auditoría
+      const muestras = await auditoriaService.obtenerMuestrasParaAuditoria();
+      const parametros = await auditoriaService.obtenerParametrosParaAuditoria();
+      const historial = await auditoriaService.obtenerHistorialAuditoria();
+      res.json({
+        success: true,
+        data: {
+          muestras,
+          parametros,
+          historial
+        }
       });
     } catch (error) {
       res.status(500).json({
