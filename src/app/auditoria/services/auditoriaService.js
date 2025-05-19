@@ -1,5 +1,5 @@
 const AuditoriaUnified = require("../models/auditoriaModelUnified");
-const { generarPDFAuditoria } = require('../../../shared/utils/generarPDF');
+const Analisis = require("../../../shared/models/analisisModel");
 const excelService = require('../../../shared/utils/generarExelAuditoria');
 const { Muestra } = require("../../../shared/models/muestrasModel");
 
@@ -32,22 +32,46 @@ class AuditoriaService {
   async registrarAccion(datosAuditoria) {
     try {
       const nuevoId = await AuditoriaUnified.generarNuevoId();
+      
+      // Validación de datos requeridos
+      if (!datosAuditoria.usuario || !datosAuditoria.accion) {
+        throw new Error('Datos de usuario y acción son requeridos');
+      }
 
       const registro = new AuditoriaUnified({
           _id: nuevoId,
-          usuario: datosAuditoria.usuario,
+          usuario: {
+              ...datosAuditoria.usuario,
+              ip: datosAuditoria.ip || 'No registrada',
+              userAgent: datosAuditoria.userAgent || 'No registrado'
+          },
           accion: {
-            descripcion: datosAuditoria.accion.descripcion
+              descripcion: datosAuditoria.accion.descripcion,
+              tipo: datosAuditoria.accion.tipo || 'general',
+              modulo: datosAuditoria.accion.modulo || 'general',
+              criticidad: datosAuditoria.accion.criticidad || 'baja'
           },
           detalles: {
               ...datosAuditoria.detalles,
-              idMuestra: datosAuditoria.detalles?.idMuestra || null
+              idMuestra: datosAuditoria.detalles?.idMuestra || null,
+              cambios: {
+                  antes: datosAuditoria.detalles?.cambios?.antes || null,
+                  despues: datosAuditoria.detalles?.cambios?.despues || null
+              },
+              metadata: {
+                  version: datosAuditoria.detalles?.metadata?.version || '1.0',
+                  entorno: process.env.NODE_ENV || 'development'
+              }
           },
-          fecha: datosAuditoria.fecha,
+          fecha: datosAuditoria.fecha || new Date(),
           estado: datosAuditoria.estado || 'exitoso',
           mensaje: datosAuditoria.mensaje || '',
           duracion: datosAuditoria.duracion || 0,
-          error: datosAuditoria.error || null
+          error: datosAuditoria.error || null,
+          seguridad: {
+              nivelAcceso: datosAuditoria.seguridad?.nivelAcceso || 'estandar',
+              requiereAutenticacion: datosAuditoria.seguridad?.requiereAutenticacion || true
+          }
       });
 
       await registro.save();
@@ -179,20 +203,6 @@ class AuditoriaService {
     }
   }
 
-  static async generarPDFRegistro(id) {
-    try {
-      const registro = await this.obtenerRegistroAuditoria(id);
-      if (!registro) {
-        throw new Error('Registro de auditoría no encontrado');
-      }
-      const pdfPath = await generarPDFAuditoria(registro);
-      return pdfPath;
-    } catch (error) {
-      console.error('Error generando PDF de auditoría unificada:', error);
-      throw error;
-    }
-  }
-
   async exportarRegistros(filtros = {}) {
     try {
       const query = this.construirQueryFiltros(filtros);
@@ -269,6 +279,92 @@ class AuditoriaService {
       }
     });
     return historial;
+  }
+
+  async obtenerEstadisticasAuditoria(fechaInicio, fechaFin) {
+    try {
+      const pipeline = [
+        {
+          $match: {
+            fecha: {
+              $gte: new Date(fechaInicio),
+              $lte: new Date(fechaFin)
+            }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              accion: '$accion.descripcion',
+              modulo: '$accion.modulo',
+              criticidad: '$accion.criticidad'
+            },
+            total: { $sum: 1 },
+            exitosos: {
+              $sum: { $cond: [{ $eq: ['$estado', 'exitoso'] }, 1, 0] }
+            },
+            fallidos: {
+              $sum: { $cond: [{ $eq: ['$estado', 'fallido'] }, 1, 0] }
+            }
+          }
+        }
+      ];
+
+      const estadisticas = await AuditoriaUnified.aggregate(pipeline);
+      return estadisticas;
+    } catch (error) {
+      console.error('Error obteniendo estadísticas de auditoría:', error);
+      throw error;
+    }
+  }
+
+  async obtenerAlertasAuditoria() {
+    try {
+      const alertas = await AuditoriaUnified.find({
+        'accion.criticidad': 'alta',
+        fecha: {
+          $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) // Últimas 24 horas
+        }
+      }).sort({ fecha: -1 }).limit(10);
+
+      return alertas;
+    } catch (error) {
+      console.error('Error obteniendo alertas de auditoría:', error);
+      throw error;
+    }
+  }
+
+  async obtenerEstadisticasAnalisisMasUsados(fechaInicio, fechaFin) {
+    // 1. Obtener todos los análisis
+    const todosAnalisis = await Analisis.find({}, { nombre: 1, _id: 0 }).lean();
+    // 2. Buscar todas las muestras (con filtro de fecha si aplica)
+    const match = {};
+    if (fechaInicio && fechaFin) {
+      match.fechaHoraMuestreo = {
+        $gte: new Date(fechaInicio),
+        $lte: new Date(fechaFin)
+      };
+    }
+    const muestras = await Muestra.find(match, { analisisSeleccionados: 1 }).lean();
+    // 3. Contar en cuántas muestras aparece cada análisis
+    const conteo = {};
+    muestras.forEach(muestra => {
+      if (Array.isArray(muestra.analisisSeleccionados)) {
+        // Usar un Set para evitar duplicados en la misma muestra
+        const usados = new Set(muestra.analisisSeleccionados.map(a => a.nombre));
+        usados.forEach(nombre => {
+          conteo[nombre] = (conteo[nombre] || 0) + 1;
+        });
+      }
+    });
+    // 4. Unir todos los análisis con el conteo (si no está, cantidad 0)
+    const resultado = todosAnalisis.map(a => ({
+      _id: a.nombre,
+      cantidad: conteo[a.nombre] || 0
+    }));
+    // Ordenar de mayor a menor
+    resultado.sort((a, b) => b.cantidad - a.cantidad);
+    return resultado;
   }
 }
 

@@ -14,13 +14,6 @@ class AuditoriaController {
           message: 'Registro de auditoría no encontrado'
         });
       }
-      // Filtrar cliente para que solo contenga nombre y documento
-      if (registro.detalles && registro.detalles.cliente) {
-        registro.detalles.cliente = {
-          nombre: registro.detalles.cliente.nombre,
-          documento: registro.detalles.cliente.documento
-        };
-      }
       res.json({
         success: true,
         data: registro
@@ -67,20 +60,9 @@ class AuditoriaController {
         parseInt(limite)
       );
 
-      // Filtrar cliente para que solo contenga nombre y documento
-      const resultadoFiltrado = resultado.map(registro => {
-        if (registro.detalles && registro.detalles.cliente) {
-          registro.detalles.cliente = {
-            nombre: registro.detalles.cliente.nombre,
-            documento: registro.detalles.cliente.documento
-          };
-        }
-        return registro;
-      });
-
       res.json({
         success: true,
-        data: resultadoFiltrado
+        data: resultado
       });
     } catch (error) {
       res.status(500).json({
@@ -100,21 +82,9 @@ class AuditoriaController {
         });
       }
       const registros = await auditoriaService.obtenerAuditoriasSemanales(fechaInicio, fechaFin);
-
-      // Filtrar cliente para que solo contenga nombre y documento
-      const registrosFiltrados = registros.map(registro => {
-        if (registro.detalles && registro.detalles.cliente) {
-          registro.detalles.cliente = {
-            nombre: registro.detalles.cliente.nombre,
-            documento: registro.detalles.cliente.documento
-          };
-        }
-        return registro;
-      });
-
       res.json({
         success: true,
-        data: registrosFiltrados
+        data: registros
       });
     } catch (error) {
       res.status(500).json({
@@ -134,21 +104,9 @@ class AuditoriaController {
         });
       }
       const registros = await auditoriaService.obtenerAuditoriasMensuales(fechaInicio, fechaFin);
-
-      // Filtrar cliente para que solo contenga nombre y documento
-      const registrosFiltrados = registros.map(registro => {
-        if (registro.detalles && registro.detalles.cliente) {
-          registro.detalles.cliente = {
-            nombre: registro.detalles.cliente.nombre,
-            documento: registro.detalles.cliente.documento
-          };
-        }
-        return registro;
-      });
-
       res.json({
         success: true,
-        data: registrosFiltrados
+        data: registros
       });
     } catch (error) {
       res.status(500).json({
@@ -179,11 +137,6 @@ class AuditoriaController {
       };
 
       const registros = await auditoriaService.exportarRegistros(filtros);
-
-      // Configurar headers para descarga de archivo
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', 'attachment; filename=registros-auditoria.json');
-
       res.json({
         success: true,
         data: registros
@@ -200,20 +153,25 @@ class AuditoriaController {
     try {
       const {
         fechaInicio,
-        fechaFin
+        fechaFin,
+        usuario,
+        rol,
+        accion,
+        estado
       } = req.query;
 
       const filtros = {
         fechaInicio,
-        fechaFin
+        fechaFin,
+        usuario,
+        rol,
+        accion,
+        estado
       };
 
-      // Obtener los registros desde el servicio
       const registros = await auditoriaService.exportarRegistros(filtros);
-
-      // Generar el Excel con los registros
       let buffer = await generarExcelAuditoria.generarExcelAuditorias(registros);
-      // Enviar el archivo directamente como attachment
+      
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename="auditorias.xlsx"');
       res.send(buffer);
@@ -232,7 +190,6 @@ class AuditoriaController {
       const registros = await auditoriaService.exportarRegistros(filtros);
       let buffer = await generarExcelAuditoria.generarExcelAuditorias(registros);
       
-      // Set proper headers for inline viewing
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'inline; filename="auditorias.xlsx"');
       res.setHeader('Content-Length', buffer.length);
@@ -271,21 +228,9 @@ class AuditoriaController {
       };
 
       const resultado = await auditoriaService.filtrarRegistros(filtros);
-
-      // Filtrar cliente para que solo contenga nombre y documento
-      const resultadoFiltrado = resultado.map(registro => {
-        if (registro.detalles && registro.detalles.cliente) {
-          registro.detalles.cliente = {
-            nombre: registro.detalles.cliente.nombre,
-            documento: registro.detalles.cliente.documento
-          };
-        }
-        return registro;
-      });
-
       res.json({
         success: true,
-        data: resultadoFiltrado
+        data: resultado
       });
     } catch (error) {
       res.status(500).json({
@@ -295,27 +240,8 @@ class AuditoriaController {
     }
   }
 
-  // Nuevo método para generar PDF de un registro de auditoría
-  async generarPDFRegistro(req, res) {
-    try {
-      const id = req.params.id;
-      const pdfPath = await auditoriaService.generarPDFRegistro(id);
-      res.json({
-        success: true,
-        pdfUrl: pdfPath
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-    }
-  }
-
-  // Nuevo endpoint para datos iniciales de auditoría
   async obtenerDatosAuditoria(req, res) {
     try {
-      // Obtener todas las muestras y registros de auditoría
       const muestras = await auditoriaService.obtenerMuestrasParaAuditoria();
       const parametros = await auditoriaService.obtenerParametrosParaAuditoria();
       const historial = await auditoriaService.obtenerHistorialAuditoria();
@@ -326,6 +252,80 @@ class AuditoriaController {
           parametros,
           historial
         }
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  async obtenerEstadisticas(req, res) {
+    try {
+      const { fechaInicio, fechaFin } = req.query;
+      if (!fechaInicio || !fechaFin) {
+        return res.status(400).json({
+          success: false,
+          message: 'Se requieren fechaInicio y fechaFin para la consulta'
+        });
+      }
+      const estadisticas = await auditoriaService.obtenerEstadisticasAuditoria(fechaInicio, fechaFin);
+      res.json({
+        success: true,
+        data: estadisticas
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  async obtenerEstadisticasAnalisis(req, res) {
+    try {
+      const { fechaInicio, fechaFin } = req.query;
+      const estadisticas = await auditoriaService.obtenerEstadisticasAnalisisMasUsados(fechaInicio, fechaFin);
+      res.json({
+        success: true,
+        data: estadisticas
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  async obtenerAlertas(req, res) {
+    try {
+      const alertas = await auditoriaService.obtenerAlertasAuditoria();
+      res.json({
+        success: true,
+        data: alertas
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  async registrarAccion(req, res) {
+    try {
+      const datosAuditoria = {
+        ...req.body,
+        ip: req.ip,
+        userAgent: req.headers['user-agent']
+      };
+      
+      const registro = await auditoriaService.registrarAccion(datosAuditoria);
+      res.json({
+        success: true,
+        data: registro
       });
     } catch (error) {
       res.status(500).json({

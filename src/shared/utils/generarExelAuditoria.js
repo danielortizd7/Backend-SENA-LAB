@@ -6,54 +6,119 @@ class generarExcelAuditoria {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Registros de Auditoría');
 
-    // Definir columnas basadas en campos de auditoría unificada
+    // Estilos para el encabezado
+    const headerStyle = {
+      font: { bold: true, color: { argb: 'FFFFFF' } },
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '003366' } },
+      alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+      border: {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      }
+    };
+
+    // Definir columnas con estilos mejorados y más datos relevantes
     sheet.columns = [
-      { header: 'Usuario Nombre', key: 'usuarioNombre', width: 30 },
-     // { header: 'Usuario Rol', key: 'usuarioRol', width: 20 },
-      { header: 'Usuario Documento', key: 'usuarioDocumento', width: 20 },
-      { header: 'Acción', key: 'accionDescripcion', width: 30 },
-      { header: 'ID Muestra', key: 'idMuestra', width: 25 },
-      { header: 'Cliente', key: 'cliente', width: 40 },
-      { header: 'Fecha y Hora Muestreo', key: 'fechaHoraMuestreo', width: 25 },
-      { header: 'Tipo de Análisis', key: 'tipoAnalisis', width: 25 },
-      { header: 'Estado', key: 'estado', width: 15 },
-      { header: 'Análisis Seleccionados', key: 'analisisSeleccionados', width: 40 },
-      //{ header: 'Resultados', key: 'resultados', width: 40 },
+      { header: 'ID Registro', key: 'id', width: 15 },
+      { header: 'Fecha y Hora', key: 'fecha', width: 20 },
+      { header: 'Usuario', key: 'usuarioNombre', width: 25 },
+      { header: 'Documento', key: 'usuarioDocumento', width: 18 },
+      { header: 'IP', key: 'ip', width: 15 },
+      { header: 'Módulo', key: 'modulo', width: 18 },
+      { header: 'Acción', key: 'accionDescripcion', width: 25 },
+      { header: 'Tipo', key: 'tipoAccion', width: 15 },
+      { header: 'Criticidad', key: 'criticidad', width: 15 },
+      { header: 'ID Muestra', key: 'idMuestra', width: 18 },
+      { header: 'Cliente', key: 'cliente', width: 30 },
+      { header: 'Tipo Análisis', key: 'tipoAnalisis', width: 22 },
+      { header: 'Estado Muestra', key: 'estadoMuestra', width: 18 },
+      { header: 'Estado Auditoría', key: 'estadoAuditoria', width: 15 },
       { header: 'Cambios Antes', key: 'cambiosAntes', width: 40 },
       { header: 'Cambios Después', key: 'cambiosDespues', width: 40 },
-      { header: 'Fecha Auditoría', key: 'fecha', width: 25 },
+      { header: 'Mensaje', key: 'mensaje', width: 35 },
+      { header: 'Duración (ms)', key: 'duracion', width: 15 }
     ];
 
+    // Aplicar estilos al encabezado
+    sheet.getRow(1).eachCell((cell) => {
+      cell.style = headerStyle;
+    });
+
+    // Agregar datos con formato mejorado
     registros.forEach(reg => {
-      // Filtrar cliente para que solo contenga nombre y documento
+      // Formatear cliente
       let clienteFiltrado = '';
       if (reg.detalles && reg.detalles.cliente) {
-        clienteFiltrado = JSON.stringify({
-          nombre: reg.detalles.cliente.nombre,
-          documento: reg.detalles.cliente.documento
-        });
+        clienteFiltrado = `${reg.detalles.cliente.nombre} (${reg.detalles.cliente.documento})`;
       }
+      // Formatear tipo de análisis
+      let tipoAnalisis = '';
+      if (reg.detalles && reg.detalles.analisisSeleccionados) {
+        tipoAnalisis = reg.detalles.analisisSeleccionados.map(a => a.nombre).join(', ');
+      }
+      // Estado real de la muestra
+      let estadoMuestra = reg.detalles?.estado || '';
+      // Estado de la auditoría
+      let estadoAuditoria = reg.estado || '';
+      // Formatear cambios
+      const formatearCambios = (cambios) => {
+        if (!cambios) return '';
+        if (typeof cambios === 'object') {
+          return Object.entries(cambios)
+            .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+            .join('\n');
+        }
+        return cambios;
+      };
       sheet.addRow({
-        _id: reg._id || '',
-        usuarioNombre: reg.usuario && reg.usuario.nombre ? reg.usuario.nombre : '',
-      //  usuarioRol: reg.usuario && reg.usuario.rol ? reg.usuario.rol : '',
-        usuarioDocumento: reg.usuario && reg.usuario.documento ? reg.usuario.documento : '',
-        accionDescripcion: reg.accion && reg.accion.descripcion ? reg.accion.descripcion : '',
-        idMuestra: reg.detalles && reg.detalles.id_muestra ? reg.detalles.id_muestra : '',
+        id: reg._id || '',
+        fecha: reg.fecha ? new Date(reg.fecha).toLocaleString() : '',
+        usuarioNombre: reg.usuario?.nombre || '',
+        usuarioDocumento: reg.usuario?.documento || '',
+        ip: reg.usuario?.ip || '',
+        modulo: reg.accion?.modulo || '',
+        accionDescripcion: reg.accion?.descripcion || '',
+        tipoAccion: reg.accion?.tipo || '',
+        criticidad: reg.accion?.criticidad || '',
+        idMuestra: reg.detalles?.idMuestra || '',
         cliente: clienteFiltrado,
-        fechaHoraMuestreo: reg.detalles && reg.detalles.fechaHoraMuestreo ? new Date(reg.detalles.fechaHoraMuestreo).toLocaleString() : '',
-        tipoAnalisis: reg.detalles && reg.detalles.tipoAnalisis ? reg.detalles.tipoAnalisis : '',
-        estado: reg.detalles && reg.detalles.estado ? reg.detalles.estado : '',
-        analisisSeleccionados: reg.detalles && reg.detalles.analisisSeleccionados ? reg.detalles.analisisSeleccionados.map(a => a.nombre).join(', ') : '',
-       // resultados: reg.detalles && reg.detalles.resultados ? JSON.stringify(reg.detalles.resultados) : '',
-        cambiosAntes: reg.detalles && reg.detalles.cambios && reg.detalles.cambios.antes ? 
-          (typeof reg.detalles.cambios.antes === 'object' ? Object.entries(reg.detalles.cambios.antes).map(([k, v]) => `${k}: ${v.valor}`).join(', ') : reg.detalles.cambios.antes) 
-          : '',
-        cambiosDespues: reg.detalles && reg.detalles.cambios && reg.detalles.cambios.despues ? 
-          (typeof reg.detalles.cambios.despues === 'object' ? Object.entries(reg.detalles.cambios.despues).map(([k, v]) => `${k}: ${v.valor}`).join(', ') : reg.detalles.cambios.despues) 
-          : '',
-        fecha: reg.fecha ? new Date(reg.fecha).toLocaleString() : ''
+        tipoAnalisis,
+        estadoMuestra,
+        estadoAuditoria,
+        cambiosAntes: formatearCambios(reg.detalles?.cambios?.antes),
+        cambiosDespues: formatearCambios(reg.detalles?.cambios?.despues),
+        mensaje: reg.mensaje || '',
+        duracion: reg.duracion || 0
       });
+    });
+
+    // Ajustar automáticamente el ancho de las columnas según el contenido
+    sheet.columns.forEach((column) => {
+      let maxLength = 0;
+      column.eachCell?.({ includeEmpty: true }, (cell) => {
+        const cellValue = cell.value ? cell.value.toString() : '';
+        maxLength = Math.max(maxLength, cellValue.length);
+      });
+      column.width = Math.max(column.width, Math.min(maxLength + 2, 60));
+    });
+
+    // Ajustar altura de filas automáticamente según el contenido
+    sheet.eachRow((row, rowNumber) => {
+      let maxLines = 1;
+      row.eachCell((cell) => {
+        const lines = cell.value ? cell.value.toString().split('\n').length : 1;
+        maxLines = Math.max(maxLines, lines);
+        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+      row.height = 18 * maxLines;
     });
 
     // Usar stream para obtener un Buffer válido
