@@ -246,6 +246,7 @@ class UsuarioController {
                 userId: usuario._id,
                 email: usuario.email,
                 nombre: usuario.nombre,
+                documento: usuario.documento,
                 rol: usuario.rol.name,
                 permisos: usuario.rol.permisos || []
             };
@@ -257,6 +258,7 @@ class UsuarioController {
                 usuario: {
                     _id: usuario._id,
                     nombre: usuario.nombre,
+                    documento: usuario.documento,
                     email: usuario.email,
                     rol: usuario.rol.name,
                     permisos: usuario.rol.permisos || []
