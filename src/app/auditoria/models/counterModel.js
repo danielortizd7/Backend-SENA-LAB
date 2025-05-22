@@ -8,6 +8,14 @@ const counterSchema = new mongoose.Schema({
   seq: {
     type: Number,
     default: 0
+  },
+  mes: {
+    type: Number,
+    required: true
+  },
+  anio: {
+    type: Number,
+    required: true
   }
 });
 

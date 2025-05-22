@@ -237,28 +237,27 @@ const formatearFechaHora = (fecha) => {
     if (!fecha) return null;
     
     try {
-        // Convertir a zona horaria de Colombia (America/Bogota)
+        // Asegurarnos de que la fecha sea un objeto Date
         const fechaObj = new Date(fecha);
         
+        // Convertir a zona horaria de Colombia (America/Bogota)
+        const fechaColombiana = new Date(fechaObj.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        
         // Formatear fecha
-        const dia = fechaObj.getDate().toString().padStart(2, '0');
-        const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
-        const año = fechaObj.getFullYear();
+        const dia = fechaColombiana.getDate().toString().padStart(2, '0');
+        const mes = (fechaColombiana.getMonth() + 1).toString().padStart(2, '0');
+        const año = fechaColombiana.getFullYear();
         
-        // Formatear hora en formato AM/PM
-        let horas = fechaObj.getHours();
-        const minutos = fechaObj.getMinutes().toString().padStart(2, '0');
-        const segundos = fechaObj.getSeconds().toString().padStart(2, '0');
-        const ampm = horas >= 12 ? 'PM' : 'AM';
-        
-        // Convertir a formato 12 horas
-        horas = horas % 12;
-        horas = horas ? horas : 12; // si es 0, convertir a 12
-        horas = horas.toString().padStart(2, '0');
+        // Formatear hora en formato 24 horas para consistencia
+        const horas = fechaColombiana.getHours().toString().padStart(2, '0');
+        const minutos = fechaColombiana.getMinutes().toString().padStart(2, '0');
+        const segundos = fechaColombiana.getSeconds().toString().padStart(2, '0');
         
         return {
             fecha: `${dia}/${mes}/${año}`,
-            hora: `${horas}:${minutos}:${segundos} ${ampm}`
+            hora: `${horas}:${minutos}:${segundos}`,
+            // Agregar timestamp ISO para el frontend
+            timestamp: fechaColombiana.toISOString()
         };
     } catch (error) {
         console.error('Error al formatear fecha:', error);
@@ -480,8 +479,13 @@ const registrarMuestra = async (req, res, next) => {
     try {
         const datos = req.body;
         
-        // Verificar que el usuario sea administrador
-        if (!req.usuario || req.usuario.rol !== 'administrador') {
+        // Verificar que el usuario esté autenticado
+        if (!req.usuario) {
+            throw new ValidationError('Usuario no autenticado');
+        }
+
+        // Solo verificar rol de administrador si no es una cotización
+        if (datos.estado !== 'En Cotizacion' && (!req.usuario || req.usuario.rol !== 'administrador')) {
             throw new ValidationError('No tiene permisos para registrar muestras. Se requiere rol de administrador');
         }
 
@@ -516,55 +520,69 @@ const registrarMuestra = async (req, res, next) => {
             throw new ValidationError('Usuario no autenticado o ID no disponible');
         }
 
-        // Obtener datos del administrador directamente del token
-        const datosAdministrador = {
+        // Obtener datos del usuario que crea la muestra
+        const datosUsuario = {
             nombre: req.usuario.nombre || 'Usuario no identificado',
             documento: req.usuario.documento,
             email: req.usuario.email,
             telefono: req.usuario.telefono,
-            direccion: req.usuario.direccion
+            direccion: req.usuario.direccion,
+            rol: req.usuario.rol
         };
         
-        console.log('Datos del administrador desde token:', datosAdministrador);
+        console.log('Datos del usuario desde token:', datosUsuario);
 
-        // Obtener datos del cliente desde la API de usuarios
+        // Obtener datos del cliente
         let datosCliente;
-        try {
-            console.log('Consultando datos del cliente con documento:', datos.documento);
-            
-            const response = await axios.get(`${BASE_URL}/api/usuarios/buscar`, {
-                params: { documento: datos.documento },
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json'
+        if (req.usuario.rol === 'cliente') {
+            // Si es cliente, usar sus propios datos
+            datosCliente = {
+                _id: req.usuario.id,
+                nombre: req.usuario.nombre,
+                documento: req.usuario.documento,
+                email: req.usuario.email,
+                telefono: req.usuario.telefono,
+                direccion: req.usuario.direccion
+            };
+        } else {
+            // Si es administrador, buscar datos del cliente
+            try {
+                console.log('Consultando datos del cliente con documento:', datos.documento);
+                
+                const response = await axios.get(`${BASE_URL}/api/usuarios/buscar`, {
+                    params: { documento: datos.documento },
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                console.log('Respuesta de la API de usuarios:', response.data);
+                
+                if (response.data && response.data.nombre) {
+                    datosCliente = {
+                        _id: response.data._id,
+                        nombre: response.data.nombre,
+                        documento: response.data.documento,
+                        email: response.data.email,
+                        telefono: response.data.telefono,
+                        direccion: response.data.direccion
+                    };
+                    console.log('Datos del cliente encontrados:', datosCliente);
+                } else {
+                    console.log('No se encontraron datos del cliente, usando valores por defecto');
+                    datosCliente = {
+                        nombre: 'Cliente no identificado',
+                        documento: datos.documento
+                    };
                 }
-            });
-            
-            console.log('Respuesta de la API de usuarios:', response.data);
-            
-            if (response.data && response.data.nombre) {
-                datosCliente = {
-                    _id: response.data._id,
-                    nombre: response.data.nombre,
-                    documento: response.data.documento,
-                    email: response.data.email,
-                    telefono: response.data.telefono,
-                    direccion: response.data.direccion
-                };
-                console.log('Datos del cliente encontrados:', datosCliente);
-            } else {
-                console.log('No se encontraron datos del cliente, usando valores por defecto');
+            } catch (error) {
+                console.error('Error al obtener datos del cliente:', error.response?.data || error.message);
                 datosCliente = {
                     nombre: 'Cliente no identificado',
                     documento: datos.documento
                 };
             }
-        } catch (error) {
-            console.error('Error al obtener datos del cliente:', error.response?.data || error.message);
-            datosCliente = {
-                nombre: 'Cliente no identificado',
-                documento: datos.documento
-            };
         }
 
         if (!datosCliente) {
@@ -614,18 +632,20 @@ const registrarMuestra = async (req, res, next) => {
             },
             creadoPor: {
                 _id: new mongoose.Types.ObjectId(),
-                nombre: datosAdministrador.nombre,
-                documento: datosAdministrador.documento,
-                email: datosAdministrador.email,
+                nombre: datosUsuario.nombre,
+                documento: datosUsuario.documento,
+                email: datosUsuario.email,
+                rol: datosUsuario.rol,
                 fechaCreacion: formatearFechaHora(fecha)
             },
             historial: [{
                 estado: estadoInicial,
-                administrador: {
+                usuario: {
                     _id: new mongoose.Types.ObjectId(),
-                    nombre: datosAdministrador.nombre,
-                    documento: datosAdministrador.documento,
-                    email: datosAdministrador.email
+                    nombre: datosUsuario.nombre,
+                    documento: datosUsuario.documento,
+                    email: datosUsuario.email,
+                    rol: datosUsuario.rol
                 },
                 fechaCambio: new Date(),
                 observaciones: esRechazada ? motivoRechazo : 
@@ -640,21 +660,22 @@ const registrarMuestra = async (req, res, next) => {
          //AUDITORIAS
          setImmediate(async () => {
             try {
-                await AuditoriaService.registrarAccionMuestra({
+                await AuditoriaService.registrarAccion({
                     usuario: req.usuario,
-                    metodo: req.method,
-                   /* ruta: req.originalUrl,*/
-                    descripcion: 'Registro de nueva muestra',
-                 //   idMuestra: muestraGuardada._id,
-                    tipoMuestra: muestraGuardada.tipoDeAgua.tipo,
-                    estadoMuestra: muestraGuardada.estado,
-                    datosCompletos: muestraGuardada.toObject(),
-                  /*  cambios: {
-                        anteriores: null,
-                        nuevos: nuevaMuestra.toObject()
+                    accion: {
+                        descripcion: 'registro nueva muestra'
                     },
-                    ip: req.ip,
-                    userAgent: req.headers['user-agent']*/
+                    detalles: {
+                        id_muestra: muestraGuardada.id_muestra,
+                        cliente: muestraGuardada.cliente,
+                        tipoDeAgua: muestraGuardada.tipoDeAgua,
+                        lugarMuestreo: muestraGuardada.lugarMuestreo,
+                        fechaHoraMuestreo: muestraGuardada.fechaHoraMuestreo,
+                        tipoAnalisis: Array.isArray(muestraGuardada.tipoAnalisis) ? muestraGuardada.tipoAnalisis[0] : muestraGuardada.tipoAnalisis,
+                        estado: muestraGuardada.estado,
+                        analisisSeleccionados: muestraGuardada.analisisSeleccionados
+                    },
+                    fecha: new Date()
                 });
             } catch (error) {
                 console.error('[AUDITORIA ERROR]', error.message);
@@ -704,11 +725,12 @@ const registrarMuestra = async (req, res, next) => {
             historial: Array.isArray(muestraGuardada.historial) ? 
                 muestraGuardada.historial.map(h => ({
                     estado: h.estado,
-                    administrador: {
-                        _id: h.administrador._id,
-                        nombre: h.administrador.nombre,
-                        documento: h.administrador.documento,
-                        email: h.administrador.email
+                    usuario: {
+                        _id: h.usuario._id,
+                        nombre: h.usuario.nombre,
+                        documento: h.usuario.documento,
+                        email: h.usuario.email,
+                        rol: h.usuario.rol
                     },
                     fechaCambio: formatearFechaHora(h.fechaCambio),
                     observaciones: h.observaciones
@@ -820,18 +842,22 @@ const actualizarMuestra = async (req, res, next) => {
          // AUDITORÍA
          setImmediate(async () => {
             try {
-                await AuditoriaService.registrarAccionMuestra({
+                await AuditoriaService.registrarAccion({
                     usuario,
-                    metodo: req.method,
-                    descripcion: 'Actualización de muestra',
-                    idMuestra: muestra._id,
-                    tipoMuestra: muestra.tipoDeAgua?.tipo,
-                    estadoMuestra: muestra.estado,
-                    datosCompletos: muestra.toObject(),
-                    cambios: {
-                        anteriores: muestraOriginal,
-                        nuevos: muestra.toObject()
-                    }
+                    accion: {
+                        descripcion: 'actualización de resultado'
+                    },
+                    detalles: {
+                        idMuestra: muestra._id,
+                        tipoMuestra: muestra.tipoDeAgua?.tipo,
+                        estadoMuestra: muestra.estado,
+                        datosCompletos: muestra.toObject(),
+                        cambios: {
+                            antes: muestraOriginal,
+                            despues: muestra.toObject()
+                        }
+                    },
+                    fecha: new Date()
                 });
             } catch (error) {
                 console.error('[AUDITORIA ERROR]', error.message);

@@ -24,7 +24,7 @@ router.get('/lab', verificarToken, verificarLaboratorista, muestrasController.ob
 router.get('/lab/:id', verificarToken, verificarLaboratorista, muestrasController.obtenerMuestra);
 
 // Rutas generales de muestras
-router.post('/', verificarToken, verificarRolAdministrador, muestrasController.registrarMuestra);
+router.post('/', verificarToken, muestrasController.registrarMuestra);
 router.get('/', paginationMiddleware, muestrasController.obtenerMuestras);
 router.get('/:id', muestrasController.obtenerMuestra);
 router.put('/:id', verificarToken, muestrasController.actualizarMuestra);

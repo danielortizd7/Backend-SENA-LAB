@@ -223,14 +223,22 @@ const registrarResultado = async (req, res) => {
         // Registrar auditoría
         setImmediate(async () => {
             try {
-                await AuditoriaService.registrarAccionMuestra({
+                await AuditoriaService.registrarAccion({
                     usuario,
-                    metodo: 'POST',
-                    descripcion: 'Registro de resultado y muestra',
-                    idMuestra,
-                    tipoMuestra: resultado.tipoDeAgua,
-                    estadoMuestra: resultado.estado,
-                    datosCompletos: resultadoFormateado
+                    accion: {
+                        descripcion: 'registro de resultado'
+                    },
+                    detalles: {
+                        id_muestra: idMuestra,
+                        cliente: resultado.cliente,
+                        tipoDeAgua: resultado.tipoDeAgua,
+                        lugarMuestreo: resultado.lugarMuestreo,
+                        fechaHoraMuestreo: resultado.fechaHoraMuestreo,
+                        tipoAnalisis: Array.isArray(resultado.tipoAnalisis) ? resultado.tipoAnalisis[0] : resultado.tipoAnalisis,
+                        estado: resultado.estado,
+                        resultados: resultado.resultados
+                    },
+                    fecha: new Date()
                 });
             } catch (error) {
                 console.error('[AUDITORIA ERROR]', error.message);
@@ -445,14 +453,19 @@ const editarResultado = async (req, res) => {
                 await AuditoriaService.registrarAccion({
                     usuario,
                     accion: {
-                        tipo: 'PUT',
-                        descripcion: 'Actualización de resultado'
+                        descripcion: 'actualización de resultado'
                     },
                     detalles: {
-                        idMuestra,
+                        id_muestra: idMuestra,
+                        cliente: resultado.cliente,
+                        tipoDeAgua: resultado.tipoDeAgua,
+                        lugarMuestreo: resultado.lugarMuestreo,
+                        fechaHoraMuestreo: resultado.fechaHoraMuestreo,
+                        tipoAnalisis: Array.isArray(resultado.tipoAnalisis) ? resultado.tipoAnalisis[0] : resultado.tipoAnalisis,
+                        estado: resultado.estado,
                         cambios: {
-                            antes: valoresAnteriores,
-                            despues: resultado.toObject()
+                            antes: valoresAnteriores.resultados,
+                            despues: resultado.resultados
                         }
                     },
                     fecha: new Date()
