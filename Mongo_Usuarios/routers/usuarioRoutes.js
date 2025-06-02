@@ -11,9 +11,9 @@ module.exports = (autenticarMiddleware, usuarioModel) => {
 
     router.post('/login', (req, res) => controller.login(req, res));
     router.get('/buscar', (req, res) => controller.buscarPorDocumento(req, res));
-    router.get("/roles/:id", controller.obtenerRoles.bind(controller));    
+    router.get("/roles/:id", controller.obtenerRoles.bind(controller));  
+    router.post('/clientes/registro', (req, res) => controller.registrarCliente(req, res));  
     router.post('/registro', autenticarMiddleware, async (req, res, next) => {
-   
        
         try {
             const rolAutenticado = req.usuario.rol; 

@@ -634,6 +634,94 @@ async buscarPorDocumento(req, res) {
 }
 
 
+async registrarCliente(req, res) {
+    try{
+        const {email, nombre, documento, telefono, direccion} = req.body;
+
+        if(!email || !nombre || !documento){
+            return res.status(400).json({
+                error: 'Faltan campos requeridos',
+                detalles: 'Email, nombre y documento son obligatorios'
+            });
+        }
+        const existeCorreo = await this.usuarioModel.obtenerPorEmail(email);
+        if(existeCorreo){
+            return res.status(400).json({
+                error: 'Email ya registrado',
+                detalles: 'El email proporcionado ya esta en uso'
+            });
+        }
+
+        const existeDocumento = await this.usuarioModel.buscarPorDocumento(documento);
+        if(existeDocumento){
+            return res.status(400).json({
+                error: 'Documento ya registrado',
+                detalles: 'Ya existe un usuario con ese documento'
+            })
+        }
+
+        const Role = require('../models/Role');
+        const rolCliente = await Role.findOne({name: 'cliente'});
+
+        if (!rolCliente){
+            return res.status(500).json({
+                error: 'Rolmcliente no encontrado',
+                detalles: 'Contacte al administrador'
+            });
+        }
+
+        const hashedPassword = await bcrypt.hash(documento, 10);
+
+        const nuevoCliente = {
+            email,
+            password: hashedPassword,
+            nombre,
+            documento,
+            telefono,
+            direccion,
+            activo: true,
+            rol: rolCliente._id,
+            detalles: {
+                tipo: 'cliente',
+                razonSocial: req.body.detalles?.razonSocial || "",
+                tipo_cliente: req.body.detalles?.tipo_cliente || "",
+            }
+        };
+
+        const resultado = await this.usuarioModel.crear(nuevoCliente);
+
+        await perfilService.crearPerfil({
+            usuarioId: resultado._id,
+            nombre,
+            email,
+            telefono,
+            direccion,
+            fotoPerfil:''
+         })
+
+        return res.status(201).json({
+            mensaje: 'Cliente registrado exitosamente',
+            usuario: {
+                _id: resultado._id,
+                email: resultado.email,
+                nombre: resultado.nombre,
+                documento: resultado.documento,
+                telefono: resultado.telefono,
+                direccion: resultado.direccion,
+                tipo: 'cliente',
+                detalles: resultado.detalles
+            }
+        });
+
+    } catch(error){
+        console.error('Error en registro de cliente:', error);
+        return res.status(500).json({
+            error: 'Error en el servidor',
+            detalles: error.message
+        })
+    }
+}
+
 
   
 }
