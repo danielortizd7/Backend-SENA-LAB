@@ -1,36 +1,12 @@
-const { Muestra } = require('../../../shared/models/muestrasModel');
-const { NotFoundError, DatabaseError, ValidationError } = require('../../../shared/errors/AppError');
-const { analisisDisponibles } = require('../../../shared/data/analisisData');
+const { ValidationError, NotFoundError, DatabaseError } = require('../../../shared/errors/AppError');
 const mongoose = require('mongoose');
+const { Muestra } = require('../../../shared/models/muestrasModel');
+const { validarRolUsuario } = require('../../../shared/middleware/roles');
+const { analisisDisponibles } = require('../../../shared/data/analisisData');
 const axios = require('axios');
 
 // URL base para las peticiones a la API de usuarios
 const BASE_URL = 'https://backend-sena-lab-1-qpzp.onrender.com';
-
-// Validar rol de usuario
-const validarRolUsuario = (usuario) => {
-    console.log('Validando rol de usuario:', usuario);
-    
-    if (!usuario) {
-        throw new ValidationError('Usuario no autenticado');
-    }
-
-    if (!usuario.rol) {
-        throw new ValidationError('No se encontró el rol del usuario');
-    }
-
-    const rolesPermitidos = ['administrador', 'laboratorista'];
-    const rolUsuario = usuario.rol.toLowerCase();
-    
-    console.log('Rol del usuario:', rolUsuario);
-    console.log('Roles permitidos:', rolesPermitidos);
-    
-    if (!rolesPermitidos.includes(rolUsuario)) {
-        throw new ValidationError(`No tienes permisos para realizar esta acción. Tu rol es: ${rolUsuario}`);
-    }
-
-    return true;
-};
 
 // Función para calcular el total de análisis seleccionados
 const calcularPrecioTotal = (analisisSeleccionados) => {
@@ -99,7 +75,8 @@ const procesarFirmas = (datosMuestra, usuario) => {
         datosMuestra.estado === 'Pendiente') {
         return {};
     }
-    
+    // Proteger acceso a cliente
+    const cliente = datosMuestra.cliente || {};
     return {
         administrador: {
             nombre: usuario.nombre,
@@ -107,8 +84,8 @@ const procesarFirmas = (datosMuestra, usuario) => {
             firmaAdministrador: datosMuestra.firmas?.firmaAdministrador?.firma || ''
         },
         cliente: {
-            nombre: datosMuestra.cliente.nombre,
-            documento: datosMuestra.cliente.documento,
+            nombre: cliente.nombre || '',
+            documento: cliente.documento || '',
             firmaCliente: datosMuestra.firmas?.firmaCliente?.firma || ''
         }
     };
@@ -187,8 +164,113 @@ const crearMuestra = async (datosMuestra, usuario) => {
         console.log('Intentando guardar muestra:', JSON.stringify(muestra, null, 2));
         
         await muestra.save();
+
+        // Registrar la auditoría de forma asíncrona
+        setImmediate(async () => {
+            try {
+                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                await AuditoriaService.registrarAccion({
+                    usuario: {
+                        id: usuario._id,
+                        nombre: usuario.nombre,
+                        rol: usuario.rol,
+                        documento: usuario.documento
+                    },
+                    accion: {
+                        descripcion: 'registro nueva muestra',
+                        tipo: 'POST',
+                        modulo: 'muestras',
+                        criticidad: datosNormalizados.estado === 'Rechazada' ? 'alta' : 'media'
+                    },
+                    detalles: {
+                        id_muestra: muestra.id_muestra,
+                        cliente: {
+                            _id: muestra.cliente._id,
+                            nombre: muestra.cliente.nombre,
+                            documento: muestra.cliente.documento,
+                            email: muestra.cliente.email,
+                            telefono: muestra.cliente.telefono,
+                            direccion: muestra.cliente.direccion
+                        },
+                        tipoDeAgua: muestra.tipoDeAgua,
+                        tipoMuestreo: muestra.tipoMuestreo,
+                        lugarMuestreo: muestra.lugarMuestreo,
+                        fechaHoraMuestreo: muestra.fechaHoraMuestreo,
+                        tipoAnalisis: muestra.tipoAnalisis,
+                        identificacionMuestra: muestra.identificacionMuestra,
+                        planMuestreo: muestra.planMuestreo,
+                        condicionesAmbientales: muestra.condicionesAmbientales,
+                        preservacionMuestra: muestra.preservacionMuestra,
+                        estado: muestra.estado,
+                        observaciones: muestra.observaciones,
+                        analisisSeleccionados: muestra.analisisSeleccionados.map(analisis => ({
+                            nombre: analisis.nombre,
+                            precio: parseFloat(analisis.precio.replace(/[^\d.-]/g, '')),
+                            unidad: analisis.unidad,
+                            metodo: analisis.metodo,
+                            rango: analisis.rango
+                        })),
+                        precioTotal: parseFloat(muestra.precioTotal.replace(/[^\d.-]/g, '')),
+                        firmas: muestra.firmas,
+                        rechazoMuestra: muestra.rechazoMuestra,
+                        cambios: {
+                            antes: null,
+                            despues: null
+                        },
+                        metadata: {
+                            version: '1.1',
+                            entorno: process.env.NODE_ENV || 'development',
+                            createdAt: muestra.createdAt,
+                            creadoPor: muestra.creadoPor,
+                            historial: muestra.historial
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
+
         return muestra;
     } catch (error) {
+        // Registrar error en auditoría
+        setImmediate(async () => {
+            try {
+                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                await AuditoriaService.registrarAccion({
+                    usuario: {
+                        id: usuario?._id,
+                        nombre: usuario?.nombre,
+                        rol: usuario?.rol,
+                        documento: usuario?.documento
+                    },
+                    accion: {
+                        descripcion: 'error en creación de muestra',
+                        tipo: 'POST',
+                        modulo: 'muestras',
+                        criticidad: 'alta'
+                    },
+                    detalles: {
+                        error: {
+                            mensaje: error.message,
+                            tipo: error.constructor.name,
+                            stack: error.stack
+                        },
+                        datosMuestra: {
+                            tipoDeAgua: datosMuestra.tipoDeAgua,
+                            tipoMuestreo: datosMuestra.tipoMuestreo,
+                            lugarMuestreo: datosMuestra.lugarMuestreo,
+                            estado: datosMuestra.estado
+                        }
+                    },
+                    estado: 'fallido',
+                    mensaje: `Error al crear muestra: ${error.message}`
+                });
+            } catch (auditError) {
+                console.error('[AUDITORIA ERROR]', auditError.message);
+            }
+        });
+
         console.error('Error completo al crear muestra:', error);
         if (error instanceof ValidationError) {
             throw error;
@@ -202,96 +284,341 @@ const crearMuestra = async (datosMuestra, usuario) => {
 
 // Actualizar una muestra
 const actualizarMuestra = async (id, datosActualizacion, usuario) => {
+    let oldData = null;
     try {
-        // Validar el rol del usuario
-        validarRolUsuario(usuario);
+        // Verificar que el usuario existe
+        if (!usuario) {
+            throw new ValidationError('Usuario no proporcionado');
+        }
 
-        const idLimpio = id.replace(/[^a-zA-Z0-9-]/g, '');
+        // Verificar que el usuario tiene un rol válido
+        if (!usuario.rol) {
+            throw new ValidationError('Usuario sin rol especificado');
+        }
+
+        // Verificar que el rol es válido
+        const rolesPermitidos = ['administrador', 'laboratorista'];
+        if (!rolesPermitidos.includes(usuario.rol.toLowerCase())) {
+            throw new ValidationError(`Rol no autorizado para esta acción: ${usuario.rol}`);
+        }
+
+        const idLimpio = id.trim();
         console.log('ID de muestra a actualizar (limpio):', idLimpio);
-
-        // Filtrar campos inmutables y agregar validaciones
-        const { documento, ...datosActualizados } = datosActualizacion;
         
-        // Validar tipoMuestreo si está presente
-        if (datosActualizados.tipoMuestreo) {
-            const tiposValidos = ['Simple', 'Compuesto', 'Integrado'];
-            if (!tiposValidos.includes(datosActualizados.tipoMuestreo)) {
-                throw new ValidationError(`Tipo de muestreo no válido. Valores permitidos: ${tiposValidos.join(', ')}`);
-            }
-        }
-
-        // Calcular el precio total si se están actualizando los análisis seleccionados
-        if (datosActualizados.analisisSeleccionados) {
-            datosActualizados.precioTotal = calcularPrecioTotal(datosActualizados.analisisSeleccionados);
-        }
-
-        // Verificar si la muestra existe antes de actualizar
-        const muestraExistente = await Muestra.findOne({ id_muestra: idLimpio });
-        if (!muestraExistente) {
+        // Obtener datos antiguos para auditoría
+        oldData = await Muestra.findOne({ id_muestra: idLimpio }).lean();
+        if (!oldData) {
             throw new NotFoundError('Muestra no encontrada');
         }
 
-        // Preparar datos para actualizar
-        const datosParaActualizar = { ...datosActualizados };
-        
-        // Si se está rechazando la muestra, actualizar el campo rechazoMuestra
-        if (datosActualizacion.estado === 'Rechazada') {
-            datosParaActualizar.rechazoMuestra = {
+        // Preparar los datos actualizados
+        const datosActualizados = { ...datosActualizacion };
+
+        // Manejar el caso de análisis seleccionados
+        if (datosActualizados.analisisSeleccionados) {
+            if (!Array.isArray(datosActualizados.analisisSeleccionados)) {
+                throw new ValidationError('analisisSeleccionados debe ser un array');
+            }
+
+            // Asegurarse de que cada análisis tenga la estructura correcta
+            datosActualizados.analisisSeleccionados = datosActualizados.analisisSeleccionados.map(analisis => {
+                if (!analisis) return null;
+                return {
+                    nombre: analisis.nombre || '',
+                    precio: analisis.precio || 0,
+                    unidad: analisis.unidad || '',
+                    metodo: analisis.metodo || '',
+                    rango: analisis.rango || ''
+                };
+            }).filter(analisis => analisis !== null);
+
+            // Recalcular el precio total
+            datosActualizados.precioTotal = datosActualizados.analisisSeleccionados.reduce(
+                (total, analisis) => total + (typeof analisis.precio === 'string' ? 
+                    parseFloat(analisis.precio.replace(/[^\d.-]/g, '')) : 
+                    (analisis.precio || 0)), 
+                0
+            );
+        }
+
+        // Manejar fechas
+        if (datosActualizados.fechaHoraMuestreo) {
+            try {
+                if (typeof datosActualizados.fechaHoraMuestreo === 'string') {
+                    datosActualizados.fechaHoraMuestreo = new Date(datosActualizados.fechaHoraMuestreo);
+                } else if (datosActualizados.fechaHoraMuestreo.timestamp) {
+                    datosActualizados.fechaHoraMuestreo = new Date(datosActualizados.fechaHoraMuestreo.timestamp);
+                }
+
+                if (isNaN(datosActualizados.fechaHoraMuestreo.getTime())) {
+                    throw new ValidationError('Fecha de muestreo inválida');
+                }
+            } catch (error) {
+                throw new ValidationError('Error al procesar la fecha de muestreo: ' + error.message);
+            }
+        }
+
+        // Manejar el estado y rechazo
+        if (datosActualizados.estado === 'Rechazada') {
+            if (!datosActualizados.observaciones) {
+                throw new ValidationError('Debe especificar el motivo del rechazo en las observaciones');
+            }
+            datosActualizados.rechazoMuestra = {
                 rechazada: true,
-                motivo: datosActualizacion.observaciones,
+                motivo: datosActualizados.observaciones,
                 fechaRechazo: new Date()
             };
         }
 
-        // Procesar firmas si se están actualizando
-        if (datosActualizacion.firmas) {
-            datosParaActualizar.firmas = procesarFirmas(datosActualizacion, usuario);
-        }
-
-        // Agregar al historial si hay cambio de estado
-        if (datosActualizacion.estado && datosActualizacion.estado !== muestraExistente.estado) {
-            datosParaActualizar.$push = {
-                ...datosParaActualizar.$push,
-                historial: crearEntradaHistorial(
-                    datosActualizacion.estado,
-                    usuario,
-                    datosActualizacion.observaciones
-                )
+        // Preparar el historial si hay cambio de estado
+        if (datosActualizados.estado && datosActualizados.estado !== oldData.estado) {
+            const entradaHistorial = {
+                estado: datosActualizados.estado,
+                usuario: {
+                    _id: usuario._id || new mongoose.Types.ObjectId(),
+                    nombre: usuario.nombre,
+                    documento: usuario.documento,
+                    email: usuario.email,
+                    rol: usuario.rol
+                },
+                fechaCambio: new Date(),
+                observaciones: datosActualizados.observaciones || `Estado cambiado a ${datosActualizados.estado}`
             };
+
+            // Si no existe el array de historial, crearlo
+            if (!oldData.historial) {
+                datosActualizados.historial = [entradaHistorial];
+            } else {
+                // Usar $push para añadir al array existente
+                datosActualizados.$push = { historial: entradaHistorial };
+            }
         }
 
+        // Detectar cambios significativos para auditoría
+        const cambiosSignificativos = {};
+        const camposAuditables = [
+            'estado',
+            'tipoDeAgua',
+            'tipoMuestreo',
+            'lugarMuestreo',
+            'fechaHoraMuestreo',
+            'tipoAnalisis',
+            'observaciones',
+            'analisisSeleccionados'
+        ];
+
+        camposAuditables.forEach(campo => {
+            if (datosActualizados[campo] && 
+                JSON.stringify(datosActualizados[campo]) !== JSON.stringify(oldData[campo])) {
+                cambiosSignificativos[campo] = {
+                    antes: oldData[campo],
+                    despues: datosActualizados[campo]
+                };
+            }
+        });
+
+        // Realizar la actualización
+        console.log('Actualizando muestra con datos:', JSON.stringify(datosActualizados, null, 2));
+        
         const muestra = await Muestra.findOneAndUpdate(
             { id_muestra: idLimpio },
-            { $set: datosParaActualizar },
-            { new: true }
-        );
+            datosActualizados,
+            { 
+                new: true,
+                runValidators: true,
+                lean: false
+            }
+        ).exec();
 
         if (!muestra) {
-            throw new NotFoundError('Muestra no encontrada');
+            throw new NotFoundError('Muestra no encontrada después de la actualización');
         }
+
+        // Registrar la auditoría de forma asíncrona
+        setImmediate(async () => {
+            try {
+                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                await AuditoriaService.registrarAccion({
+                    usuario: {
+                        id: usuario._id,
+                        nombre: usuario.nombre,
+                        rol: usuario.rol,
+                        documento: usuario.documento
+                    },
+                    accion: {
+                        descripcion: 'actualización de muestra',
+                        tipo: 'PUT',
+                        modulo: 'muestras',
+                        criticidad: datosActualizados.estado === 'Rechazada' ? 'alta' : 'media'
+                    },
+                    detalles: {
+                        idMuestra: muestra.id_muestra,
+                        cliente: muestra.cliente,
+                        tipoDeAgua: muestra.tipoDeAgua,
+                        lugarMuestreo: muestra.lugarMuestreo,
+                        fechaHoraMuestreo: muestra.fechaHoraMuestreo,
+                        tipoAnalisis: muestra.tipoAnalisis,
+                        estado: muestra.estado,
+                        analisisSeleccionados: muestra.analisisSeleccionados,
+                        cambios: cambiosSignificativos,
+                        metadata: {
+                            version: '1.1',
+                            entorno: process.env.NODE_ENV || 'development',
+                            lastModified: new Date()
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
 
         return muestra;
     } catch (error) {
+        // Registrar error en auditoría
+        setImmediate(async () => {
+            try {
+                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                await AuditoriaService.registrarAccion({
+                    usuario: {
+                        id: usuario?._id,
+                        nombre: usuario?.nombre,
+                        rol: usuario?.rol,
+                        documento: usuario?.documento
+                    },
+                    accion: {
+                        descripcion: 'error en actualización de muestra',
+                        tipo: 'PUT',
+                        modulo: 'muestras',
+                        criticidad: 'alta'
+                    },
+                    detalles: {
+                        idMuestra: id,
+                        error: {
+                            mensaje: error.message,
+                            tipo: error.constructor.name,
+                            stack: error.stack
+                        },
+                        datosActualizacion: datosActualizacion,
+                        estadoAnterior: oldData?.estado
+                    },
+                    estado: 'fallido',
+                    mensaje: `Error al actualizar muestra: ${error.message}`
+                });
+            } catch (auditError) {
+                console.error('[AUDITORIA ERROR]', auditError.message);
+            }
+        });
+
+        console.error('Error en actualizarMuestra:', error);
         if (error instanceof NotFoundError || error instanceof ValidationError) {
             throw error;
         }
-        throw new DatabaseError('Error al actualizar la muestra', error);
+        throw new DatabaseError('Error al actualizar la muestra: ' + error.message, error);
     }
 };
 
 // Eliminar una muestra
 const eliminarMuestra = async (id, usuario) => {
+    let muestraPrevia = null;
     try {
         // Validar el rol del usuario
         validarRolUsuario(usuario);
+
+        // Obtener datos de la muestra antes de eliminar para la auditoría
+        muestraPrevia = await Muestra.findOne({ id_muestra: id }).lean();
+        if (!muestraPrevia) {
+            throw new NotFoundError('Muestra no encontrada');
+        }
 
         const muestra = await Muestra.findOneAndDelete({ id_muestra: id });
         
         if (!muestra) {
             throw new NotFoundError('Muestra no encontrada');
         }
+
+        // Registrar la auditoría de forma asíncrona
+        setImmediate(async () => {
+            try {
+                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                await AuditoriaService.registrarAccion({
+                    usuario: {
+                        id: usuario._id,
+                        nombre: usuario.nombre,
+                        rol: usuario.rol,
+                        documento: usuario.documento
+                    },
+                    accion: {
+                        descripcion: 'eliminación de muestra',
+                        tipo: 'DELETE',
+                        modulo: 'muestras',
+                        criticidad: 'alta'
+                    },
+                    detalles: {
+                        idMuestra: id,
+                        muestraEliminada: {
+                            cliente: muestraPrevia.cliente,
+                            tipoDeAgua: muestraPrevia.tipoDeAgua,
+                            lugarMuestreo: muestraPrevia.lugarMuestreo,
+                            fechaHoraMuestreo: muestraPrevia.fechaHoraMuestreo,
+                            tipoAnalisis: muestraPrevia.tipoAnalisis,
+                            estado: muestraPrevia.estado,
+                            analisisSeleccionados: muestraPrevia.analisisSeleccionados
+                        },
+                        metadata: {
+                            version: '1.1',
+                            entorno: process.env.NODE_ENV || 'development',
+                            fechaEliminacion: new Date(),
+                            ultimoEstado: muestraPrevia.estado
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR]', error.message);
+            }
+        });
+
         return muestra;
     } catch (error) {
+        // Registrar error en auditoría
+        setImmediate(async () => {
+            try {
+                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                await AuditoriaService.registrarAccion({
+                    usuario: {
+                        id: usuario?._id,
+                        nombre: usuario?.nombre,
+                        rol: usuario?.rol,
+                        documento: usuario?.documento
+                    },
+                    accion: {
+                        descripcion: 'error en eliminación de muestra',
+                        tipo: 'DELETE',
+                        modulo: 'muestras',
+                        criticidad: 'alta'
+                    },
+                    detalles: {
+                        idMuestra: id,
+                        error: {
+                            mensaje: error.message,
+                            tipo: error.constructor.name,
+                            stack: error.stack
+                        },
+                        estadoPrevio: muestraPrevia?.estado,
+                        metadata: {
+                            version: '1.1',
+                            entorno: process.env.NODE_ENV || 'development',
+                            intentoEliminacion: new Date()
+                        }
+                    },
+                    estado: 'fallido',
+                    mensaje: `Error al eliminar muestra: ${error.message}`
+                });
+            } catch (auditError) {
+                console.error('[AUDITORIA ERROR]', auditError.message);
+            }
+        });
+
         if (error instanceof NotFoundError || error instanceof ValidationError) {
             throw error;
         }
@@ -378,4 +705,4 @@ module.exports = {
     obtenerMuestrasPorEstado,
     calcularPrecioTotal,
     obtenerMuestrasPorCliente
-}; 
+};

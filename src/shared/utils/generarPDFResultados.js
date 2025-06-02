@@ -1,5 +1,5 @@
 const PdfPrinter = require('pdfmake');
-const pdfFonts = require('../../../pdfmakeFonts/vfs_fonts');
+const pdfFonts = require('../../../pdfmakefonts/vfs_fonts');
 const fs = require('node:fs');
 
 // Soporte para diferentes formas de exportación de vfs_fonts.js
@@ -27,45 +27,54 @@ function generarDocumentDefinition(resultado, logoBase64) {
     return new Date(dateObj).toLocaleString();
   };
 
-  const resultadosArray = Array.isArray(resultado.resultadosArray)
-    ? resultado.resultadosArray.map(item => [
-        { text: item.nombreFormateado || '', style: 'tableBody' },
-        { text: item.unidad || '', style: 'tableBody' },
-        { text: item.valor || '', style: 'tableBody' },
-        { text: item.metodo || '', style: 'tableBody' },
-        { text: item.tipo || '', style: 'tableBody' },
-      ])
-    : [];
-
-  const historialCambiosReverso = (resultado.historialCambiosReverso || []).map((cambio, idx) => ({
-    stack: [
-      { text: `CAMBIO #${idx + 1}`, style: 'historialCambioTitulo' },
-      { text: `Realizado por: ${cambio.nombre || 'No disponible'} | Fecha: ${cambio.fechaFormateada || formatDate(cambio.fecha)}`, style: 'historialCambioInfo' },
-      { text: `Observaciones: ${cambio.observaciones || 'Sin observaciones'}`, style: 'historialCambioInfo' },
-      cambio.cambiosResultadosArray && cambio.cambiosResultadosArray.length > 0 ? {
-        table: {
-          widths: ['*', '*', '*', '*'],
-          body: [
-            [
-              { text: 'Análisis', style: 'tableHeader' },
-              { text: 'Valor Anterior', style: 'tableHeader' },
-              { text: 'Valor Nuevo', style: 'tableHeader' },
-              { text: 'Unidad', style: 'tableHeader' },
-            ],
-            ...cambio.cambiosResultadosArray.map(item => [
-              { text: item.parametro || '', style: 'tableBody' },
-              { text: item.valorAnterior || '-', style: 'tableBody' },
-              { text: item.valorNuevo || '-', style: 'tableBody' },
-              { text: item.unidad || '-', style: 'tableBody' },
-            ]),
-          ],
-        },
-        layout: 'lightHorizontalLines',
-        margin: [0, 5, 0, 10],
-      } : null,
-    ].filter(Boolean),
-    margin: [0, 0, 0, 10],
+  // Transformar el objeto de resultados a un array
+  const resultadosArray = Object.entries(resultado.resultados || {}).map(([nombre, datos]) => ({
+    nombreFormateado: nombre,
+    unidad: datos.unidad,
+    valor: datos.valor,
+    metodo: datos.metodo,
+    tipo: datos.tipo
   }));
+
+  // Preparar el historial de cambios con la transformación de resultados
+  const historialCambiosReverso = (resultado.historialCambios || []).map((cambio, idx) => {
+    const cambiosResultadosArray = Object.entries(cambio.cambiosRealizados?.resultados || {}).map(([parametro, detalles]) => ({
+      parametro: parametro,
+      valorAnterior: detalles.valorAnterior,
+      valorNuevo: detalles.valorNuevo,
+      unidad: detalles.unidad
+    }));
+
+    return {
+      stack: [
+        { text: `CAMBIO #${idx + 1}`, style: 'historialCambioTitulo' },
+        { text: `Realizado por: ${cambio.nombre || 'No disponible'} | Fecha: ${cambio.fechaFormateada || formatDate(cambio.fecha)}`, style: 'historialCambioInfo' },
+        { text: `Observaciones: ${cambio.observaciones || 'Sin observaciones'}`, style: 'historialCambioInfo' },
+        cambiosResultadosArray && cambiosResultadosArray.length > 0 ? {
+          table: {
+            widths: ['*', '*', '*', '*'],
+            body: [
+              [
+                { text: 'Análisis', style: 'tableHeader' },
+                { text: 'Valor Anterior', style: 'tableHeader' },
+                { text: 'Valor Nuevo', style: 'tableHeader' },
+                { text: 'Unidad', style: 'tableHeader' },
+              ],
+              ...cambiosResultadosArray.map(item => [
+                { text: item.parametro || '', style: 'tableBody' },
+                { text: item.valorAnterior || '-', style: 'tableBody' },
+                { text: item.valorNuevo || '-', style: 'tableBody' },
+                { text: item.unidad || '-', style: 'tableBody' },
+              ]),
+            ],
+          },
+          layout: 'lightHorizontalLines',
+          margin: [0, 5, 0, 10],
+        } : null,
+      ].filter(Boolean),
+      margin: [0, 0, 0, 10],
+    };
+  }).reverse(); // Invertir el orden para mostrar el historial del más reciente al más antiguo
 
   const disclaimers = (resultado.disclaimers || [
     'El laboratorio NO EMITE OPINIONES NI DECLARACIONES con el cumplimiento o no cumplimiento de los requisitos y/o especificaciones; el laboratorio no declara conformidad.',
@@ -80,33 +89,48 @@ function generarDocumentDefinition(resultado, logoBase64) {
     'El Laboratorio de Análisis Ambientales no subcontrata ensayos.'
   ]).map(clarification => ({ text: clarification, style: 'listItem' }));
 
+  // Intentar obtener la información del verificador del último historial de cambios
+  const ultimoCambioVerificacion = resultado.historialCambios?.slice(-1)[0];
+  const realizadoPorNombre = ultimoCambioVerificacion?.nombre || resultado.nombreLaboratorista || 'No disponible';
+  const realizadoPorFecha = ultimoCambioVerificacion?.fechaFormateada || formatDate(ultimoCambioVerificacion?.fecha) || '';
+  const realizadoPorObservaciones = ultimoCambioVerificacion?.observaciones || resultado.observaciones || 'Sin observaciones';
+
+  // Obtener el verificador del último historial de cambios
+  let verificadorNombre = 'N/A';
+  let verificadorCedula = 'N/A';
+  if (resultado.historialCambios && resultado.historialCambios.length > 0) {
+    const ultimoCambio = resultado.historialCambios[resultado.historialCambios.length - 1];
+    if (ultimoCambio && ultimoCambio.nombre) verificadorNombre = ultimoCambio.nombre;
+    if (ultimoCambio && ultimoCambio.cedula) verificadorCedula = ultimoCambio.cedula;
+  }
+
   return {
     pageSize: 'A4',
     pageMargins: [50, 50, 50, 50],
     content: [
       {
-        table: {
-          widths: ['20%', '60%', '20%'],
-          body: [
-            [
-              (logoBase64 && typeof logoBase64 === 'string' && logoBase64.startsWith('data:image'))
-                ? { image: logoBase64, width: 80, alignment: 'center', margin: [0, 10, 0, 10] }
-                : { text: '', alignment: 'center', margin: [0, 10, 0, 10] },
-              {
-                stack: [
-                  { text: 'LABORATORIO DE ANÁLISIS AMBIENTALES', style: 'headerTitle', alignment: 'center', margin: [0, 4, 0, 0] },
-                  { text: 'CENTRO DE TELEINFORMÁTICA Y PRODUCCIÓN INDUSTRIAL', style: 'headerSubtitle', alignment: 'center', margin: [0, 0, 0, 4] },
-                  { text: 'INFORME DE RESULTADOS DE ENSAYOS', style: 'mainReportTitle', alignment: 'center', margin: [0, 0, 0, 0] },
-                ],
-                fillColor: '#003366',
-                color: 'white',
-                alignment: 'center',
-                margin: [0, 0, 0, 0],
-                border: [false, false, false, false],
-              },
-              { text: 'Código:\nLAA-F-047-03', style: 'codigo', alignment: 'center', margin: [0, 10, 0, 10], border: [true, true, true, true] },
-            ],
-          ],
+          table: {
+              widths: ['20%', '60%', '20%'],
+              body: [
+                  [
+                      (logoBase64 && typeof logoBase64 === 'string' && logoBase64.startsWith('data:image'))
+                          ? { image: logoBase64, width: 50, alignment: 'center', margin: [5, 5, 5, 5] } // Aumento de margen vertical
+                          : { text: '', alignment: 'center', margin: [5, 5, 5, 5] }, // Aumento de margen vertical
+                      {
+                          stack: [
+                              { text: 'LABORATORIO DE ANÁLISIS AMBIENTALES', style: 'headerTitle', alignment: 'center', margin: [0, 4, 0, 0] },
+                              { text: 'CENTRO DE TELEINFORMÁTICA Y PRODUCCIÓN INDUSTRIAL', style: 'headerSubtitle', alignment: 'center', margin: [0, 0, 0, 4] },
+                              { text: 'INFORME DE RESULTADOS DE ENSAYOS', style: 'mainReportTitle', alignment: 'center', margin: [10, 0, 10, 0] }, // Aumento de margen vertical
+                          ],
+                          fillColor: '#003366',
+                          color: 'white',
+                          alignment: 'center',
+                          margin: [5, 0, 5, 0], // Aumento de margen vertical
+                          border: [false, false, false, false],
+                      },
+                      { text: 'Código:\nLAA-F-047-03', style: 'codigo', alignment: 'center', margin: [17, 17, 17, 17], border: [true, true, true, true] }, // Aumento de margen vertical
+                  ],
+              ],
         },
         layout: {
           hLineWidth: function () { return 1; },
@@ -116,7 +140,18 @@ function generarDocumentDefinition(resultado, logoBase64) {
         },
         margin: [0, 0, 0, 18],
       },
-      { text: 'INFORMACIÓN GENERAL', style: 'sectionBar' },
+      {
+        table: {
+          widths: ['*'],
+          body: [
+            [ { text: 'INFORMACIÓN GENERAL', style: 'sectionHeader' } ]
+          ]
+        },
+        layout: 'noBorders',
+        width: '70%',
+        alignment: 'center',
+        margin: [0, 18, 0, 10]
+      },
       {
         table: {
           widths: ['30%', '*'],
@@ -131,7 +166,18 @@ function generarDocumentDefinition(resultado, logoBase64) {
         layout: 'lightHorizontalLines',
         margin: [0, 0, 0, 15],
       },
-      { text: 'INFORMACIÓN DEL CLIENTE', style: 'sectionBar' },
+      {
+        table: {
+          widths: ['*'],
+          body: [
+            [ { text: 'INFORMACIÓN DEL CLIENTE', style: 'sectionHeader' } ]
+          ]
+        },
+        layout: 'noBorders',
+        width: '70%',
+        alignment: 'center',
+        margin: [0, 18, 0, 10]
+      },
       {
         table: {
           widths: ['30%', '*'],
@@ -146,7 +192,18 @@ function generarDocumentDefinition(resultado, logoBase64) {
         layout: 'lightHorizontalLines',
         margin: [0, 0, 0, 15],
       },
-      { text: 'INFORMACIÓN DE LA MUESTRA', style: 'sectionBar' },
+      {
+        table: {
+          widths: ['*'],
+          body: [
+            [ { text: 'INFORMACIÓN DE LA MUESTRA', style: 'sectionHeader' } ]
+          ]
+        },
+        layout: 'noBorders',
+        width: '70%',
+        alignment: 'center',
+        margin: [0, 18, 0, 10]
+      },
       {
         table: {
           widths: ['30%', '*'],
@@ -160,9 +217,21 @@ function generarDocumentDefinition(resultado, logoBase64) {
         layout: 'lightHorizontalLines',
         margin: [0, 0, 0, 15],
       },
-      { text: 'RESULTADOS DE ANÁLISIS', style: 'sectionBar' },
-      { text: `Realizado por: ${resultado.cambioVerificacion?.nombre || 'No disponible'} | Fecha: ${resultado.cambioVerificacion?.fechaFormateada || ''}`, margin: [0, 0, 0, 5] },
-      { text: `Observaciones: ${resultado.cambioVerificacion?.observaciones || 'Sin observaciones'}`, margin: [0, 0, 0, 8] },
+      {
+        table: {
+          widths: ['*'],
+          body: [
+            [ { text: 'RESULTADOS DE ANÁLISIS', style: 'sectionHeader' } ]
+          ]
+        },
+        layout: 'noBorders',
+        width: '70%',
+        alignment: 'center',
+        margin: [0, 18, 0, 10],
+        pageBreak: 'before'
+      },
+      { text: `Verificado por: ${realizadoPorNombre} | Fecha: ${realizadoPorFecha}`, margin: [0, 0, 0, 5], pageBreak: undefined },
+      { text: `Observaciones: ${realizadoPorObservaciones}`, margin: [0, 0, 0, 8], pageBreak: undefined },
       {
         table: {
           widths: ['*', '*', '*', '*', '*'],
@@ -174,8 +243,16 @@ function generarDocumentDefinition(resultado, logoBase64) {
               { text: 'MÉTODO', style: 'tableHeader' },
               { text: 'TIPO', style: 'tableHeader' },
             ],
-            ...resultadosArray,
-            resultadosArray.length === 0 ? [{ text: 'No hay resultados de análisis.', colSpan: 5, style: 'italic', alignment: 'center' }] : [],
+            ...(resultadosArray.length > 0
+                ? resultadosArray.map(item => [
+                    { text: item.nombreFormateado || '', style: 'tableBody' },
+                    { text: item.unidad || '', style: 'tableBody' },
+                    { text: item.valor || '', style: 'tableBody' },
+                    { text: item.metodo || '', style: 'tableBody' },
+                    { text: item.tipo || '', style: 'tableBody' },
+                ])
+                : [[{ text: 'No hay resultados de análisis.', colSpan: 5, style: 'italic', alignment: 'center' }, '', '', '', '']]
+            ),
           ],
         },
         layout: {
@@ -183,22 +260,106 @@ function generarDocumentDefinition(resultado, logoBase64) {
           vLineWidth: function (i, node) { return (i === 0 || i === node.table.widths.length) ? 1 : 0.5; },
           hLineColor: function (i, node) { return (i === 0 || i === node.table.body.length) ? '#222' : '#ddd'; },
           vLineColor: function (i, node) { return (i === 0 || i === node.table.widths.length) ? '#222' : '#ddd'; },
-          fillColor: function (rowIndex, node, columnIndex) { return rowIndex === 0 ? '#4CAF50' : null; },
+          fillColor: function (rowIndex, node, columnIndex) { return rowIndex === 0 ? '#003366' : null; },
           fillOpacity: 0.7,
           textColor: function (rowIndex) { return rowIndex === 0 ? 'white' : 'black'; },
         },
         margin: [0, 0, 0, 20],
+        pageBreak: undefined
       },
-      ...(historialCambiosReverso.length > 0 ? [
-        { text: 'HISTORIAL DE CAMBIOS', style: 'sectionBar', pageBreak: 'before' },
-        ...historialCambiosReverso.flatMap(item => item.stack)
-      ] : []),
-      { text: 'OBSERVACIONES', style: 'observacionesTitulo', margin: [0, 30, 0, 5], pageBreak: 'before' },
-      { text: 'Agradecemos el diligenciamiento de la siguiente encuesta de satisfacción: https://forms.office.com/r/ePtNQrxCMD', style: 'observacionesContenido', margin: [0, 0, 0, 15] },
-      { text: 'DESCARGO DE RESPONSABILIDAD', style: 'descargoTitulo', margin: [0, 20, 0, 5] },
-      { ul: disclaimers, style: 'descargoContenido', margin: [0, 0, 0, 15] },
-      { text: 'ACLARACIONES', style: 'aclaracionesTitulo', margin: [0, 20, 0, 5] },
-      { ul: clarifications, style: 'aclaracionesContenido', margin: [0, 0, 0, 30] },
+      {
+        table: {
+          widths: ['*'],
+          body: [
+            [ { text: 'OBSERVACIONES', style: 'sectionHeader' } ]
+          ]
+        },
+        layout: 'noBorders',
+        width: '70%',
+        alignment: 'center',
+        margin: [0, 30, 0, 10],
+        pageBreak: 'before'
+      },
+      {
+        stack: [
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [ { text: 'Agradecemos el diligenciamiento de la siguiente encuesta de satisfacción: https://forms.office.com/r/ePtNQrxCMD', style: 'sectionBoxContent', link: 'https://forms.office.com/r/ePtNQrxCMD' } ]
+              ]
+            },
+            layout: {
+              fillColor: function () { return 'white'; },
+              hLineColor: function () { return '#4CAF50'; },
+              vLineColor: function () { return '#4CAF50'; },
+              hLineWidth: function () { return 1; },
+              vLineWidth: function () { return 1; }
+            },
+            margin: [0, 10, 0, 10]
+          },
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [ { text: 'DESCARGO DE RESPONSABILIDAD', style: 'sectionHeader' } ]
+              ]
+            },
+            layout: 'noBorders',
+            width: '70%',
+            alignment: 'center',
+            margin: [0, 30, 0, 10]
+          },
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [ { ul: disclaimers, style: 'sectionBoxContent' } ]
+              ]
+            },
+            layout: {
+              fillColor: function () { return 'white'; },
+              hLineColor: function () { return '#4CAF50'; },
+              vLineColor: function () { return '#4CAF50'; },
+              hLineWidth: function () { return 1; },
+              vLineWidth: function () { return 1; }
+            },
+            margin: [0, 10, 0, 10]
+          },
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [ { text: 'ACLARACIONES', style: 'sectionHeader' } ]
+              ]
+            },
+            layout: {
+              fillColor: function () { return 'white'; },
+              hLineColor: function () { return '#4CAF50'; },
+              vLineColor: function () { return '#4CAF50'; },
+              hLineWidth: function () { return 1; },
+              vLineWidth: function () { return 1; }
+            },
+            margin: [0, 5, 0, 5]
+          },
+          {
+            table: {
+              widths: ['*'],
+              body: [
+                [ { ul: clarifications, style: 'sectionBoxContent' } ]
+              ]
+            },
+            layout: {
+              fillColor: function () { return 'white'; },
+              hLineColor: function () { return '#4CAF50'; },
+              vLineColor: function () { return '#4CAF50'; },
+              hLineWidth: function () { return 1; },
+              vLineWidth: function () { return 1; }
+            },
+            margin: [0, 10, 0, 10]
+          }
+        ]
+      },
       {
         columns: [
           {
@@ -214,18 +375,18 @@ function generarDocumentDefinition(resultado, logoBase64) {
           {
             stack: [
               { text: 'APROBADO POR:', style: 'firmaLabel' },
-              { text: resultado.aprobadorNombre || 'Director Técnico', style: 'firmaInfo' },
-              { text: `Cédula: ${resultado.aprobadorCedula || 'N/A'}`, style: 'firmaInfo' },
+              { text: verificadorNombre, style: 'firmaInfo' },
+              { text: `Cédula: ${verificadorCedula}`, style: 'firmaInfo' },
               { text: 'ROL: Administrador', style: 'firmaInfo' },
             ],
             width: '*',
             alignment: 'center',
           },
         ],
-        margin: [0, 40, 0, 0],
+        margin: [0, 10, 0, 0],
       },
-      { text: 'FIN DEL INFORME DE ENSAYO', style: 'footerTitulo', alignment: 'center', margin: [0, 40, 0, 10] },
-      { text: 'LABORATORIO DE ANÁLISIS AMBIENTALES (a)\nCARRERA 9 NÚMERO 71N - 60, POPAYÁN, CAUCA\nCORREO ELECTRÓNICO: LABAMBIENTALCIP@SENA.EDU.CO\nTELÉFONO / WHATSAPP: 324 6128123', style: 'contacto', alignment: 'center', margin: [0, 10] },
+      { text: 'FIN DEL INFORME DE ENSAYO', style: 'greenFooterTitle', alignment: 'center', margin: [0, 10, 0, 0] },
+      { text: 'LABORATORIO DE ANÁLISIS AMBIENTALES (a)\nCARRERA 9 NÚMERO 71N - 60, POPAYÁN, CAUCA\nCORREO ELECTRÓNICO: LABAMBIENTALCIP@SENA.EDU.CO\nTELÉFONO / WHATSAPP: 324 6128123', style: 'contacto', alignment: 'center', margin: [0, 8] },
     ],
     styles: {
       headerTitle: { fontSize: 14, bold: true, color: 'white', alignment: 'center', margin: [0, 2, 0, 0], letterSpacing: 1 },
@@ -233,7 +394,7 @@ function generarDocumentDefinition(resultado, logoBase64) {
       mainReportTitle: { fontSize: 12, bold: true, color: 'white', alignment: 'center', margin: [0, 2, 0, 2], letterSpacing: 1 },
       sectionBar: { fontSize: 11, bold: true, color: 'white', fillColor: '#4CAF50', margin: [0, 12, 0, 4], alignment: 'left', padding: [8, 4, 0, 4], textTransform: 'uppercase', letterSpacing: 1 },
       sectionTitle: { fontSize: 14, bold: true, background: '#4CAF50', color: 'white', padding: 5, margin: [0, 15, 0, 5] },
-      tableHeader: { bold: true, fontSize: 9, color: 'white', fillColor: '#4CAF50', alignment: 'center', textTransform: 'uppercase', letterSpacing: 1, margin: [0, 4, 0, 4] },
+      tableHeader: { bold: true, fontSize: 8, color: 'white', alignment: 'center', textTransform: 'uppercase', letterSpacing: 1, margin: [0, 4, 0, 4] },
       tableBody: { fontSize: 8, color: '#222', margin: [0, 2, 0, 2] },
       bold: { bold: true },
       italic: { italics: true },
@@ -251,6 +412,10 @@ function generarDocumentDefinition(resultado, logoBase64) {
       aclaracionesContenido: { fontSize: 9, color: '#222', border: [true, true, true, true], borderColor: '#4CAF50', borderWidth: 1, padding: [12, 18], marginBottom: 18 },
       listItem: { fontSize: 9, margin: [0, 0, 0, 6] },
       codigo: { fontSize: 8, alignment: 'center', color: '#003366', bold: true },
+      greenSectionTitle: { fontSize: 12, bold: true, color: 'white', fillColor: '#4CAF50', alignment: 'center', margin: [0, 0, 0, 0], textTransform: 'uppercase', letterSpacing: 1, padding: [0, 6, 0, 6] },
+      sectionBoxContent: { fontSize: 10, color: '#222', margin: [0, 8, 0, 8], alignment: 'left' },
+      greenFooterTitle: { fontSize: 12, bold: true, color: 'white', fillColor: '#4CAF50', alignment: 'center', margin: [0, 0, 0, 0], textTransform: 'uppercase', letterSpacing: 1, padding: [0, 6, 0, 6] },
+      sectionHeader: { bold: true, fontSize: 11, color: 'white', fillColor: '#4CAF50', alignment: 'center', textTransform: 'uppercase', letterSpacing: 1, margin: [0, 4, 0, 1], padding: [0, 3, 0, 3] },
     },
     defaultStyle: {
       fontSize: 10,
@@ -289,6 +454,20 @@ function safeTableCell(cell) {
   return { text: String(cell) };
 }
 
+// Helper to load logo as base64
+function loadLogoAsBase64(logoPath) {
+  try {
+    const imageBuffer = fs.readFileSync(logoPath);
+    const ext = logoPath.split('.').pop().toLowerCase();
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+    return `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
+  } catch (err) {
+    console.error('No se pudo cargar el logo:', err);
+    return null;
+  }
+}
+
 module.exports = {
-  generarPDF: generarPDFResultadosPdfMake
+  generarPDF: generarPDFResultadosPdfMake,
+  loadLogoAsBase64
 };
