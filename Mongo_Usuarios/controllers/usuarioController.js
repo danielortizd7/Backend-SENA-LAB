@@ -226,13 +226,19 @@ class UsuarioController {
                 });
             }
     
-            // 👇 validación de rol cliente solo si NO es móvil
             if (usuario.rol.name === 'cliente' && plataforma !== 'movil') {
                 return res.status(403).json({
                     error: 'Acceso denegado',
                     detalles: 'Los clientes solo pueden iniciar sesión desde la app móvil'
                 });
             }
+
+            if (usuario.rol.name !== 'cliente' && plataforma === 'movil') {
+            return res.status(403).json({
+                error: 'Acceso denegado',
+                detalles: `El rol "${usuario.rol.name}" no puede iniciar sesión desde la app móvil`
+            });
+        }
     
             const contraseñaValida = await bcrypt.compare(password, usuario.password);
             if (!contraseñaValida) {
