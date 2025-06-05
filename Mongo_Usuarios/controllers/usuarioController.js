@@ -207,7 +207,7 @@ class UsuarioController {
 
       async login(req, res) {
         try {
-            const { email, password, plataforma } = req.body; // 👈 importante agregar esto
+            const { email, password, plataforma } = req.body; 
     
             const usuario = await this.usuarioModel.obtenerPorEmail(email);
             console.log('Usuario obtenido:', usuario);

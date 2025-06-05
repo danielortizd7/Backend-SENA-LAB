@@ -26,17 +26,12 @@ const autenticar = (usuarioModel) => async (req, res, next) => {
                 error: 'Usuario no autorizado',
                 detalles: 'Usuario no encontrado o inactivo'
             });
-        }
-        if (usuario.rol.name === 'cliente' && req.body.plataforma !== 'movil') {
-            return res.status(403).json({
-                error: 'Acceso denegado',
-                detalles: 'Los clientes solo pueden iniciar sesión desde la plataforma móvil'
-            });
-        }
+        } 
         
         req.usuario = {
             ...usuario.toObject(),
-            userId: usuario._id.toString(), 
+            userId: usuario._id.toString(),
+            rol: usuario.rol.name, 
             permisos: usuario.rol?.permisos || []
         };
         
