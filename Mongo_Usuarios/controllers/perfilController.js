@@ -33,7 +33,16 @@ const obtenerPerfil = async (req, res) => {
 
     if (!perfil) return res.status(404).json({ mensaje: 'Perfil no encontrado' });
 
-    res.json(perfil); // Ya viene "limpio" desde el servicio
+    const urlBase = req.protocol + '://' + req.get('host');
+    const fotoPerfilUrl = perfil.fotoPerfil ? `${urlBase}${perfil.fotoPerfil}` : null;
+
+    res.json({
+      nombre: perfil.nombre,
+      email: perfil.email,
+      telefono: perfil.telefono,
+      direccion: perfil.direccion,
+      fotoPerfil: fotoPerfilUrl
+    }); 
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
