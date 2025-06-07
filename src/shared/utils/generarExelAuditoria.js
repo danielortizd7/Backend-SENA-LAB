@@ -17,80 +17,209 @@ class generarExcelAuditoria {
         bottom: { style: 'thin' },
         right: { style: 'thin' }
       }
-    };
-
-    // Definir columnas con estilos mejorados y más datos relevantes
+    };    // Definir columnas con flujo lógico de información de la muestra y auditoría
     sheet.columns = [
-      { header: 'ID Registro', key: 'id', width: 15 },
+      // 1. Información básica del registro de auditoría
+      { header: 'ID Auditoría', key: 'id', width: 18 },
       { header: 'Fecha y Hora', key: 'fecha', width: 20 },
-      { header: 'Usuario', key: 'usuarioNombre', width: 25 },
-      { header: 'Documento', key: 'usuarioDocumento', width: 18 },
-      { header: 'IP', key: 'ip', width: 15 },
-      { header: 'Módulo', key: 'modulo', width: 18 },
-      { header: 'Acción', key: 'accionDescripcion', width: 25 },
-      { header: 'Tipo', key: 'tipoAccion', width: 15 },
-      { header: 'Criticidad', key: 'criticidad', width: 15 },
+      
+      // 2. Información de la muestra (flujo principal)
       { header: 'ID Muestra', key: 'idMuestra', width: 18 },
-      { header: 'Cliente', key: 'cliente', width: 30 },
-      { header: 'Tipo Análisis', key: 'tipoAnalisis', width: 22 },
-      { header: 'Estado Muestra', key: 'estadoMuestra', width: 18 },
-      { header: 'Estado Auditoría', key: 'estadoAuditoria', width: 15 },
-      { header: 'Cambios Antes', key: 'cambiosAntes', width: 40 },
-      { header: 'Cambios Después', key: 'cambiosDespues', width: 40 },
-      { header: 'Mensaje', key: 'mensaje', width: 35 },
-      { header: 'Duración (ms)', key: 'duracion', width: 15 }
+      { header: 'Cliente', key: 'cliente', width: 35 },
+      { header: 'Tipo de Agua', key: 'tipoAgua', width: 25 },
+      { header: 'Lugar Muestreo', key: 'lugarMuestreo', width: 25 },
+      { header: 'Fecha Muestreo', key: 'fechaMuestreo', width: 20 },
+      { header: 'Tipo Muestreo', key: 'tipoMuestreo', width: 18 },
+      { header: 'Tipo Análisis', key: 'tipoAnalisis', width: 18 },
+      
+      // 3. Análisis y condiciones técnicas
+      { header: 'Análisis Solicitados', key: 'analisisSeleccionados', width: 45 },
+      { header: 'Precio Total', key: 'precioTotal', width: 15 },
+      { header: 'Condiciones Ambientales', key: 'condicionesAmbientales', width: 30 },
+      { header: 'Preservación', key: 'preservacion', width: 18 },
+      { header: 'Identificación Muestra', key: 'identificacionMuestra', width: 20 },
+      
+      // 4. Estados y acciones
+      { header: 'Estado Actual', key: 'estadoActual', width: 18 },
+      { header: 'Acción Realizada', key: 'accionDescripcion', width: 35 },
+      { header: 'Observaciones', key: 'observaciones', width: 40 },
+      
+      // 5. Historial completo de acciones
+      { header: 'Historial de Acciones', key: 'historialAcciones', width: 60 },
+      
+      // 6. Usuario responsable
+      { header: 'Usuario', key: 'usuarioNombre', width: 25 },
+      { header: 'Rol', key: 'usuarioRol', width: 15 },
+      { header: 'Documento', key: 'usuarioDocumento', width: 18 },
+      
+      // 7. Cambios técnicos (si aplica)
+      { header: 'Valores Anteriores', key: 'cambiosAntes', width: 35 },
+      { header: 'Valores Nuevos', key: 'cambiosDespues', width: 35 },
+      
+      // 8. Metadata del sistema
+      { header: 'Versión', key: 'version', width: 12 },
+      { header: 'Entorno', key: 'entorno', width: 15 }
     ];
 
     // Aplicar estilos al encabezado
     sheet.getRow(1).eachCell((cell) => {
       cell.style = headerStyle;
-    });
-
-    // Agregar datos con formato mejorado
-    registros.forEach(reg => {
-      // Formatear cliente
-      let clienteFiltrado = '';
-      if (reg.detalles && reg.detalles.cliente) {
-        clienteFiltrado = `${reg.detalles.cliente.nombre} (${reg.detalles.cliente.documento})`;
-      }
-      // Formatear tipo de análisis
-      let tipoAnalisis = '';
-      if (reg.detalles && reg.detalles.analisisSeleccionados) {
-        tipoAnalisis = reg.detalles.analisisSeleccionados.map(a => a.nombre).join(', ');
-      }
-      // Estado real de la muestra
-      let estadoMuestra = reg.detalles?.estado || '';
-      // Estado de la auditoría
-      let estadoAuditoria = reg.estado || '';
-      // Formatear cambios
-      const formatearCambios = (cambios) => {
-        if (!cambios) return '';
-        if (typeof cambios === 'object') {
-          return Object.entries(cambios)
-            .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-            .join('\n');
+    });    // Función auxiliar para formatear fechas de manera robusta
+    const formatearFecha = (fecha, conHora = true) => {
+      if (!fecha) return '';
+      try {
+        let fechaObj;
+        if (typeof fecha === 'object' && fecha.timestamp) {
+          fechaObj = new Date(fecha.timestamp.$date || fecha.timestamp);
+        } else if (typeof fecha === 'object' && fecha.$date) {
+          fechaObj = new Date(fecha.$date);
+        } else {
+          fechaObj = new Date(fecha);
         }
-        return cambios;
-      };
+        
+        if (isNaN(fechaObj.getTime())) return '';
+        
+        return conHora ? 
+          fechaObj.toLocaleString('es-CO', { 
+            timeZone: 'America/Bogota',
+            year: 'numeric', month: '2-digit', day: '2-digit', 
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          }) :
+          fechaObj.toLocaleDateString('es-CO', { 
+            timeZone: 'America/Bogota',
+            year: 'numeric', month: '2-digit', day: '2-digit'
+          });
+      } catch (error) {
+        return fecha.toString();
+      }
+    };
+
+    // Función auxiliar para formatear cambios técnicos
+    const formatearCambios = (cambios) => {
+      if (!cambios) return '';
+      if (typeof cambios === 'object' && cambios !== null) {
+        return Object.entries(cambios)
+          .map(([k, v]) => {
+            if (typeof v === 'object' && v !== null) {
+              const valor = v.valor || JSON.stringify(v);
+              const unidad = v.unidad || '';
+              const metodo = v.metodo ? ` (${v.metodo})` : '';
+              return `${k}: ${valor} ${unidad}${metodo}`;
+            }
+            return `${k}: ${v}`;
+          })
+          .join('\n');
+      }
+      return cambios.toString();
+    };
+
+    // Agregar datos con formato completo y estructurado
+    registros.forEach(reg => {
+      // 1. Información básica del registro
+      const fechaRegistro = formatearFecha(reg.fecha);
+      
+      // 2. Información de la muestra
+      const muestra = reg.muestra || {};
+      const idMuestra = muestra.id_muestra || reg.detalles?.idMuestra || '';
+      
+      // Cliente con información completa
+      const cliente = muestra.cliente || {};
+      const clienteInfo = cliente.nombre ? 
+        `${cliente.nombre} - ${cliente.documento}\nEmail: ${cliente.email || 'N/A'}\nTel: ${cliente.telefono || 'N/A'}\nDir: ${cliente.direccion || 'N/A'}` : '';
+      
+      // Tipo de agua con descripción completa
+      const tipoAgua = muestra.tipoDeAgua || {};
+      const tipoAguaInfo = tipoAgua.descripcion ? 
+        `${tipoAgua.descripcion} (${tipoAgua.codigo || 'N/A'})` : '';
+      
+      // Fecha de muestreo
+      const fechaMuestreo = formatearFecha(muestra.fechaHoraMuestreo, false);
+      
+      // Análisis seleccionados con detalles
+      const analisisSeleccionados = muestra.analisisSeleccionados || [];
+      const analisisInfo = analisisSeleccionados.length > 0 ?
+        analisisSeleccionados.map(analisis => 
+          `${analisis.nombre} - $${analisis.precio} (${analisis.unidad}) - ${analisis.metodo}`
+        ).join('\n') : '';
+      
+      // 3. Información de la acción actual
+      const accion = reg.accion || {};
+      const accionDescripcion = accion.descripcion || '';
+      
+      // Observaciones actuales
+      const observaciones = muestra.observaciones || reg.mensaje || '';
+      
+      // 4. Historial completo de acciones
+      const historial = reg.historial || [];
+      const historialInfo = historial.map(item => {
+        const fechaItem = formatearFecha(item.fecha);
+        const usuarioItem = item.usuario ? `${item.usuario.nombre} (${item.usuario.rol})` : '';
+        const accionItem = item.cambios?.accion || '';
+        const obsItem = item.observaciones || '';
+        const estadoTransicion = item.cambios?.transicionEstado ? 
+          ` [${item.cambios.transicionEstado.desde} → ${item.cambios.transicionEstado.hacia}]` : '';
+        
+        return `[${fechaItem}] ${accionItem}${estadoTransicion} - ${usuarioItem} - Obs: ${obsItem}`;
+      }).join(' | ');
+      
+      // 5. Usuario responsable
+      const usuario = reg.creadoPor || reg.usuario || {};
+      
+      // 6. Cambios técnicos del historial más reciente
+      let cambiosAntes = '';
+      let cambiosDespues = '';
+      if (historial.length > 0) {
+        const ultimoCambio = historial[historial.length - 1];
+        if (ultimoCambio.cambios) {
+          cambiosAntes = formatearCambios(ultimoCambio.cambios.antes);
+          cambiosDespues = formatearCambios(ultimoCambio.cambios.despues);
+        }
+      }
+      
+      // 7. Metadata
+      const metadata = reg.metadata || {};
+
       sheet.addRow({
+        // 1. Información básica del registro de auditoría
         id: reg._id || '',
-        fecha: reg.fecha ? new Date(reg.fecha).toLocaleString() : '',
-        usuarioNombre: reg.usuario?.nombre || '',
-        usuarioDocumento: reg.usuario?.documento || '',
-        ip: reg.usuario?.ip || '',
-        modulo: reg.accion?.modulo || '',
-        accionDescripcion: reg.accion?.descripcion || '',
-        tipoAccion: reg.accion?.tipo || '',
-        criticidad: reg.accion?.criticidad || '',
-        idMuestra: reg.detalles?.idMuestra || '',
-        cliente: clienteFiltrado,
-        tipoAnalisis,
-        estadoMuestra,
-        estadoAuditoria,
-        cambiosAntes: formatearCambios(reg.detalles?.cambios?.antes),
-        cambiosDespues: formatearCambios(reg.detalles?.cambios?.despues),
-        mensaje: reg.mensaje || '',
-        duracion: reg.duracion || 0
+        fecha: fechaRegistro,
+        
+        // 2. Información de la muestra (flujo principal)
+        idMuestra: idMuestra,
+        cliente: clienteInfo,
+        tipoAgua: tipoAguaInfo,
+        lugarMuestreo: muestra.lugarMuestreo || '',
+        fechaMuestreo: fechaMuestreo,
+        tipoMuestreo: muestra.tipoMuestreo || '',
+        tipoAnalisis: muestra.tipoAnalisis || '',
+        
+        // 3. Análisis y condiciones técnicas
+        analisisSeleccionados: analisisInfo,
+        precioTotal: muestra.precioTotal ? `$${muestra.precioTotal}` : '',
+        condicionesAmbientales: muestra.condicionesAmbientales || '',
+        preservacion: muestra.preservacionMuestra || '',
+        identificacionMuestra: muestra.identificacionMuestra || '',
+        
+        // 4. Estados y acciones
+        estadoActual: muestra.estado || reg.estado || '',
+        accionDescripcion: accionDescripcion,
+        observaciones: observaciones,
+        
+        // 5. Historial completo de acciones
+        historialAcciones: historialInfo,
+        
+        // 6. Usuario responsable
+        usuarioNombre: usuario.nombre || '',
+        usuarioRol: usuario.rol || '',
+        usuarioDocumento: usuario.documento || '',
+        
+        // 7. Cambios técnicos
+        cambiosAntes: cambiosAntes,
+        cambiosDespues: cambiosDespues,
+        
+        // 8. Metadata del sistema
+        version: metadata.version || '',
+        entorno: metadata.entorno || ''
       });
     });
 
