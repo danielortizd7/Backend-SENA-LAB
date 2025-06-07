@@ -15,10 +15,10 @@ const obtenerPerfilPorUsuario = async (usuarioId) => {
 
   // Armas una respuesta segura solo con los campos visibles
   return {
-    nombre: perfil.usuarioId.nombre,
-    email: perfil.usuarioId.email,
-    telefono: perfil.usuarioId.telefono,
-    direccion: perfil.usuarioId.direccion,
+    nombre: perfil.nombre,
+    email: perfil.email,
+    telefono: perfil.telefono,
+    direccion: perfil.direccion,
     fotoPerfil: perfil.fotoPerfil
   };
 };
