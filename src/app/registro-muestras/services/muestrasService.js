@@ -168,7 +168,7 @@ const crearMuestra = async (datosMuestra, usuario) => {
         // Registrar la auditoría de forma asíncrona
         setImmediate(async () => {
             try {
-                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                const AuditoriaService = require('../../auditoria/services/auditoria.service');
                 await AuditoriaService.registrarAccion({
                     usuario: {
                         id: usuario._id,
@@ -236,7 +236,7 @@ const crearMuestra = async (datosMuestra, usuario) => {
         // Registrar error en auditoría
         setImmediate(async () => {
             try {
-                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                const AuditoriaService = require('../../auditoria/services/auditoria.service');
                 await AuditoriaService.registrarAccion({
                     usuario: {
                         id: usuario?._id,
@@ -437,7 +437,7 @@ const actualizarMuestra = async (id, datosActualizacion, usuario) => {
         // Registrar la auditoría de forma asíncrona
         setImmediate(async () => {
             try {
-                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                const AuditoriaService = require('../../auditoria/services/auditoria.service');
                 await AuditoriaService.registrarAccion({
                     usuario: {
                         id: usuario._id,
@@ -478,7 +478,7 @@ const actualizarMuestra = async (id, datosActualizacion, usuario) => {
         // Registrar error en auditoría
         setImmediate(async () => {
             try {
-                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                const AuditoriaService = require('../../auditoria/services/auditoria.service');
                 await AuditoriaService.registrarAccion({
                     usuario: {
                         id: usuario?._id,
@@ -540,7 +540,7 @@ const eliminarMuestra = async (id, usuario) => {
         // Registrar la auditoría de forma asíncrona
         setImmediate(async () => {
             try {
-                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                const AuditoriaService = require('../../auditoria/services/auditoria.service');
                 await AuditoriaService.registrarAccion({
                     usuario: {
                         id: usuario._id,
@@ -583,7 +583,7 @@ const eliminarMuestra = async (id, usuario) => {
         // Registrar error en auditoría
         setImmediate(async () => {
             try {
-                const AuditoriaService = require('../../auditoria/services/auditoriaService');
+                const AuditoriaService = require('../../auditoria/services/auditoria.service');
                 await AuditoriaService.registrarAccion({
                     usuario: {
                         id: usuario?._id,

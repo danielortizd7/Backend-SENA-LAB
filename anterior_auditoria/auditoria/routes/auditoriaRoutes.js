@@ -103,11 +103,4 @@ router.post(
     auditoriaController.registrarAccion
 );
 
-// Obtener progreso de una muestra específica
-router.get(
-    "/progreso/:idMuestra",
-    verificarPermiso(PERMISOS.VER_AUDITORIA),
-    auditoriaController.obtenerProgresoMuestra
-);
-
 module.exports = router;
