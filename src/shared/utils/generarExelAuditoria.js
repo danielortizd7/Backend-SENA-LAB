@@ -38,23 +38,19 @@ class generarExcelAuditoria {
       { header: 'Condiciones Ambientales', key: 'condicionesAmbientales', width: 30 },
       { header: 'Preservación', key: 'preservacion', width: 18 },
       { header: 'Identificación Muestra', key: 'identificacionMuestra', width: 20 },
-      
-      // 4. Estados y acciones
+        // 4. Estados y acciones
       { header: 'Estado Actual', key: 'estadoActual', width: 18 },
       { header: 'Acción Realizada', key: 'accionDescripcion', width: 35 },
-      { header: 'Observaciones', key: 'observaciones', width: 40 },
       
-      // 5. Historial completo de acciones
-      { header: 'Historial de Acciones', key: 'historialAcciones', width: 60 },
-      
+      // 5. Historial completo de acciones (ordenado)
+      { header: 'Historial de Acciones', key: 'historialAcciones', width: 80 },      
       // 6. Usuario responsable
       { header: 'Usuario', key: 'usuarioNombre', width: 25 },
       { header: 'Rol', key: 'usuarioRol', width: 15 },
       { header: 'Documento', key: 'usuarioDocumento', width: 18 },
-      
-      // 7. Cambios técnicos (si aplica)
-      { header: 'Valores Anteriores', key: 'cambiosAntes', width: 35 },
-      { header: 'Valores Nuevos', key: 'cambiosDespues', width: 35 },
+        // 7. Cambios técnicos (si aplica)
+      { header: 'Resultados Anteriores', key: 'cambiosAntes', width: 40 },
+      { header: 'Resultados Actuales', key: 'cambiosDespues', width: 40 },
       
       // 8. Metadata del sistema
       { header: 'Versión', key: 'version', width: 12 },
@@ -141,38 +137,113 @@ class generarExcelAuditoria {
         analisisSeleccionados.map(analisis => 
           `${analisis.nombre} - $${analisis.precio} (${analisis.unidad}) - ${analisis.metodo}`
         ).join('\n') : '';
-      
-      // 3. Información de la acción actual
+        // 3. Información de la acción actual
       const accion = reg.accion || {};
       const accionDescripcion = accion.descripcion || '';
       
-      // Observaciones actuales
-      const observaciones = muestra.observaciones || reg.mensaje || '';
-      
-      // 4. Historial completo de acciones
+      // 4. Historial completo de acciones - ORDENADO cronológicamente
       const historial = reg.historial || [];
-      const historialInfo = historial.map(item => {
+      
+      // Ordenar historial por fecha (más reciente primero)
+      const historialOrdenado = historial.sort((a, b) => {
+        const fechaA = new Date(a.fecha?.timestamp || a.fecha || 0);
+        const fechaB = new Date(b.fecha?.timestamp || b.fecha || 0);
+        return fechaB - fechaA; // Orden descendente (más reciente primero)
+      });      const historialInfo = historialOrdenado.map((item, index) => {
+        // Numeración descendente: el más reciente (index 0) tiene el número más alto
+        const numeroAccion = historialOrdenado.length - index;
+        
         const fechaItem = formatearFecha(item.fecha);
         const usuarioItem = item.usuario ? `${item.usuario.nombre} (${item.usuario.rol})` : '';
         const accionItem = item.cambios?.accion || '';
-        const obsItem = item.observaciones || '';
         const estadoTransicion = item.cambios?.transicionEstado ? 
-          ` [${item.cambios.transicionEstado.desde} → ${item.cambios.transicionEstado.hacia}]` : '';
+          `Estado: ${item.cambios.transicionEstado.desde || 'Inicial'} → ${item.cambios.transicionEstado.hacia}` : '';
+        const observacionesItem = item.observaciones || item.cambios?.observaciones || 'Sin observaciones';
         
-        return `[${fechaItem}] ${accionItem}${estadoTransicion} - ${usuarioItem} - Obs: ${obsItem}`;
-      }).join(' | ');
+        // Formatear resultados si existen
+        let resultadosInfo = '';
+        
+        // Si hay resultados anteriores (antes)
+        if (item.cambios?.antes && typeof item.cambios.antes === 'object') {
+          const resultadosAntes = Object.entries(item.cambios.antes)
+            .map(([parametro, datos]) => {
+              if (typeof datos === 'object' && datos.valor) {
+                return `  ${parametro}: ${datos.valor} ${datos.unidad || ''} (${datos.metodo || 'N/A'})`;
+              }
+              return `  ${parametro}: ${datos}`;
+            }).join('\n');
+          
+          if (resultadosAntes) {
+            resultadosInfo += `\nValores Anteriores:\n${resultadosAntes}`;
+          }
+        }
+        
+        // Si hay resultados nuevos (despues)
+        if (item.cambios?.despues && typeof item.cambios.despues === 'object') {
+          const resultadosDespues = Object.entries(item.cambios.despues)
+            .map(([parametro, datos]) => {
+              if (typeof datos === 'object' && datos.valor) {
+                return `  ${parametro}: ${datos.valor} ${datos.unidad || ''} (${datos.metodo || 'N/A'})`;
+              }
+              return `  ${parametro}: ${datos}`;
+            }).join('\n');
+          
+          if (resultadosDespues) {
+            const tituloResultados = item.cambios?.antes ? 'Valores Nuevos:' : 'Resultados Registrados:';
+            resultadosInfo += `\n${tituloResultados}\n${resultadosDespues}`;
+          }
+        }
+        
+        return `${numeroAccion}. ${accionItem}
+Fecha: ${fechaItem}
+Usuario: ${usuarioItem}
+${estadoTransicion}${resultadosInfo}
+Observaciones: ${observacionesItem}`;
+      }).join('\n\n');
       
       // 5. Usuario responsable
       const usuario = reg.creadoPor || reg.usuario || {};
-      
-      // 6. Cambios técnicos del historial más reciente
+        // 6. Cambios técnicos del historial más reciente con resultados
       let cambiosAntes = '';
       let cambiosDespues = '';
       if (historial.length > 0) {
-        const ultimoCambio = historial[historial.length - 1];
-        if (ultimoCambio.cambios) {
-          cambiosAntes = formatearCambios(ultimoCambio.cambios.antes);
-          cambiosDespues = formatearCambios(ultimoCambio.cambios.despues);
+        // Buscar la entrada más reciente que tenga cambios de resultados
+        const ultimoCambioConResultados = historial.find(entrada => 
+          entrada.cambios && (entrada.cambios.antes || entrada.cambios.despues)
+        );
+        
+        if (ultimoCambioConResultados && ultimoCambioConResultados.cambios) {
+          // Formatear valores anteriores
+          if (ultimoCambioConResultados.cambios.antes) {
+            if (typeof ultimoCambioConResultados.cambios.antes === 'object') {
+              cambiosAntes = Object.entries(ultimoCambioConResultados.cambios.antes)
+                .map(([param, datos]) => {
+                  if (typeof datos === 'object' && datos.valor) {
+                    return `${param}: ${datos.valor} ${datos.unidad || ''} (${datos.metodo || 'N/A'})`;
+                  }
+                  return `${param}: ${datos}`;
+                }).join('\n');
+            } else {
+              cambiosAntes = ultimoCambioConResultados.cambios.antes.toString();
+            }
+          } else {
+            cambiosAntes = 'Primer registro - Sin valores anteriores';
+          }
+          
+          // Formatear valores nuevos
+          if (ultimoCambioConResultados.cambios.despues) {
+            if (typeof ultimoCambioConResultados.cambios.despues === 'object') {
+              cambiosDespues = Object.entries(ultimoCambioConResultados.cambios.despues)
+                .map(([param, datos]) => {
+                  if (typeof datos === 'object' && datos.valor) {
+                    return `${param}: ${datos.valor} ${datos.unidad || ''} (${datos.metodo || 'N/A'})`;
+                  }
+                  return `${param}: ${datos}`;
+                }).join('\n');
+            } else {
+              cambiosDespues = ultimoCambioConResultados.cambios.despues.toString();
+            }
+          }
         }
       }
       
@@ -199,15 +270,12 @@ class generarExcelAuditoria {
         condicionesAmbientales: muestra.condicionesAmbientales || '',
         preservacion: muestra.preservacionMuestra || '',
         identificacionMuestra: muestra.identificacionMuestra || '',
-        
-        // 4. Estados y acciones
+          // 4. Estados y acciones
         estadoActual: muestra.estado || reg.estado || '',
         accionDescripcion: accionDescripcion,
-        observaciones: observaciones,
         
-        // 5. Historial completo de acciones
-        historialAcciones: historialInfo,
-        
+        // 5. Historial completo de acciones (ordenado)
+        historialAcciones: historialInfo,        
         // 6. Usuario responsable
         usuarioNombre: usuario.nombre || '',
         usuarioRol: usuario.rol || '',
@@ -221,25 +289,16 @@ class generarExcelAuditoria {
         version: metadata.version || '',
         entorno: metadata.entorno || ''
       });
-    });
-
-    // Ajustar automáticamente el ancho de las columnas según el contenido
+    });    // Mantener ancho fijo de columnas (no ajustar automáticamente)
     sheet.columns.forEach((column) => {
-      let maxLength = 0;
+      // Solo aplicar bordes y alineación, mantener ancho original
       column.eachCell?.({ includeEmpty: true }, (cell) => {
-        const cellValue = cell.value ? cell.value.toString() : '';
-        maxLength = Math.max(maxLength, cellValue.length);
+        cell.alignment = { vertical: 'top', wrapText: true };
       });
-      column.width = Math.max(column.width, Math.min(maxLength + 2, 60));
-    });
-
-    // Ajustar altura de filas automáticamente según el contenido
+    });    // Aplicar formato básico a las filas sin aumentar altura automáticamente
     sheet.eachRow((row, rowNumber) => {
-      let maxLines = 1;
       row.eachCell((cell) => {
-        const lines = cell.value ? cell.value.toString().split('\n').length : 1;
-        maxLines = Math.max(maxLines, lines);
-        cell.alignment = { vertical: 'middle', wrapText: true };
+        cell.alignment = { vertical: 'top', wrapText: true };
         cell.border = {
           top: { style: 'thin' },
           left: { style: 'thin' },
@@ -247,7 +306,8 @@ class generarExcelAuditoria {
           right: { style: 'thin' }
         };
       });
-      row.height = 18 * maxLines;
+      // Mantener altura fija estándar
+      row.height = 20;
     });
 
     // Usar stream para obtener un Buffer válido

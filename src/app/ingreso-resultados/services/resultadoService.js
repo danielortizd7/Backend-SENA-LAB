@@ -66,13 +66,37 @@ const registrarResultado = async (datosResultado) => {
                 // Usar el _id del análisis como clave en lugar del nombre
                 resultadosValidados.set(analisis._id, resultadoProcesado);
             }
-        }
-
-        // Crear el nuevo resultado con los datos validados
+        }        // Crear el nuevo resultado con los datos validados
         const nuevoResultado = new Resultado({
             ...datosResultado,
             resultados: resultadosValidados
         });
+
+        // Agregar entrada inicial al historial de cambios
+        const entradaInicialHistorial = {
+            _id: new mongoose.Types.ObjectId(),
+            nombre: datosResultado.nombreLaboratorista,
+            cedula: datosResultado.cedulaLaboratorista,
+            fecha: new Date(),
+            observaciones: datosResultado.observaciones || "Registro inicial de resultados",
+            cambiosRealizados: {
+                accion: "registro_inicial",
+                resultados: Object.fromEntries(
+                    Array.from(resultadosValidados.entries()).map(([id, valor]) => {
+                        const analisis = analisisInfo.find(a => a._id.toString() === id.toString());
+                        const nombreAnalisis = analisis ? analisis.nombre : id.toString();
+                        return [nombreAnalisis, {
+                            valorAnterior: "Sin registro",
+                            valorNuevo: `${valor.valor} ${valor.unidad}`,
+                            unidad: valor.unidad,
+                            metodo: valor.metodo
+                        }];
+                    })
+                )
+            }
+        };
+
+        nuevoResultado.historialCambios = [entradaInicialHistorial];
 
         await nuevoResultado.save();
         return nuevoResultado;
