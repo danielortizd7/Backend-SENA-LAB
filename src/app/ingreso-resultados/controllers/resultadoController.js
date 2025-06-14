@@ -226,7 +226,10 @@ const registrarResultado = async (req, res) => {
                 await AuditoriaService.registrarAccion({
                     usuario,
                     accion: {
-                        descripcion: 'registro de resultado'
+                        descripcion: 'registro de resultado',
+                        tipo: 'POST',
+                        modulo: 'resultados',
+                        criticidad: 'normal'
                     },
                     detalles: {
                         id_muestra: idMuestra,
@@ -236,7 +239,12 @@ const registrarResultado = async (req, res) => {
                         fechaHoraMuestreo: resultado.fechaHoraMuestreo,
                         tipoAnalisis: Array.isArray(resultado.tipoAnalisis) ? resultado.tipoAnalisis[0] : resultado.tipoAnalisis,
                         estado: resultado.estado,
-                        resultados: resultado.resultados
+                        resultados: resultado.resultados,
+                        observaciones: observaciones || '',
+                        cambios: {
+                            antes: null, // Primer registro no tiene valores anteriores
+                            despues: resultado.resultados // Los resultados recién registrados
+                        }
                     },
                     fecha: new Date()
                 });
@@ -453,7 +461,10 @@ const editarResultado = async (req, res) => {
                 await AuditoriaService.registrarAccion({
                     usuario,
                     accion: {
-                        descripcion: 'actualización de resultado'
+                        descripcion: 'actualización de resultado',
+                        tipo: 'PUT',
+                        modulo: 'resultados',
+                        criticidad: 'normal'
                     },
                     detalles: {
                         id_muestra: idMuestra,
@@ -466,7 +477,8 @@ const editarResultado = async (req, res) => {
                         cambios: {
                             antes: valoresAnteriores.resultados,
                             despues: resultado.resultados
-                        }
+                        },
+                        observaciones: observaciones || ''
                     },
                     fecha: new Date()
                 });
@@ -710,6 +722,43 @@ const verificarResultado = async (req, res) => {
                 error: error.message
             });
         }
+
+        // Registrar la acción de verificación y cambio de estado en auditoría
+        setImmediate(async () => {
+            try {
+                await AuditoriaService.registrarAccion({
+                    usuario,
+                    accion: {
+                        descripcion: 'verificación de resultado y finalización de muestra',
+                        tipo: 'PUT',
+                        modulo: 'resultados',
+                        criticidad: 'alta'
+                    },
+                    detalles: {
+                        id_muestra: idMuestra,
+                        cliente: resultado.cliente,
+                        tipoDeAgua: resultado.tipoDeAgua,
+                        lugarMuestreo: resultado.lugarMuestreo,
+                        fechaHoraMuestreo: resultado.fechaHoraMuestreo,
+                        tipoAnalisis: Array.isArray(resultado.tipoAnalisis) ? resultado.tipoAnalisis[0] : resultado.tipoAnalisis,
+                        estado: "Finalizada",
+                        estadoAnterior: estadoAnterior,
+                        estadoNuevo: "Finalizada",
+                        verificacion: {
+                            verificado: true,
+                            observaciones: observaciones || "Verificación de resultados"
+                        }
+                    },
+                    transicionEstado: {
+                        estadoAnterior: estadoAnterior,
+                        estadoNuevo: "Finalizada"
+                    },
+                    fecha: new Date()
+                });
+            } catch (error) {
+                console.error('[AUDITORIA ERROR] Error al registrar verificación:', error.message);
+            }
+        });
 
         // Formatear el resultado para la respuesta
         const resultadoFormateado = {

@@ -663,17 +663,34 @@ const registrarMuestra = async (req, res, next) => {
                 await AuditoriaService.registrarAccion({
                     usuario: req.usuario,
                     accion: {
-                        descripcion: 'registro nueva muestra'
+                        descripcion: 'registro nueva muestra',
+                        tipo: 'POST',
+                        modulo: 'muestras',
+                        criticidad: muestraGuardada.estado === 'Rechazada' ? 'alta' : 'media'
                     },
                     detalles: {
                         id_muestra: muestraGuardada.id_muestra,
                         cliente: muestraGuardada.cliente,
                         tipoDeAgua: muestraGuardada.tipoDeAgua,
+                        tipoMuestreo: muestraGuardada.tipoMuestreo,
                         lugarMuestreo: muestraGuardada.lugarMuestreo,
                         fechaHoraMuestreo: muestraGuardada.fechaHoraMuestreo,
                         tipoAnalisis: Array.isArray(muestraGuardada.tipoAnalisis) ? muestraGuardada.tipoAnalisis[0] : muestraGuardada.tipoAnalisis,
+                        identificacionMuestra: muestraGuardada.identificacionMuestra,
+                        planMuestreo: muestraGuardada.planMuestreo,
+                        condicionesAmbientales: muestraGuardada.condicionesAmbientales,
+                        preservacionMuestra: muestraGuardada.preservacionMuestra,
                         estado: muestraGuardada.estado,
-                        analisisSeleccionados: muestraGuardada.analisisSeleccionados
+                        analisisSeleccionados: muestraGuardada.analisisSeleccionados,
+                        precioTotal: muestraGuardada.precioTotal,
+                        observaciones: muestraGuardada.observaciones,
+                        firmas: muestraGuardada.firmas,
+                        metadata: {
+                            version: '1.1',
+                            entorno: process.env.NODE_ENV || 'development',
+                            creacion: muestraGuardada.createdAt,
+                            creadoPor: muestraGuardada.creadoPor
+                        }
                     },
                     fecha: new Date()
                 });
@@ -794,16 +811,11 @@ const actualizarMuestra = async (req, res, next) => {
     try {
         const usuario = obtenerDatosUsuario(req);
         const { id } = req.params;
-        const datosActualizacion = normalizarCampos(req.body);
-        
-        // Validar campos que no se pueden actualizar
+        let datosActualizacion = { ...req.body };
+
+        // Eliminar campos que no se pueden actualizar
         const camposInmutables = ['documento', 'fechaHoraRecepcion', 'tipoAnalisis', 'tipoDeAgua'];
-        const camposActualizacion = Object.keys(datosActualizacion);
-        const camposInvalidos = camposInmutables.filter(campo => camposActualizacion.includes(campo));
-        
-        if (camposInvalidos.length > 0) {
-            throw new ValidationError(`Los siguientes campos no se pueden modificar: ${camposInvalidos.join(', ')}`);
-        }
+        camposInmutables.forEach(campo => delete datosActualizacion[campo]);
 
         // Validaciones específicas
         if (datosActualizacion.estado === 'Rechazada' && !datosActualizacion.observaciones) {
@@ -814,76 +826,70 @@ const actualizarMuestra = async (req, res, next) => {
             throw new ValidationError('Debe especificar el método de preservación cuando selecciona "Otro"');
         }
 
+        // Asegurarse de que analisisSeleccionados sea un array si está presente
+        if (datosActualizacion.analisisSeleccionados) {
+            if (!Array.isArray(datosActualizacion.analisisSeleccionados)) {
+                throw new ValidationError('analisisSeleccionados debe ser un array');
+            }
+        }
+
         // Usar el servicio para actualizar la muestra
         const muestra = await muestrasService.actualizarMuestra(id, datosActualizacion, usuario);
 
-        // Formatear fechas para la respuesta
-        const formatearFecha = (fecha) => {
-            // Convertir a zona horaria de Colombia (America/Bogota)
-            const fechaObj = new Date(fecha);
-            const fechaColombiana = new Date(fechaObj.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-            
-            // Formatear fecha
-            const dia = fechaColombiana.getDate().toString().padStart(2, '0');
-            const mes = (fechaColombiana.getMonth() + 1).toString().padStart(2, '0');
-            const año = fechaColombiana.getFullYear();
-            
-            // Formatear hora en formato 24 horas
-            const horas = fechaColombiana.getHours().toString().padStart(2, '0');
-            const minutos = fechaColombiana.getMinutes().toString().padStart(2, '0');
-            const segundos = fechaColombiana.getSeconds().toString().padStart(2, '0');
-            
-            return {
-                fecha: `${dia}/${mes}/${año}`,
-                hora: `${horas}:${minutos}:${segundos}`
-            };
+        // Formatear la respuesta
+        const respuesta = {
+            id_muestra: muestra.id_muestra,
+            cliente: muestra.cliente,
+            tipoDeAgua: muestra.tipoDeAgua,
+            tipoMuestreo: muestra.tipoMuestreo,
+            lugarMuestreo: muestra.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
+            tipoAnalisis: muestra.tipoAnalisis,
+            identificacionMuestra: muestra.identificacionMuestra,
+            planMuestreo: muestra.planMuestreo,
+            condicionesAmbientales: muestra.condicionesAmbientales,
+            preservacionMuestra: muestra.preservacionMuestra,
+            analisisSeleccionados: Array.isArray(muestra.analisisSeleccionados) ? 
+                muestra.analisisSeleccionados.map(analisis => ({
+                    nombre: analisis.nombre,
+                    precio: formatearPrecioCOP(analisis.precio),
+                    unidad: analisis.unidad,
+                    metodo: analisis.metodo,
+                    rango: analisis.rango
+                })) : [],
+            estado: muestra.estado,
+            rechazoMuestra: muestra.rechazoMuestra,
+            observaciones: muestra.observaciones,
+            historial: Array.isArray(muestra.historial) ? 
+                muestra.historial.map(h => ({
+                    estado: h.estado,
+                    usuario: h.usuario,
+                    fechaCambio: formatearFechaHora(h.fechaCambio),
+                    observaciones: h.observaciones
+                })) : [],
+            createdAt: formatearFechaHora(muestra.createdAt),
+            updatedAt: formatearFechaHora(muestra.updatedAt),
+            precioTotal: formatearPrecioCOP(muestra.precioTotal)
         };
 
-         // AUDITORÍA
-         setImmediate(async () => {
+        // Registrar la acción en auditoría
+        setImmediate(async () => {
             try {
                 await AuditoriaService.registrarAccion({
                     usuario,
                     accion: {
-                        descripcion: 'actualización de resultado'
+                        descripcion: 'actualización de muestra'
                     },
                     detalles: {
-                        idMuestra: muestra._id,
-                        tipoMuestra: muestra.tipoDeAgua?.tipo,
-                        estadoMuestra: muestra.estado,
-                        datosCompletos: muestra.toObject(),
-                        cambios: {
-                            antes: muestraOriginal,
-                            despues: muestra.toObject()
-                        }
-                    },
-                    fecha: new Date()
+                        idMuestra: muestra.id_muestra,
+                        cambios: datosActualizacion,
+                        estadoFinal: muestra.estado
+                    }
                 });
             } catch (error) {
                 console.error('[AUDITORIA ERROR]', error.message);
             }
         });
-
-        // Preparar la respuesta
-        const respuesta = {
-            ...muestra.toObject(),
-            createdAt: formatearFecha(muestra.createdAt),
-            updatedAt: formatearFecha(muestra.updatedAt),
-            fechaHoraMuestreo: formatearFecha(muestra.fechaHoraMuestreo),
-            historial: muestra.historial.map(h => ({
-                ...h,
-                fechaCambio: formatearFecha(h.fechaCambio)
-            })),
-            creadoPor: {
-                ...muestra.creadoPor,
-                fechaCreacion: formatearFecha(muestra.createdAt)
-            },
-            firmas: {
-                ...muestra.firmas,
-                fechaFirmaAdministrador: muestra.firmas.firmaAdministrador ? formatearFecha(muestra.firmas.firmaAdministrador.fecha) : null,
-                fechaFirmaCliente: muestra.firmas.firmaCliente ? formatearFecha(muestra.firmas.firmaCliente.fecha) : null
-            }
-        };
 
         ResponseHandler.success(res, { muestra: respuesta }, 'Muestra actualizada exitosamente');
     } catch (error) {
