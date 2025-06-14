@@ -25,7 +25,8 @@ const whitelist = [
     'http://localhost:5173',  // Frontend en desarrollo local
     'http://localhost:5174',  // Frontend en desarrollo local (puerto alternativo)
     'https://laboratorio-sena.vercel.app', // Frontend en producción
-    'https://web-sena-lab.vercel.app' // Frontend en Vercel
+    'https://web-sena-lab.vercel.app', // Frontend en Vercel
+    'https://aqualab-sena.vercel.app' // Frontend en producción (Aqualab)
 ];
 
 app.use(cors({
