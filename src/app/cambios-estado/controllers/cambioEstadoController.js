@@ -1,5 +1,5 @@
 const { validationResult } = require('express-validator');
-const { cambiarEstadoMuestra } = require("../services/cambiarEstadoService");
+const { cambiarEstadoMuestra, aceptarCotizacion: aceptarCotizacionService } = require("../services/cambiarEstadoService");
 const { Muestra, estadosValidos } = require("../../../shared/models/muestrasModel");
 const ResponseHandler = require("../../../shared/utils/responseHandler");
 const { NotFoundError, ValidationError } = require("../../../shared/errors/AppError");
@@ -96,4 +96,30 @@ const actualizarEstado = async (req, res) => {
     }
 };
 
-module.exports = { cambiarEstado, actualizarEstado };
+// Función específica para aceptar cotizaciones (solo administrador)
+const aceptarCotizacion = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const usuario = req.usuario; // El usuario debe venir del middleware de autenticación
+
+        // Verificar que el usuario sea administrador
+        if (usuario.rol !== 'administrador') {
+            return res.status(403).json({
+                success: false,
+                message: 'Solo los administradores pueden aceptar cotizaciones'
+            });
+        }
+
+        const resultado = await aceptarCotizacionService(id, usuario);
+
+        return res.status(200).json(resultado);
+    } catch (error) {
+        console.error('Error en aceptarCotizacion:', error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || 'Error al aceptar la cotización'
+        });
+    }
+};
+
+module.exports = { cambiarEstado, actualizarEstado, aceptarCotizacion };

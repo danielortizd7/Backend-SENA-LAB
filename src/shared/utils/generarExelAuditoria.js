@@ -1,11 +1,20 @@
 const ExcelJS = require('exceljs');
 const stream = require('stream');
 
-class generarExcelAuditoria {
-  async generarExcelAuditorias(registros) {
+class generarExcelAuditoria {  async generarExcelAuditorias(registros) {
     const { Muestra } = require('../../shared/models/muestrasModel');
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Registros de Auditoría');
+
+    // Función auxiliar para obtener fecha de muestreo real desde la BD
+    const obtenerFechaMuestreoReal = async (idMuestra) => {
+      try {
+        const muestra = await Muestra.findOne({ id_muestra: idMuestra }).lean();
+        return muestra?.fechaHoraMuestreo || null;
+      } catch (error) {
+        return null;
+      }
+    };
 
     // Estilos para el encabezado
     const headerStyle = {
@@ -29,7 +38,7 @@ class generarExcelAuditoria {
       { header: 'Cliente', key: 'cliente', width: 35 },
       { header: 'Tipo de Agua', key: 'tipoAgua', width: 25 },
       { header: 'Lugar Muestreo', key: 'lugarMuestreo', width: 25 },
-      { header: 'Fecha Muestreo', key: 'fechaMuestreo', width: 20 },
+      { header: 'Fecha de Muestreo', key: 'fechaMuestreo', width: 20 },
       { header: 'Tipo Muestreo', key: 'tipoMuestreo', width: 18 },
       { header: 'Tipo Análisis', key: 'tipoAnalisis', width: 18 },
       
@@ -48,41 +57,48 @@ class generarExcelAuditoria {
     // Aplicar estilos al encabezado
     sheet.getRow(1).eachCell((cell) => {
       cell.style = headerStyle;
-    });
-
-    // Función auxiliar para formatear fechas de manera robusta
+    });    // Función auxiliar para formatear fechas de manera robusta
     const formatearFecha = (fecha, conHora = true) => {
       if (!fecha) return '';
       try {
         let fechaObj;
+        
+        // Manejar objetos con timestamp
         if (typeof fecha === 'object' && fecha.timestamp) {
-          console.log('Procesando timestamp:', fecha.timestamp);
           fechaObj = new Date(fecha.timestamp.$date || fecha.timestamp);
-        } else if (typeof fecha === 'object' && fecha.$date) {
-          console.log('Procesando $date:', fecha.$date);
+        } 
+        // Manejar objetos MongoDB con $date
+        else if (typeof fecha === 'object' && fecha.$date) {
           fechaObj = new Date(fecha.$date);
-        } else {
-          console.log('Procesando fecha directa:', fecha);
-          // Manejar fechas de MongoDB que vienen como Date objects o strings ISO
+        }
+        // Manejar objetos MongoDB con $oid (ObjectId con timestamp)
+        else if (typeof fecha === 'object' && fecha.$oid) {
+          // Extraer timestamp del ObjectId (primeros 8 caracteres en hex)
+          const timestamp = parseInt(fecha.$oid.substring(0, 8), 16) * 1000;
+          fechaObj = new Date(timestamp);
+        }
+        // Manejar strings y otros formatos
+        else {
           fechaObj = new Date(fecha);
         }
         
+        // Verificar si la fecha es válida
         if (isNaN(fechaObj.getTime())) {
-          console.log('Fecha inválida tras conversión');
-          return '';        }
-          if (isNaN(fechaObj.getTime())) return '';
+          return 'Fecha inválida';
+        }
         
         return conHora ? 
           fechaObj.toLocaleString('es-CO', { 
             timeZone: 'America/Bogota',
             year: 'numeric', month: '2-digit', day: '2-digit', 
             hour: '2-digit', minute: '2-digit', second: '2-digit'
-          }) :          fechaObj.toLocaleDateString('es-CO', { 
+          }) :
+          fechaObj.toLocaleDateString('es-CO', { 
             timeZone: 'America/Bogota',
             year: 'numeric', month: '2-digit', day: '2-digit'
           });
       } catch (error) {
-        return fecha.toString();
+        return 'Error al formatear fecha';
       }
     };
 
@@ -142,15 +158,35 @@ class generarExcelAuditoria {
         return fechaB - fechaA; // Orden descendente (más reciente primero)
       });      // Fecha de muestreo - buscar en muestra o usar fecha de registro
       let fechaMuestreo = 'Fecha no disponible';
+      
+      // Priorizar fechaHoraMuestreo de la muestra
       if (muestra.fechaHoraMuestreo) {
         fechaMuestreo = formatearFecha(muestra.fechaHoraMuestreo, true);
-      } else if (reg.detalles?.fechaHoraMuestreo) {
+      } 
+      // Si no está en muestra, buscar en detalles
+      else if (reg.detalles?.fechaHoraMuestreo) {
         fechaMuestreo = formatearFecha(reg.detalles.fechaHoraMuestreo, true);
-      } else if (muestra.fechaMuestreo) {
+      } 
+      // Buscar en fechaMuestreo como alternativa
+      else if (muestra.fechaMuestreo) {
         fechaMuestreo = formatearFecha(muestra.fechaMuestreo, true);
       }
-      
-      console.log('Fecha de muestreo final:', fechaMuestreo);const historialInfo = historialOrdenado.map((item, index) => {
+      // Si no hay fecha disponible, buscar en la BD
+      else {
+        const fechaReal = await obtenerFechaMuestreoReal(idMuestra);
+        if (fechaReal) {
+          fechaMuestreo = formatearFecha(fechaReal, true);
+        }
+        // Si aún no hay fecha, usar createdAt como última opción
+        else if (muestra.createdAt) {
+          fechaMuestreo = formatearFecha(muestra.createdAt, true);
+        }
+        // Si tampoco hay createdAt, usar fecha del registro
+        else if (reg.fecha) {
+          fechaMuestreo = formatearFecha(reg.fecha, true);
+        }
+      }
+      const historialInfo = historialOrdenado.map((item, index) => {
         // Numeración descendente: el más reciente (index 0) tiene el número más alto
         const numeroAccion = historialOrdenado.length - index;
         

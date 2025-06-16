@@ -11,24 +11,25 @@ const ESTADOS_MUESTRA = {
   EN_COTIZACION: 'En Cotización',
   RECHAZADA: 'Rechazada',
   PENDIENTE: 'Pendiente',
-  APROBADA: 'Aprobada'
+  ACEPTADA: 'Aceptada'
 };
 // Mapeo de estados de muestra a sus descripciones
 const TRANSICIONES_VALIDAS = {
   [ESTADOS_MUESTRA.RECIBIDA]: [ESTADOS_MUESTRA.EN_ANALISIS, ESTADOS_MUESTRA.RECHAZADA, ESTADOS_MUESTRA.EN_COTIZACION],
   [ESTADOS_MUESTRA.EN_ANALISIS]: [ESTADOS_MUESTRA.FINALIZADA, ESTADOS_MUESTRA.RECHAZADA],
-  [ESTADOS_MUESTRA.FINALIZADA]: [ESTADOS_MUESTRA.APROBADA],
-  [ESTADOS_MUESTRA.PENDIENTE]: [ESTADOS_MUESTRA.RECIBIDA, ESTADOS_MUESTRA.RECHAZADA],
-  [ESTADOS_MUESTRA.EN_COTIZACION]: [ESTADOS_MUESTRA.RECIBIDA, ESTADOS_MUESTRA.RECHAZADA],
-  [ESTADOS_MUESTRA.APROBADA]: [], // Estado final
+  [ESTADOS_MUESTRA.FINALIZADA]: [ESTADOS_MUESTRA.ACEPTADA],
+  [ESTADOS_MUESTRA.PENDIENTE]: [ESTADOS_MUESTRA.EN_COTIZACION, ESTADOS_MUESTRA.RECHAZADA],
+  [ESTADOS_MUESTRA.EN_COTIZACION]: [ESTADOS_MUESTRA.ACEPTADA, ESTADOS_MUESTRA.RECHAZADA],
+  [ESTADOS_MUESTRA.ACEPTADA]: [ESTADOS_MUESTRA.RECIBIDA], // La cotización aceptada pasa a recibida
   [ESTADOS_MUESTRA.RECHAZADA]: [] // Estado final
 };
 
 const FASES_PROGRESO = [
+  ESTADOS_MUESTRA.EN_COTIZACION,
+  ESTADOS_MUESTRA.ACEPTADA,
   ESTADOS_MUESTRA.RECIBIDA,
   ESTADOS_MUESTRA.EN_ANALISIS,
-  ESTADOS_MUESTRA.FINALIZADA,
-  ESTADOS_MUESTRA.APROBADA
+  ESTADOS_MUESTRA.FINALIZADA
 ];
 
 /**
@@ -68,11 +69,10 @@ const generarProgresoMuestra = (estadoActual, historialEstados = []) => {
       progreso.fasesRestantes.push(fase);
     }
   });
-
   // Calcular porcentaje de completado
   if (estadoActual === ESTADOS_MUESTRA.RECHAZADA) {
     progreso.porcentajeCompletado = 0; // Las muestras rechazadas no cuentan como progreso
-  } else if (estadoActual === ESTADOS_MUESTRA.APROBADA) {
+  } else if (estadoActual === ESTADOS_MUESTRA.FINALIZADA) {
     progreso.porcentajeCompletado = 100;
   } else {
     const indiceActual = FASES_PROGRESO.indexOf(estadoActual);
@@ -90,10 +90,9 @@ const generarProgresoMuestra = (estadoActual, historialEstados = []) => {
  * @param {string} estadoDestino - Estado objetivo
  * @returns {Object} Resultado de la validación
  */
-const validarTransicionEstado = (estadoOrigen, estadoDestino) => {
-  // Si es la creación inicial (de null a cualquier estado), permitir solo estados iniciales válidos
+const validarTransicionEstado = (estadoOrigen, estadoDestino) => {  // Si es la creación inicial (de null a cualquier estado), permitir solo estados iniciales válidos
   if (estadoOrigen === null || estadoOrigen === undefined) {
-    const estadosIniciales = [ESTADOS_MUESTRA.RECIBIDA, ESTADOS_MUESTRA.PENDIENTE, ESTADOS_MUESTRA.EN_COTIZACION];
+    const estadosIniciales = [ESTADOS_MUESTRA.RECIBIDA, ESTADOS_MUESTRA.PENDIENTE, ESTADOS_MUESTRA.EN_COTIZACION, ESTADOS_MUESTRA.ACEPTADA];
     const esValida = estadosIniciales.includes(estadoDestino);
     return {
       esValida,

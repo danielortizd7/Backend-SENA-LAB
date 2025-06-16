@@ -217,10 +217,9 @@ const senaLabValidators = {
             .optional()
             .isString().withMessage('La descripción debe ser texto')
             .trim()
-            .isLength({ min: 10 }).withMessage('La descripción debe tener al menos 10 caracteres'),
-        body('estado')
+            .isLength({ min: 10 }).withMessage('La descripción debe tener al menos 10 caracteres'),        body('estado')
             .optional()
-            .isIn(['Recibida', 'En análisis', 'Finalizada', 'Rechazada', 'En Cotización'])
+            .isIn(['Recibida', 'En análisis', 'Finalizada', 'Rechazada', 'En Cotización', 'Aceptada'])
             .withMessage('Estado no válido'),
         body('observaciones')
             .optional()

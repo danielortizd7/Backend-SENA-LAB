@@ -74,10 +74,8 @@ const normalizarCampos = (datos) => {
 };
 
 const validarDatosMuestra = (datos) => {
-    const errores = [];
-
-    // Si la muestra está rechazada o en cotización, solo validar campos básicos
-    if (datos.estado === 'Rechazada' || datos.estado === 'En Cotizacion') {
+    const errores = [];    // Si la muestra está rechazada, en cotización o aceptada, solo validar campos básicos
+    if (datos.estado === 'Rechazada' || datos.estado === 'En Cotizacion' || datos.estado === 'Aceptada') {
         if (!datos.documento) errores.push('El documento es requerido');
         if (!datos.tipoDeAgua?.tipo) errores.push('El tipo de agua es requerido');
         if (!datos.lugarMuestreo) errores.push('El lugar de muestreo es requerido');
@@ -135,10 +133,8 @@ const validarDatosMuestra = (datos) => {
     // 10. Análisis Seleccionados
     if (!Array.isArray(datos.analisisSeleccionados) || datos.analisisSeleccionados.length === 0) {
         errores.push('Debe seleccionar al menos un análisis');
-    }
-
-    // Validar firmas solo si no es una muestra rechazada y o En Cotizacion 
-    if (datos.estado !== 'Rechazada' && datos.estado !== 'En Cotizacion' && datos.estado !== 'Pendiente') {
+    }    // Validar firmas solo si no es una muestra rechazada, en cotización o aceptada
+    if (datos.estado !== 'Rechazada' && datos.estado !== 'En Cotizacion' && datos.estado !== 'Aceptada' && datos.estado !== 'Pendiente') {
         if (!datos.firmas?.firmaAdministrador?.firma) {
             errores.push('La firma del administrador es requerida');
         }
@@ -330,10 +326,8 @@ const obtenerMuestras = async (req, res, next) => {
                         ...analisis,
                         precio: formatearPrecioCOP(analisis.precio)
                     })) : []
-            };
-
-            // Eliminar el campo firmas si la muestra está rechazada o en cotización
-            if (muestra.estado === 'Rechazada' || muestra.estado === 'En Cotizacion') {
+            };            // Eliminar el campo firmas si la muestra está rechazada, en cotización o aceptada
+            if (muestra.estado === 'Rechazada' || muestra.estado === 'En Cotizacion' || muestra.estado === 'Aceptada') {
                 delete muestraFormateada.firmas;
             }
 
@@ -482,10 +476,8 @@ const registrarMuestra = async (req, res, next) => {
         // Verificar que el usuario esté autenticado
         if (!req.usuario) {
             throw new ValidationError('Usuario no autenticado');
-        }
-
-        // Solo verificar rol de administrador si no es una cotización
-        if (datos.estado !== 'En Cotizacion' && (!req.usuario || req.usuario.rol !== 'administrador')) {
+        }        // Solo verificar rol de administrador si no es una cotización o aceptada
+        if (datos.estado !== 'En Cotizacion' && datos.estado !== 'Aceptada' && (!req.usuario || req.usuario.rol !== 'administrador')) {
             throw new ValidationError('No tiene permisos para registrar muestras. Se requiere rol de administrador');
         }
 
@@ -493,17 +485,18 @@ const registrarMuestra = async (req, res, next) => {
         const { analisisLimpios, precioTotal } = procesarAnalisisYPrecio(datos.analisisSeleccionados);
 
         console.log('Análisis seleccionados:', analisisLimpios);
-        console.log('Precio total calculado:', precioTotal);
-
-        // Determinar el estado inicial de la muestra
+        console.log('Precio total calculado:', precioTotal);        // Determinar el estado inicial de la muestra
         const esRechazada = datos.estado === 'Rechazada';
         const esCotizada = datos.estado === 'En Cotizacion';
+        const esAceptada = datos.estado === 'Aceptada';
         
         let estadoInicial;
         if (esRechazada) {
             estadoInicial = 'Rechazada';
         } else if (esCotizada) {
             estadoInicial = 'En Cotizacion';
+        } else if (esAceptada) {
+            estadoInicial = 'Aceptada';
         } else {
             estadoInicial = 'Recibida';
         }
@@ -648,9 +641,9 @@ const registrarMuestra = async (req, res, next) => {
                     rol: datosUsuario.rol
                 },
                 fechaCambio: new Date(),
-                observaciones: esRechazada ? motivoRechazo : 
-                             (esCotizada ? 'Muestra en proceso de cotización' : 
-                             'Muestra recibida')
+                observaciones: esRechazada ? motivoRechazo :                             (esCotizada ? 'Muestra en proceso de cotización' : 
+                             (esAceptada ? 'Cotización aceptada, pendiente recepción' : 
+                             'Muestra recibida'))
             }],
             actualizadoPor: []
         });
@@ -770,10 +763,8 @@ const registrarMuestra = async (req, res, next) => {
             createdAt: formatearFechaHora(muestraGuardada.createdAt),
             updatedAt: formatearFechaHora(muestraGuardada.updatedAt),
             precioTotal: formatearPrecioCOP(muestraGuardada.precioTotal)
-        };
-
-        // Solo incluir firmas en la respuesta si la muestra no está rechazada ni en cotización
-        if (!esRechazada && !esCotizada && muestraGuardada.firmas) {
+        };        // Solo incluir firmas en la respuesta si la muestra no está rechazada, en cotización o aceptada
+        if (!esRechazada && !esCotizada && !esAceptada && muestraGuardada.firmas) {
             respuesta.firmas = {
                 firmaAdministrador: muestraGuardada.firmas.firmaAdministrador ? {
                     nombre: muestraGuardada.firmas.firmaAdministrador.nombre,
@@ -789,10 +780,10 @@ const registrarMuestra = async (req, res, next) => {
         }
 
         return res.status(201).json({
-            success: true,
-            message: esRechazada ? 'Muestra rechazada exitosamente' : 
+            success: true,            message: esRechazada ? 'Muestra rechazada exitosamente' : 
                     (esCotizada ? 'Muestra en proceso de cotización exitosamente' : 
-                    'Muestra registrada exitosamente'),
+                    (esAceptada ? 'Cotización aceptada exitosamente' :
+                    'Muestra registrada exitosamente')),
             data: {
                 muestra: respuesta
             }

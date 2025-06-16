@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const estadosValidos = ["Recibida", "En análisis", "Finalizada", "En Cotizacion", "Rechazada"];
+const estadosValidos = ["Recibida", "En análisis", "Finalizada", "En Cotizacion", "Rechazada", "Aceptada"];
 
 // Constantes para tipos de muestreo
 const TIPOS_MUESTREO = {
@@ -26,7 +26,8 @@ const ESTADOS = {
     EN_ANALISIS: 'En análisis',
     FINALIZADA: 'Finalizada',
     EN_COTIZACION: 'En Cotizacion',
-    RECHAZADA: 'Rechazada'
+    RECHAZADA: 'Rechazada',
+    ACEPTADA: 'Aceptada'
 };
 
 // Esquema para resultados de análisis
