@@ -642,12 +642,19 @@ async buscarPorDocumento(req, res) {
 
 async registrarCliente(req, res) {
     try{
-        const {email, nombre, documento, telefono, direccion} = req.body;
+        const {email, nombre, documento, telefono, direccion, aceptaTerminos} = req.body;
 
         if(!email || !nombre || !documento){
             return res.status(400).json({
                 error: 'Faltan campos requeridos',
                 detalles: 'Email, nombre y documento son obligatorios'
+            });
+        }
+        // Validar aceptación de términos y condiciones
+        if (aceptaTerminos !== true) {
+            return res.status(400).json({
+                error: 'Términos y condiciones no aceptados',
+                detalles: 'Debe aceptar los términos y condiciones para registrarse.'
             });
         }
         const existeCorreo = await this.usuarioModel.obtenerPorEmail(email);
