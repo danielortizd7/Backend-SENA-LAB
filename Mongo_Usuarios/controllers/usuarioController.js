@@ -5,6 +5,7 @@ const Usuario = require('../models/Usuario');
 const emailService = require('../service/emailService');
 const config = require('../config/database');
 const EmailService = require('../service/emailService');
+const CredencialesEmailService  = require('../service/credencialesEmailService');
 const Role = require('../models/Role');
 const Perfil = require('../models/perfilModel')
 const perfilService = require('../service/perfilService')
@@ -13,6 +14,7 @@ class UsuarioController {
     constructor(usuarioModel) {
         this.usuarioModel = usuarioModel;
         this.emailService = new EmailService();
+        this.credService = new CredencialesEmailService();
         console.log('UsuarioController inicializado con modelo:', this.usuarioModel);
     }
 
@@ -174,7 +176,14 @@ class UsuarioController {
             telefono,
             direccion,
             fotoPerfil:''
-         })
+         });
+
+        await this.credService.enviarCredenciales(
+            resultado.email,
+            resultado.nombre,
+            contrasenaInput,
+            tipo 
+         );
 
 
          const respuesta = {
@@ -710,7 +719,14 @@ async registrarCliente(req, res) {
             telefono,
             direccion,
             fotoPerfil:''
-         })
+         });
+
+         await this.credService.enviarCredenciales(
+  resultado.email,
+  resultado.nombre,
+  documento,          
+  'cliente'        
+);
 
         return res.status(201).json({
             mensaje: 'Cliente registrado exitosamente',
