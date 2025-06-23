@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const http = require("http");
 const path = require("path");
 const connectDB = require("./src/config/database.js");
 const { ResponseHandler } = require('./src/shared/utils/responseHandler');
@@ -12,10 +13,13 @@ const cambiosEstadoRoutes = require("./src/app/cambios-estado/routes/cambioEstad
 const resultadosRoutes = require('./src/app/ingreso-resultados/routes/resultadoRoutes');
 const firmaRoutes = require("./src/app/firma-digital/routes/firmaRoutes.js");
 const auditoriaRoutes = require("./src/app/auditoria/routes/auditoriaRoutes.js");
+const notificationRoutes = require("./src/app/notificaciones/routes/notificationRoutes.js");
 
 const { verificarToken, login } = require('./src/shared/middleware/authMiddleware');
 
+// Crear servidor HTTP y app Express
 const app = express();
+const server = http.createServer(app);
 
 // Conectar a la base de datos correctamente
 connectDB();
@@ -109,6 +113,7 @@ app.use("/api/cambios-estado", cambiosEstadoRoutes);
 app.use("/api/ingreso-resultados", resultadosRoutes);
 app.use("/api/firma-digital", firmaRoutes);
 app.use("/api/auditoria", auditoriaRoutes);
+app.use("/api/notificaciones", verificarToken, notificationRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
@@ -128,8 +133,13 @@ app.use((err, req, res, next) => {
     ResponseHandler.error(res, err);
 });
 
+// Inicializar Socket.IO
+const socketManager = require("./src/config/socketManager");
+socketManager.initialize(server);
+
 // Iniciar servidor
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
-}); 
+    console.log(`WebSocket disponible en ws://localhost:${PORT}`);
+});

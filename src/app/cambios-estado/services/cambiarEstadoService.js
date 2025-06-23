@@ -2,6 +2,7 @@ const { Muestra, estadosValidos } = require('../../../shared/models/muestrasMode
 const Resultado = require('../../ingreso-resultados/models/resultadoModel');
 const mongoose = require('mongoose');
 const AuditoriaService = require('../../auditoria/services/auditoriaService');
+const NotificationService = require('../../notificaciones/services/notificationService');
 
 async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
     try {
@@ -86,11 +87,10 @@ async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
                 fechaRechazo: new Date()
             };
         }        // Guardar los cambios
-        await muestra.save();
-
-        // Registrar en auditoría
+        await muestra.save();        // Registrar en auditoría y enviar notificación
         setImmediate(async () => {
             try {
+                // Registrar auditoría
                 await AuditoriaService.registrarAccion({
                     usuario: {
                         _id: usuario._id,
@@ -123,7 +123,26 @@ async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
                         estadoNuevo: nuevoEstado
                     },
                     fecha: new Date()
-                });
+                });                // Enviar notificación al cliente si hay información del cliente
+                if (muestra.cliente && muestra.cliente._id) {
+                    console.log(`📨 Enviando notificación de cambio de estado:`);
+                    console.log(`   - Cliente ID: ${muestra.cliente._id}`);
+                    console.log(`   - Cliente: ${muestra.cliente.nombre} (${muestra.cliente.documento})`);
+                    console.log(`   - Muestra: ${muestra.id_muestra}`);
+                    console.log(`   - Cambio: ${estadoAnterior} → ${nuevoEstado}`);
+                    
+                    await NotificationService.enviarNotificacionCambioEstado(
+                        muestra.cliente._id,
+                        muestra.id_muestra,
+                        estadoAnterior,
+                        nuevoEstado,
+                        usuario.observaciones || ''
+                    );
+                } else {
+                    console.warn(`⚠️ No se puede enviar notificación: información de cliente incompleta`);
+                    console.log(`   - Cliente en muestra:`, muestra.cliente);
+                }
+                
             } catch (auditoriaError) {
                 console.error('Error al registrar auditoría del cambio de estado:', auditoriaError);
             }
