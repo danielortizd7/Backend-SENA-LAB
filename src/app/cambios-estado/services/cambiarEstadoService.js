@@ -124,15 +124,17 @@ async function cambiarEstadoMuestra(idMuestra, nuevoEstado, usuario) {
                     },
                     fecha: new Date()
                 });                // Enviar notificación al cliente si hay información del cliente
-                if (muestra.cliente && muestra.cliente._id) {
+                if (muestra.cliente && (muestra.cliente.documento || muestra.cliente._id)) {
                     console.log(`📨 Enviando notificación de cambio de estado:`);
+                    console.log(`   - Cliente Documento: ${muestra.cliente.documento}`);
                     console.log(`   - Cliente ID: ${muestra.cliente._id}`);
                     console.log(`   - Cliente: ${muestra.cliente.nombre} (${muestra.cliente.documento})`);
                     console.log(`   - Muestra: ${muestra.id_muestra}`);
                     console.log(`   - Cambio: ${estadoAnterior} → ${nuevoEstado}`);
-                    
+                    // Usar cliente.documento si existe, si no, fallback a _id
+                    const identificadorCliente = muestra.cliente.documento || muestra.cliente._id;
                     await NotificationService.enviarNotificacionCambioEstado(
-                        muestra.cliente._id,
+                        identificadorCliente,
                         muestra.id_muestra,
                         estadoAnterior,
                         nuevoEstado,

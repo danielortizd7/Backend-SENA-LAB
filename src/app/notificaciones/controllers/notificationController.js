@@ -191,8 +191,10 @@ class NotificationController {
             const { muestraId, estadoAnterior, estadoNuevo, observaciones } = req.body;
             const cliente = req.usuario;
 
+
+            // Enviar notificación usando cliente.documento para compatibilidad con tokens existentes
             const notificacion = await NotificationService.enviarNotificacionCambioEstado(
-                cliente._id,
+                cliente.documento,
                 muestraId || 'TEST001',
                 estadoAnterior || 'En Cotización',
                 estadoNuevo || 'Aceptada',
