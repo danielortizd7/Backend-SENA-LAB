@@ -131,21 +131,19 @@ class NotificationService {
                 return;
             }
 
-            // Buscar tokens por clienteId (ObjectId) o clienteDocumento (string)
-            let deviceTokens = await DeviceToken.find({ 
-                $or: [
-                    { clienteId: clienteId, isActive: true },
-                    { clienteDocumento: clienteId, isActive: true } // por si clienteId es el documento
-                ]
-            });
-
-            // Si no se encontraron tokens y clienteId es un ObjectId, buscar por documento (string)
-            if (deviceTokens.length === 0 && typeof clienteId === 'object' && clienteId.toString) {
-                // Buscar el documento asociado a ese clienteId
-                const tokenByDoc = await DeviceToken.find({ clienteDocumento: clienteId.toString(), isActive: true });
-                if (tokenByDoc.length > 0) {
-                    deviceTokens = tokenByDoc;
-                }
+            // Detectar si el identificador es ObjectId o documento
+            let deviceTokens = [];
+            if (typeof clienteId === 'string' && !clienteId.match(/^[0-9a-fA-F]{24}$/)) {
+                // Es un documento (string)
+                deviceTokens = await DeviceToken.find({ clienteDocumento: clienteId, isActive: true });
+            } else {
+                // Es un ObjectId o número válido
+                deviceTokens = await DeviceToken.find({
+                    $or: [
+                        { clienteId: clienteId, isActive: true },
+                        { clienteDocumento: clienteId, isActive: true }
+                    ]
+                });
             }
 
             if (deviceTokens.length === 0) {
@@ -178,7 +176,6 @@ class NotificationService {
             };
 
             const response = await admin.messaging().sendMulticast(message);
-            
             // Procesar respuestas y desactivar tokens inválidos
             await this.procesarRespuestaFirebase(response, deviceTokens);
 
