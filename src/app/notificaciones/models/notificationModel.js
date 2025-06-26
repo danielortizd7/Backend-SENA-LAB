@@ -3,8 +3,15 @@ const mongoose = require('mongoose');
 const notificationSchema = new mongoose.Schema({
     clienteId: {
         type: mongoose.Schema.Types.ObjectId,
-        required: true,
-        index: true
+        required: false,
+        index: true,
+        default: null
+    },
+    clienteDocumento: {
+        type: String,
+        required: false,
+        index: true,
+        default: null
     },
     muestraId: {
         type: String, // id_muestra como RM250615003
@@ -72,6 +79,7 @@ const notificationSchema = new mongoose.Schema({
 
 // Índices para consultas eficientes
 notificationSchema.index({ clienteId: 1, createdAt: -1 });
+notificationSchema.index({ clienteDocumento: 1, createdAt: -1 });
 notificationSchema.index({ muestraId: 1, tipo: 1 });
 notificationSchema.index({ estado: 1, createdAt: -1 });
 notificationSchema.index({ 'data.estadoNuevo': 1 });
@@ -94,20 +102,23 @@ notificationSchema.methods.reintentar = function() {
     throw new Error('Máximo número de intentos alcanzado');
 };
 
-// Método estático para obtener notificaciones por cliente
-notificationSchema.statics.obtenerPorCliente = function(clienteId, limite = 20) {
-    return this.find({ clienteId })
+// Método estático para obtener notificaciones por cliente (por ID o documento)
+notificationSchema.statics.obtenerPorCliente = function(identificador, limite = 20) {
+    const query = (typeof identificador === 'string' && !identificador.match(/^[0-9a-fA-F]{24}$/))
+        ? { clienteDocumento: identificador }
+        : { clienteId: identificador };
+    return this.find(query)
                .sort({ createdAt: -1 })
                .limit(limite)
                .lean();
 };
 
-// Método estático para obtener notificaciones no leídas
-notificationSchema.statics.obtenerNoLeidas = function(clienteId) {
-    return this.find({ 
-        clienteId, 
-        estado: { $in: ['enviada', 'entregada'] }
-    }).sort({ createdAt: -1 });
+// Método estático para obtener notificaciones no leídas (por ID o documento)
+notificationSchema.statics.obtenerNoLeidas = function(identificador) {
+    const query = (typeof identificador === 'string' && !identificador.match(/^[0-9a-fA-F]{24}$/))
+        ? { clienteDocumento: identificador, estado: { $in: ['enviada', 'entregada'] } }
+        : { clienteId: identificador, estado: { $in: ['enviada', 'entregada'] } };
+    return this.find(query).sort({ createdAt: -1 });
 };
 
 module.exports = mongoose.model('Notification', notificationSchema);

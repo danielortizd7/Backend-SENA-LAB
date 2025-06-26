@@ -77,13 +77,13 @@ class NotificationService {
     }
 
     // Enviar notificación de cambio de estado
-    async enviarNotificacionCambioEstado(clienteId, muestraId, estadoAnterior, estadoNuevo, observaciones = '') {
+    async enviarNotificacionCambioEstado(clienteIdentificador, muestraId, estadoAnterior, estadoNuevo, observaciones = '') {
         try {
             const titulo = this.generarTitulo(estadoNuevo);
             const mensaje = this.generarMensaje(muestraId, estadoAnterior, estadoNuevo, observaciones);
 
-            const notificacion = new Notification({
-                clienteId,
+            // Determinar si es ObjectId (24 hex chars) o documento (string)
+            let notificationData = {
                 muestraId,
                 tipo: 'cambio_estado',
                 titulo,
@@ -98,15 +98,22 @@ class NotificationService {
                         requiereAccion: this.requiereAccionCliente(estadoNuevo)
                     }
                 }
-            });
+            };
+            if (typeof clienteIdentificador === 'string' && !clienteIdentificador.match(/^[0-9a-fA-F]{24}$/)) {
+                notificationData.clienteDocumento = clienteIdentificador;
+            } else {
+                notificationData.clienteId = clienteIdentificador;
+            }
+
+            const notificacion = new Notification(notificationData);
 
             // Guardar notificación en base de datos
             await notificacion.save();
 
             // Enviar por múltiples canales
             await Promise.all([
-                this.enviarPushNotification(clienteId, titulo, mensaje, notificacion.data),
-                this.enviarWebSocketNotification(clienteId, notificacion),
+                this.enviarPushNotification(clienteIdentificador, titulo, mensaje, notificacion.data),
+                this.enviarWebSocketNotification(clienteIdentificador, notificacion),
             ]);
 
             console.log(`Notificación enviada para muestra ${muestraId}: ${estadoAnterior} → ${estadoNuevo}`);
