@@ -164,13 +164,14 @@ class NotificationService {
                     body: mensaje
                 },
                 data: {
-                    ...data,
                     estadoAnterior: data.estadoAnterior || '',
                     estadoNuevo: data.estadoNuevo || '',
                     fechaCambio: data.fechaCambio?.toISOString() || new Date().toISOString(),
                     observaciones: data.observaciones || '',
                     tipo: 'cambio_estado',
-                    clickAction: 'OPEN_MUESTRA_DETAIL'
+                    clickAction: 'OPEN_MUESTRA_DETAIL',
+                    // Solo campos string, no objetos
+                    requiereAccion: data.metadata?.requiereAccion?.toString() || 'false'
                 },
                 tokens
             };
