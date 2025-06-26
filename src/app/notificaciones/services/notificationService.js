@@ -124,13 +124,22 @@ class NotificationService {
                 return;
             }
 
-            console.log(`🔍 Buscando tokens FCM para cliente: ${clienteId}`);
-
-            // Obtener tokens activos del cliente
-            const deviceTokens = await DeviceToken.find({ 
-                clienteId, 
-                isActive: true 
+            // Buscar tokens por clienteId (ObjectId) o clienteDocumento (string)
+            let deviceTokens = await DeviceToken.find({ 
+                $or: [
+                    { clienteId: clienteId, isActive: true },
+                    { clienteDocumento: clienteId, isActive: true } // por si clienteId es el documento
+                ]
             });
+
+            // Si no se encontraron tokens y clienteId es un ObjectId, buscar por documento (string)
+            if (deviceTokens.length === 0 && typeof clienteId === 'object' && clienteId.toString) {
+                // Buscar el documento asociado a ese clienteId
+                const tokenByDoc = await DeviceToken.find({ clienteDocumento: clienteId.toString(), isActive: true });
+                if (tokenByDoc.length > 0) {
+                    deviceTokens = tokenByDoc;
+                }
+            }
 
             if (deviceTokens.length === 0) {
                 console.log(`⚠️ No hay tokens FCM activos para cliente ${clienteId}`);
