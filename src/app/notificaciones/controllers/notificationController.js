@@ -15,38 +15,10 @@ class NotificationController {
                 return res.status(400).json({
                     success: false,
                     message: 'Token de dispositivo y plataforma son requeridos'
-                    } else if (apiError.code === 'messaging/invalid-registration-token' ||
-                          apiError.code === 'messaging/registration-token-not-registered' ||
-                          apiError.code === 'messaging/invalid-argument') {
-                    
-                    // Este error es esperado con un token falso - significa que FCM API está habilitada
-                    console.log('✅ FCM API está habilitada (error de token esperado)');
-                    
-                    return res.status(200).json({
-                        success: true,
-                        message: 'Firebase Cloud Messaging API está habilitada y funcionando',
-                        data: {
-                            status: 'FCM_API_ENABLED',
-                            testResult: 'Token inválido (esperado)',
-                            diagnosis: 'API funcionando correctamente'
-                        }
-                    });
-                    
-                } else {
-                    // Error inesperado
-                    console.log('⚠️ Error inesperado de FCM API');
-                    
-                    return res.status(200).json({
-                        success: false,
-                        message: 'Error inesperado en FCM API',
-                        data: {
-                            error: apiError.code,
-                            message: apiError.message,
-                            diagnosis: 'UNEXPECTED_ERROR'
-                        }
-                    });
-                }         });
-            }            if (!['android'].includes(platform)) {
+                });
+            }
+
+            if (!['android'].includes(platform)) {
                 return res.status(400).json({
                     success: false,
                     message: 'Plataforma no válida. Solo se acepta: android'

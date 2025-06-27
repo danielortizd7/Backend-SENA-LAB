@@ -140,14 +140,18 @@ app.use("/api/ingreso-resultados", resultadosRoutes);
 app.use("/api/firma-digital", firmaRoutes);
 app.use("/api/auditoria", auditoriaRoutes);
 
-// Rutas públicas de notificaciones (habilitadas temporalmente para diagnóstico)
+// Rutas públicas de notificaciones (sin prefijo de autenticación)
 console.log('🔧 Endpoints de testing habilitados para diagnóstico FCM');
-app.get("/api/notificaciones/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
-app.post("/api/notificaciones/test-local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
-app.post("/api/notificaciones/limpiar-tokens", require("./src/app/notificaciones/controllers/notificationController").limpiarTokensInvalidos);
-app.get("/api/notificaciones/verificar-fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
+app.get("/api/notificaciones-test/firebase-config", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
+app.post("/api/notificaciones-test/local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
+app.post("/api/notificaciones-test/limpiar-tokens", require("./src/app/notificaciones/controllers/notificationController").limpiarTokensInvalidos);
+app.get("/api/notificaciones-test/fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
 
-// Rutas protegidas de notificaciones
+// También mantener las rutas originales como backup
+app.get("/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
+app.get("/test-fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
+
+// Rutas protegidas de notificaciones (estas van después para no interferir con las públicas)
 app.use("/api/notificaciones", verificarToken, notificationRoutes);
 
 // Ruta de prueba
