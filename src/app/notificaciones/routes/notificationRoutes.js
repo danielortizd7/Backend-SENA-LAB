@@ -137,4 +137,13 @@ router.get('/admin/diagnostico',
     notificationController.diagnosticoNotificaciones
 );
 
+/**
+ * @route GET /api/notificaciones/verificar-fcm-api
+ * @desc Verificar estado de Firebase Cloud Messaging API
+ * @access Público (para debugging)
+ */
+router.get('/verificar-fcm-api',
+    notificationController.verificarEstadoFCMAPI
+);
+
 module.exports = router;

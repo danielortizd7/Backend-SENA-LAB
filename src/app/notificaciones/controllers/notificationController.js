@@ -15,7 +15,37 @@ class NotificationController {
                 return res.status(400).json({
                     success: false,
                     message: 'Token de dispositivo y plataforma son requeridos'
-                });
+                    } else if (apiError.code === 'messaging/invalid-registration-token' ||
+                          apiError.code === 'messaging/registration-token-not-registered' ||
+                          apiError.code === 'messaging/invalid-argument') {
+                    
+                    // Este error es esperado con un token falso - significa que FCM API está habilitada
+                    console.log('✅ FCM API está habilitada (error de token esperado)');
+                    
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Firebase Cloud Messaging API está habilitada y funcionando',
+                        data: {
+                            status: 'FCM_API_ENABLED',
+                            testResult: 'Token inválido (esperado)',
+                            diagnosis: 'API funcionando correctamente'
+                        }
+                    });
+                    
+                } else {
+                    // Error inesperado
+                    console.log('⚠️ Error inesperado de FCM API');
+                    
+                    return res.status(200).json({
+                        success: false,
+                        message: 'Error inesperado en FCM API',
+                        data: {
+                            error: apiError.code,
+                            message: apiError.message,
+                            diagnosis: 'UNEXPECTED_ERROR'
+                        }
+                    });
+                }         });
             }            if (!['android'].includes(platform)) {
                 return res.status(400).json({
                     success: false,
@@ -710,6 +740,101 @@ socket.connect();
             return res.status(500).json({
                 success: false,
                 message: 'Error al limpiar tokens inválidos',
+                error: error.message
+            });
+        }
+    }
+
+    // ENDPOINT PARA VERIFICAR ESTADO DE FCM API
+    async verificarEstadoFCMAPI(req, res) {
+        try {
+            console.log('🔍 === VERIFICACIÓN DE FCM API ===');
+            
+            const admin = require('firebase-admin');
+            
+            // Verificar si Firebase está inicializado
+            if (admin.apps.length === 0) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Firebase no está inicializado',
+                    data: { initialized: false }
+                });
+            }
+            
+            const messaging = admin.messaging();
+            console.log('✅ Instancia de Messaging obtenida');
+            
+            // Intentar una operación que requiere FCM API habilitada
+            const testToken = 'fakeTokenForAPITest123456789012345678901234567890123456789012345678901234567890';
+            
+            try {
+                await messaging.send({
+                    token: testToken,
+                    notification: {
+                        title: 'API Test',
+                        body: 'Testing FCM API availability'
+                    }
+                });
+                
+                // Si llegamos aquí sin error 404, FCM API está habilitada
+                console.log('✅ FCM API está habilitada y respondiendo');
+                
+            } catch (apiError) {
+                console.log(`🔍 Error recibido: ${apiError.code}`);
+                console.log(`📝 Mensaje: ${apiError.message}`);
+                
+                if (apiError.message.includes('404') || 
+                    apiError.message.includes('/batch') ||
+                    apiError.code === 'messaging/unknown-error') {
+                    
+                    return res.status(200).json({
+                        success: false,
+                        message: 'Firebase Cloud Messaging API NO está habilitada',
+                        data: {
+                            error: apiError.code,
+                            message: apiError.message,
+                            diagnosis: 'FCM_API_NOT_ENABLED',
+                            solution: {
+                                step1: 'Ve a Google Cloud Console',
+                                step2: `https://console.cloud.google.com/apis/library/fcm.googleapis.com?project=${process.env.FIREBASE_PROJECT_ID}`,
+                                step3: 'Habilita "Firebase Cloud Messaging API"',
+                                step4: 'Espera 5-10 minutos para propagación'
+                            }
+                        }
+                    });
+                    
+                } else if (apiError.code === 'messaging/invalid-registration-token' ||
+                          apiError.code === 'messaging/registration-token-not-registered' ||
+                          apiError.code === 'messaging/invalid-argument') {
+                    
+                    return res.status(200).json({
+                        success: true,
+                        message: 'FCM API está habilitada y funcionando correctamente',
+                        data: {
+                            error: apiError.code,
+                            diagnosis: 'FCM_API_WORKING',
+                            explanation: 'Error esperado con token de prueba inválido'
+                        }
+                    });
+                    
+                } else {
+                    return res.status(200).json({
+                        success: false,
+                        message: 'Error inesperado en FCM API',
+                        data: {
+                            error: apiError.code,
+                            message: apiError.message,
+                            diagnosis: 'UNKNOWN_ERROR'
+                        }
+                    });
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Error verificando FCM API:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error verificando estado de FCM API',
                 error: error.message
             });
         }
