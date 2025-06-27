@@ -145,6 +145,7 @@ if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'producti
     console.log('⚠️ Modo desarrollo: Endpoints de testing habilitados');
     app.get("/api/notificaciones/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
     app.post("/api/notificaciones/test-local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
+    app.post("/api/notificaciones/limpiar-tokens", require("./src/app/notificaciones/controllers/notificationController").limpiarTokensInvalidos);
 } else {
     console.log('🔒 Modo producción: Endpoints de testing deshabilitados');
 }

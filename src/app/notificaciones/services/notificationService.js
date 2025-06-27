@@ -41,6 +41,9 @@ class NotificationService {
 
                 console.log('🔧 Configurando Firebase con project_id:', process.env.FIREBASE_PROJECT_ID);
                 console.log('🔧 Client email:', process.env.FIREBASE_CLIENT_EMAIL);
+                console.log('🔧 Private key ID:', process.env.FIREBASE_PRIVATE_KEY_ID);
+                console.log('🔧 Private key present:', !!process.env.FIREBASE_PRIVATE_KEY);
+                console.log('🔧 Client ID:', process.env.FIREBASE_CLIENT_ID);
 
                 admin.initializeApp({
                     credential: admin.credential.cert(serviceAccount),
@@ -217,13 +220,35 @@ class NotificationService {
             try {
                 response = await admin.messaging().sendMulticast(message);
             } catch (firebaseError) {
-                console.error('Error específico de Firebase:', firebaseError.message);
+                console.error('❌ Error específico de Firebase:', firebaseError.message);
+                console.error('🔍 Código de error:', firebaseError.code);
+                console.error('🔍 Detalles completos:', JSON.stringify(firebaseError, null, 2));
                 
-                // Si es un error de conectividad o tokens inválidos, simular respuesta
+                // Diagnóstico específico del error /batch
+                if (firebaseError.message.includes('/batch')) {
+                    console.error('🚨 ERROR CRÍTICO: Firebase no puede encontrar el endpoint /batch');
+                    console.error('💡 Posibles causas:');
+                    console.error('   1. Project ID incorrecto en Firebase');
+                    console.error('   2. Token FCM inválido o expirado');
+                    console.error('   3. Cloud Messaging no habilitado en Firebase Console');
+                    console.error('   4. Credenciales de service account incorrectas');
+                    console.error('');
+                    console.error('🔧 Soluciones:');
+                    console.error('   1. Verifica Project ID en Firebase Console');
+                    console.error('   2. Regenera token FCM en la app Android');
+                    console.error('   3. Habilita Cloud Messaging en Firebase Console');
+                }
+                
+                // Si es un error de conectividad, tokens inválidos, o proyecto incorrecto
                 if (firebaseError.message.includes('404') || 
                     firebaseError.message.includes('registration-token-not-registered') ||
-                    firebaseError.message.includes('invalid-registration-token')) {
-                    console.log('ℹ️ Simulando respuesta debido a tokens inválidos o problemas de conectividad');
+                    firebaseError.message.includes('invalid-registration-token') ||
+                    firebaseError.message.includes('project not found') ||
+                    firebaseError.message.includes('/batch') ||
+                    firebaseError.code === 'messaging/invalid-registration-token' ||
+                    firebaseError.code === 'messaging/registration-token-not-registered') {
+                    
+                    console.log('ℹ️ Simulando respuesta debido a error Firebase (ver logs arriba para detalles)');
                     response = {
                         successCount: 0,
                         failureCount: tokensToSend.length,
@@ -233,6 +258,7 @@ class NotificationService {
                         }))
                     };
                 } else {
+                    // Error más serio, propagarlo
                     throw firebaseError;
                 }
             }

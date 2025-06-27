@@ -677,6 +677,43 @@ socket.connect();
             });
         }
     }
+
+    // ENDPOINT PARA LIMPIAR TOKENS INVÁLIDOS
+    async limpiarTokensInvalidos(req, res) {
+        try {
+            console.log('🧹 === LIMPIEZA DE TOKENS INVÁLIDOS ===');
+            
+            // Desactivar todos los tokens marcados como inválidos
+            const resultado = await DeviceToken.updateMany(
+                { isActive: false },
+                { $unset: { deviceToken: 1 } }
+            );
+            
+            // Contar tokens activos restantes
+            const tokensActivos = await DeviceToken.countDocuments({ isActive: true });
+            
+            console.log(`🗑️ Tokens inválidos limpiados: ${resultado.modifiedCount}`);
+            console.log(`✅ Tokens activos restantes: ${tokensActivos}`);
+            
+            return res.status(200).json({
+                success: true,
+                message: 'Tokens inválidos limpiados exitosamente',
+                data: {
+                    tokensLimpiados: resultado.modifiedCount,
+                    tokensActivos: tokensActivos,
+                    timestamp: new Date().toISOString()
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error limpiando tokens:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al limpiar tokens inválidos',
+                error: error.message
+            });
+        }
+    }
 }
 
 module.exports = new NotificationController();
