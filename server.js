@@ -140,19 +140,26 @@ app.use("/api/ingreso-resultados", resultadosRoutes);
 app.use("/api/firma-digital", firmaRoutes);
 app.use("/api/auditoria", auditoriaRoutes);
 
-// Rutas públicas de notificaciones (sin prefijo de autenticación)
-console.log('🔧 Endpoints de testing habilitados para diagnóstico FCM');
-app.get("/api/notificaciones-test/firebase-config", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
-app.post("/api/notificaciones-test/local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
-app.post("/api/notificaciones-test/limpiar-tokens", require("./src/app/notificaciones/controllers/notificationController").limpiarTokensInvalidos);
-app.get("/api/notificaciones-test/fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
-
-// También mantener las rutas originales como backup
-app.get("/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
-app.get("/test-fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
-
-// Rutas protegidas de notificaciones (estas van después para no interferir con las públicas)
+// Rutas protegidas de notificaciones
 app.use("/api/notificaciones", verificarToken, notificationRoutes);
+
+// Endpoints públicos de notificaciones (disponibles en todas las configuraciones)
+app.post("/api/notificaciones-test/register-device", require("./src/app/notificaciones/controllers/notificationController").registrarDeviceTokenPublico);
+app.post("/api/notificaciones-test/local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
+
+// Solo en desarrollo: endpoints adicionales de diagnóstico
+if (process.env.NODE_ENV !== 'production') {
+    console.log('🔧 Endpoints de diagnóstico habilitados para desarrollo');
+    app.get("/api/notificaciones-test/firebase-config", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
+    app.post("/api/notificaciones-test/limpiar-tokens", require("./src/app/notificaciones/controllers/notificationController").limpiarTokensInvalidos);
+    app.get("/api/notificaciones-test/fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
+    
+    // Rutas de backup para desarrollo
+    app.get("/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
+    app.get("/test-fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
+} else {
+    console.log('🚀 Modo producción: endpoints de diagnóstico deshabilitados');
+}
 
 // Ruta de prueba
 app.get("/", (req, res) => {

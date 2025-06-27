@@ -52,6 +52,68 @@ class NotificationController {
         }
     }
 
+    // Registrar token de dispositivo móvil (versión pública para testing)
+    async registrarDeviceTokenPublico(req, res) {
+        try {
+            console.log('📱 === REGISTRO PÚBLICO DE TOKEN FCM ===');
+            
+            const { deviceToken, platform, deviceInfo, clienteDocumento } = req.body;
+
+            if (!deviceToken || !platform || !clienteDocumento) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Token de dispositivo, plataforma y documento de cliente son requeridos',
+                    required: {
+                        deviceToken: 'Token FCM del dispositivo',
+                        platform: 'android',
+                        clienteDocumento: 'Número de documento del cliente'
+                    }
+                });
+            }
+
+            if (!['android'].includes(platform)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Plataforma no válida. Solo se acepta: android'
+                });
+            }
+
+            console.log(`📋 Registrando token para cliente: ${clienteDocumento}`);
+            console.log(`📱 Platform: ${platform}`);
+            console.log(`🔑 Token: ${deviceToken.substring(0, 20)}...`);
+
+            const token = await NotificationService.registrarDeviceToken(
+                null, // clienteId (no requerido para registro público)
+                clienteDocumento,
+                deviceToken,
+                platform,
+                deviceInfo || { public: true, registered: new Date().toISOString() }
+            );
+
+            console.log('✅ Token registrado exitosamente');
+
+            return res.status(200).json({
+                success: true,
+                message: 'Token de dispositivo registrado exitosamente',
+                data: {
+                    tokenId: token._id,
+                    clienteDocumento: token.clienteDocumento,
+                    platform: token.platform,
+                    isActive: token.isActive,
+                    registeredAt: token.createdAt
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Error registrando device token público:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al registrar token de dispositivo',
+                error: error.message
+            });
+        }
+    }
+
     // Obtener notificaciones del cliente
     async obtenerNotificaciones(req, res) {
         try {

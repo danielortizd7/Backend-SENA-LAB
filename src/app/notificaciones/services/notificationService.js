@@ -50,7 +50,9 @@ class NotificationService {
                     projectId: process.env.FIREBASE_PROJECT_ID
                 });
 
-                console.log('Firebase Admin SDK inicializado exitosamente');
+                if (process.env.NODE_ENV !== 'production') {
+                    console.log('Firebase Admin SDK inicializado exitosamente');
+                }
             }
         } catch (error) {
             console.error('Error inicializando Firebase:', error.message);
@@ -82,7 +84,10 @@ class NotificationService {
                 }
             );
 
-            console.log(`Token registrado para cliente ${clienteDocumento}: ${platform}`);
+            // Log solo en desarrollo
+            if (process.env.NODE_ENV !== 'production') {
+                console.log(`Token registrado para cliente ${clienteDocumento}: ${platform}`);
+            }
             return tokenDoc;
         } catch (error) {
             console.error('Error registrando device token:', error);
@@ -130,7 +135,10 @@ class NotificationService {
                 this.enviarWebSocketNotification(clienteIdentificador, notificacion),
             ]);
 
-            console.log(`Notificación enviada para muestra ${muestraId}: ${estadoAnterior} → ${estadoNuevo}`);
+            // Log solo en desarrollo
+            if (process.env.NODE_ENV !== 'production') {
+                console.log(`Notificación enviada para muestra ${muestraId}: ${estadoAnterior} → ${estadoNuevo}`);
+            }
             return notificacion;
 
         } catch (error) {
