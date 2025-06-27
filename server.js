@@ -26,7 +26,7 @@ connectDB();
 
 // Configuración de CORS
 const corsOrigins = process.env.NODE_ENV === 'production' 
-    ? (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean)
+    ? (process.env.ALLOWED_ORIGINS || 'https://aqualab-sena.vercel.app,https://laboratorio-sena.vercel.app,https://web-sena-lab.vercel.app').split(',').filter(Boolean)
     : [
         'http://localhost:5173',  // Frontend en desarrollo local
         'http://localhost:5174',  // Frontend en desarrollo local (puerto alternativo)
@@ -39,21 +39,24 @@ console.log(`🌐 CORS configurado para ${process.env.NODE_ENV || 'development'}
 
 app.use(cors({
     origin: function (origin, callback) {
+        console.log(`🔍 CORS - Origin recibido: "${origin}"`);
+        console.log(`🔍 CORS - NODE_ENV: "${process.env.NODE_ENV}"`);
+        console.log(`🔍 CORS - Orígenes permitidos:`, corsOrigins);
+        
         // En producción, ser más estricto con los orígenes
         if (process.env.NODE_ENV === 'production') {
+            // Permitir requests sin origin (como Postman, apps móviles, etc.)
             if (!origin) {
-                // En producción, solo permitir requests sin origin si están explícitamente configurados
-                if (process.env.ALLOW_NO_ORIGIN === 'true') {
-                    return callback(null, true);
-                } else {
-                    return callback(new Error('Origin requerido en producción'));
-                }
+                console.log('✅ CORS - Permitiendo request sin origin (app móvil/Postman)');
+                return callback(null, true);
             }
             
             if (corsOrigins.includes(origin)) {
+                console.log(`✅ CORS - Origin permitido: ${origin}`);
                 callback(null, true);
             } else {
                 console.log('🚫 Origen bloqueado por CORS en producción:', origin);
+                console.log('🔧 Orígenes permitidos:', corsOrigins);
                 callback(new Error('Origen no permitido por CORS'));
             }
         } else {
