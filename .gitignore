@@ -33,3 +33,21 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Archivos de testing y desarrollo (NO para producción)
+test-notificaciones.js
+verificar-servidor.js
+validar-produccion.js
+PRUEBAS-NOTIFICACIONES.md
+CHECKLIST-PRODUCCION.md
+.gitignore.production
+.env.production.example
+
+# Logs de desarrollo
+*.log
+temp/
+tmp/
+
+# Archivos temporales de testing
+public/excelAuditorias/auditorias_test_*.xlsx
+public/pdfs/muestra_TEST-*.pdf

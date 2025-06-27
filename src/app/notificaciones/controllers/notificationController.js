@@ -528,6 +528,155 @@ socket.connect();
             });
         }
     }
+
+    // ENDPOINT DE PRUEBA LOCAL - Solo para desarrollo
+    async pruebaLocalNotificacion(req, res) {
+        try {
+            console.log('🧪 === PRUEBA LOCAL DE NOTIFICACIONES ===');
+            
+            const { 
+                clienteDocumento = '1235467890',
+                muestraId = 'TEST-' + Date.now(),
+                estadoAnterior = 'En Cotización',
+                estadoNuevo = 'Aceptada',
+                observaciones = 'Prueba local de notificación',
+                testToken = null
+            } = req.body;
+
+            console.log('📋 Parámetros de prueba:');
+            console.log(`   - Cliente Documento: ${clienteDocumento}`);
+            console.log(`   - Muestra ID: ${muestraId}`);
+            console.log(`   - Cambio: ${estadoAnterior} → ${estadoNuevo}`);
+            console.log(`   - Token de prueba: ${testToken ? testToken.substring(0, 20) + '...' : 'No proporcionado'}`);
+
+            // Si se proporciona un token de prueba, registrarlo temporalmente
+            if (testToken) {
+                console.log('🔧 Registrando token de prueba...');
+                await NotificationService.registrarDeviceToken(
+                    null, // clienteId
+                    clienteDocumento,
+                    testToken,
+                    'android',
+                    { device: 'test', version: 'local' }
+                );
+                console.log('✅ Token de prueba registrado');
+            }
+
+            // Buscar tokens existentes para este cliente
+            const tokens = await DeviceToken.find({ 
+                clienteDocumento: clienteDocumento, 
+                isActive: true 
+            });
+            console.log(`🔍 Tokens encontrados para ${clienteDocumento}: ${tokens.length}`);
+            tokens.forEach((token, index) => {
+                console.log(`   ${index + 1}. ${token.platform} - ${token.deviceToken.substring(0, 20)}... (Activo: ${token.isActive})`);
+            });
+
+            if (tokens.length === 0) {
+                console.log('⚠️ No hay tokens activos para este cliente');
+                return res.status(200).json({
+                    success: false,
+                    message: 'No hay tokens FCM registrados para este cliente',
+                    data: {
+                        clienteDocumento,
+                        tokensEncontrados: 0,
+                        sugerencia: 'Registra un token primero usando el endpoint /registrar-token o proporciona testToken en el body'
+                    }
+                });
+            }
+
+            // Enviar notificación de prueba
+            console.log('🚀 Enviando notificación de prueba...');
+            const notificacion = await NotificationService.enviarNotificacionCambioEstado(
+                clienteDocumento,
+                muestraId,
+                estadoAnterior,
+                estadoNuevo,
+                observaciones
+            );
+
+            console.log('✅ Notificación enviada exitosamente');
+            console.log('🧪 === FIN DE PRUEBA LOCAL ===');
+
+            return res.status(200).json({
+                success: true,
+                message: 'Notificación de prueba enviada exitosamente',
+                data: {
+                    notificacionId: notificacion._id,
+                    clienteDocumento,
+                    muestraId,
+                    titulo: notificacion.titulo,
+                    mensaje: notificacion.mensaje,
+                    tokensEncontrados: tokens.length,
+                    timestamp: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Error en prueba local:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error en prueba local de notificación',
+                error: error.message,
+                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+            });
+        }
+    }
+
+    // ENDPOINT PARA VERIFICAR CONFIGURACIÓN DE FIREBASE
+    async verificarConfigFirebase(req, res) {
+        try {
+            console.log('🔍 === VERIFICACIÓN DE CONFIGURACIÓN FIREBASE ===');
+            
+            const firebaseVars = {
+                PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
+                CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
+                PRIVATE_KEY_ID: process.env.FIREBASE_PRIVATE_KEY_ID,
+                HAS_PRIVATE_KEY: !!process.env.FIREBASE_PRIVATE_KEY,
+                CLIENT_ID: process.env.FIREBASE_CLIENT_ID
+            };
+
+            console.log('📋 Variables de entorno Firebase:');
+            Object.entries(firebaseVars).forEach(([key, value]) => {
+                if (key === 'HAS_PRIVATE_KEY') {
+                    console.log(`   ${key}: ${value}`);
+                } else if (value) {
+                    console.log(`   ${key}: ${value.length > 50 ? value.substring(0, 50) + '...' : value}`);
+                } else {
+                    console.log(`   ${key}: ❌ NO CONFIGURADA`);
+                }
+            });
+
+            const missingVars = Object.entries(firebaseVars)
+                .filter(([key, value]) => !value && key !== 'CLIENT_ID')
+                .map(([key]) => key);
+
+            const admin = require('firebase-admin');
+            const isInitialized = admin.apps.length > 0;
+
+            console.log(`🔧 Firebase Admin SDK inicializado: ${isInitialized ? '✅' : '❌'}`);
+            console.log('🔍 === FIN DE VERIFICACIÓN ===');
+
+            return res.status(200).json({
+                success: true,
+                message: 'Verificación de configuración Firebase completada',
+                data: {
+                    isInitialized,
+                    configuredVars: firebaseVars,
+                    missingVars,
+                    status: missingVars.length === 0 ? 'COMPLETA' : 'INCOMPLETA'
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Error verificando configuración:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error verificando configuración Firebase',
+                error: error.message
+            });
+        }
+    }
 }
 
 module.exports = new NotificationController();

@@ -25,24 +25,47 @@ const server = http.createServer(app);
 connectDB();
 
 // Configuración de CORS
-const whitelist = [
-    'http://localhost:5173',  // Frontend en desarrollo local
-    'http://localhost:5174',  // Frontend en desarrollo local (puerto alternativo)
-    'https://laboratorio-sena.vercel.app', // Frontend en producción
-    'https://web-sena-lab.vercel.app', // Frontend en Vercel
-    'https://aqualab-sena.vercel.app' // Frontend en producción (Aqualab)
-];
+const corsOrigins = process.env.NODE_ENV === 'production' 
+    ? (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean)
+    : [
+        'http://localhost:5173',  // Frontend en desarrollo local
+        'http://localhost:5174',  // Frontend en desarrollo local (puerto alternativo)
+        'https://laboratorio-sena.vercel.app', // Frontend en producción
+        'https://web-sena-lab.vercel.app', // Frontend en Vercel
+        'https://aqualab-sena.vercel.app' // Frontend en producción (Aqualab)
+    ];
+
+console.log(`🌐 CORS configurado para ${process.env.NODE_ENV || 'development'}:`, corsOrigins);
 
 app.use(cors({
     origin: function (origin, callback) {
-        // Permitir solicitudes sin origin (como las aplicaciones móviles o postman)
-        if (!origin) return callback(null, true);
-        
-        if (whitelist.includes(origin)) {
-            callback(null, true);
+        // En producción, ser más estricto con los orígenes
+        if (process.env.NODE_ENV === 'production') {
+            if (!origin) {
+                // En producción, solo permitir requests sin origin si están explícitamente configurados
+                if (process.env.ALLOW_NO_ORIGIN === 'true') {
+                    return callback(null, true);
+                } else {
+                    return callback(new Error('Origin requerido en producción'));
+                }
+            }
+            
+            if (corsOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                console.log('🚫 Origen bloqueado por CORS en producción:', origin);
+                callback(new Error('Origen no permitido por CORS'));
+            }
         } else {
-            console.log('Origen bloqueado por CORS:', origin);
-            callback(new Error('No permitido por CORS'));
+            // En desarrollo, permitir solicitudes sin origin (como aplicaciones móviles o postman)
+            if (!origin) return callback(null, true);
+            
+            if (corsOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                console.log('⚠️ Origen no configurado en desarrollo:', origin);
+                callback(null, true); // Permitir en desarrollo
+            }
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -113,6 +136,17 @@ app.use("/api/cambios-estado", cambiosEstadoRoutes);
 app.use("/api/ingreso-resultados", resultadosRoutes);
 app.use("/api/firma-digital", firmaRoutes);
 app.use("/api/auditoria", auditoriaRoutes);
+
+// Rutas públicas de notificaciones (solo en desarrollo)
+if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production') {
+    console.log('⚠️ Modo desarrollo: Endpoints de testing habilitados');
+    app.get("/api/notificaciones/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
+    app.post("/api/notificaciones/test-local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
+} else {
+    console.log('🔒 Modo producción: Endpoints de testing deshabilitados');
+}
+
+// Rutas protegidas de notificaciones
 app.use("/api/notificaciones", verificarToken, notificationRoutes);
 
 // Ruta de prueba
