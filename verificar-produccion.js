@@ -3,9 +3,6 @@
  * Verifica que todas las configuraciones estén listas para despliegue
  */
 
-// Cargar variables de entorno
-require('dotenv').config();
-
 const fs = require('fs');
 const path = require('path');
 
