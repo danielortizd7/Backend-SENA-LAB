@@ -1615,4 +1615,4 @@ if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
     }
 }
 
-module.exports = new NotificationController();
+module.exports = new NotificationController();  //correccion
