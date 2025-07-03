@@ -153,6 +153,10 @@ if (process.env.NODE_ENV !== 'production') {
     app.get("/api/notificaciones-test/firebase-config", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
     app.post("/api/notificaciones-test/limpiar-tokens", require("./src/app/notificaciones/controllers/notificationController").limpiarTokensInvalidos);
     app.get("/api/notificaciones-test/fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
+    app.get("/api/notificaciones-test/diagnostico", require("./src/app/notificaciones/controllers/notificationController").diagnosticoPublicoFCM);
+    app.post("/api/notificaciones-test/probar-token", require("./src/app/notificaciones/controllers/notificationController").probarNotificacionToken);
+    app.post("/api/notificaciones-test/diagnostico-avanzado", require("./src/app/notificaciones/controllers/notificationController").diagnosticoAvanzadoToken);
+    app.get("/api/notificaciones-test/guia-android", require("./src/app/notificaciones/controllers/notificationController").guiaConfiguracionAndroid);
     
     // Rutas de backup para desarrollo
     app.get("/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);

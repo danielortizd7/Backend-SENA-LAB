@@ -873,6 +873,685 @@ socket.connect();
             });
         }
     }
-}
 
-module.exports = new NotificationController();
+    // DIAGNÓSTICO ESPECÍFICO PARA ERROR 404 DE FCM
+    async diagnosticoError404FCM(req, res) {
+        try {
+            console.log('🚨 === DIAGNÓSTICO ERROR 404 FCM ===');
+            
+            const admin = require('firebase-admin');
+            
+            // Verificar si Firebase está inicializado
+            if (admin.apps.length === 0) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Firebase no está inicializado',
+                    data: { initialized: false }
+                });
+            }
+
+            console.log('✅ Firebase está inicializado');
+            
+            const firebaseConfig = {
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKeyId: process.env.FIREBASE_PRIVATE_KEY_ID,
+                hasPrivateKey: !!process.env.FIREBASE_PRIVATE_KEY
+            };
+
+            console.log('📋 Configuración Firebase:');
+            console.log(`   Project ID: ${firebaseConfig.projectId}`);
+            console.log(`   Client Email: ${firebaseConfig.clientEmail}`);
+            console.log(`   Private Key ID: ${firebaseConfig.privateKeyId}`);
+            console.log(`   Has Private Key: ${firebaseConfig.hasPrivateKey}`);
+
+            // Verificar URLs de Firebase
+            const baseUrl = `https://fcm.googleapis.com/v1/projects/${firebaseConfig.projectId}/messages:send`;
+            console.log(`🔗 URL de FCM: ${baseUrl}`);
+
+            // Buscar tokens de prueba
+            const testTokens = await DeviceToken.find({ 
+                isActive: true 
+            }).limit(1);
+
+            if (testTokens.length === 0) {
+                return res.status(200).json({
+                    success: false,
+                    message: 'No hay tokens FCM para probar',
+                    data: {
+                        diagnosis: 'NO_TOKENS',
+                        solution: 'Registra un token FCM primero'
+                    }
+                });
+            }
+
+            const testToken = testTokens[0];
+            console.log(`🧪 Token de prueba: ${testToken.deviceToken.substring(0, 20)}...`);
+
+            // Intentar envío de prueba para diagnosticar el error exacto
+            const messaging = admin.messaging();
+            
+            try {
+                const result = await messaging.send({
+                    token: testToken.deviceToken,
+                    notification: {
+                        title: '🧪 Diagnóstico FCM',
+                        body: 'Probando conectividad FCM...'
+                    },
+                    data: {
+                        type: 'diagnostic',
+                        timestamp: new Date().toISOString()
+                    }
+                });
+
+                console.log('✅ Notificación enviada exitosamente');
+                console.log(`📝 Message ID: ${result}`);
+
+                return res.status(200).json({
+                    success: true,
+                    message: 'FCM funciona correctamente',
+                    data: {
+                        messageId: result,
+                        tokenTested: testToken.deviceToken.substring(0, 20) + '...',
+                        projectId: firebaseConfig.projectId,
+                        diagnosis: 'FCM_WORKING'
+                    }
+                });
+
+            } catch (fcmError) {
+                console.log(`❌ Error FCM: ${fcmError.code}`);
+                console.log(`📝 Mensaje: ${fcmError.message}`);
+                
+                let diagnosis = 'UNKNOWN';
+                let solution = [];
+                
+                if (fcmError.message.includes('404') || 
+                    fcmError.message.includes('/batch') ||
+                    fcmError.message.includes('not found')) {
+                    
+                    diagnosis = 'FCM_API_NOT_ENABLED';
+                    solution = [
+                        '1. Ve a Google Cloud Console',
+                        `2. Abre: https://console.cloud.google.com/apis/library/fcm.googleapis.com?project=${firebaseConfig.projectId}`,
+                        '3. Haz click en "HABILITAR" para Firebase Cloud Messaging API',
+                        '4. Espera 5-10 minutos para que se propague',
+                        '5. Vuelve a intentar enviar notificaciones'
+                    ];
+                    
+                } else if (fcmError.code === 'messaging/invalid-registration-token') {
+                    diagnosis = 'INVALID_TOKEN';
+                    solution = [
+                        '1. El token FCM es inválido o expiró',
+                        '2. Genera un nuevo token en la app Android',
+                        '3. Registra el nuevo token usando /registrar-token'
+                    ];
+                    
+                } else if (fcmError.code === 'messaging/authentication-error') {
+                    diagnosis = 'AUTH_ERROR';
+                    solution = [
+                        '1. Verifica las credenciales de Firebase en .env',
+                        '2. Descarga un nuevo service account key',
+                        '3. Actualiza las variables de entorno'
+                    ];
+                    
+                } else if (fcmError.message.includes('project')) {
+                    diagnosis = 'WRONG_PROJECT';
+                    solution = [
+                        '1. Verifica el Project ID en Firebase Console',
+                        '2. Asegúrate que coincida con FIREBASE_PROJECT_ID en .env',
+                        '3. Verifica que el service account pertenezca al proyecto correcto'
+                    ];
+                }
+
+                return res.status(200).json({
+                    success: false,
+                    message: 'Error en FCM detectado',
+                    data: {
+                        error: fcmError.code,
+                        message: fcmError.message,
+                        diagnosis,
+                        solution,
+                        projectId: firebaseConfig.projectId,
+                        tokenTested: testToken.deviceToken.substring(0, 20) + '...',
+                        fcmUrl: baseUrl
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error('❌ Error en diagnóstico:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error ejecutando diagnóstico',
+                error: error.message
+            });
+        }
+    }
+
+    // GUÍA PASO A PASO PARA SOLUCIONAR ERROR 404
+    async guiaSolucionError404(req, res) {
+        try {
+            const projectId = process.env.FIREBASE_PROJECT_ID;
+            
+            const guia = {
+                problema: 'Error 404 - Firebase Cloud Messaging API no está habilitada',
+                causa: 'La API de FCM no está activada en Google Cloud Console',
+                solucion: {
+                    paso1: {
+                        titulo: '1. Acceder a Google Cloud Console',
+                        url: `https://console.cloud.google.com/apis/library/fcm.googleapis.com?project=${projectId}`,
+                        descripcion: 'Abre este enlace en tu navegador (asegúrate de estar logueado con la cuenta correcta)'
+                    },
+                    paso2: {
+                        titulo: '2. Habilitar Firebase Cloud Messaging API',
+                        accion: 'Haz click en el botón "HABILITAR" o "ENABLE"',
+                        nota: 'Si ya está habilitada, aparecerá "API HABILITADA"'
+                    },
+                    paso3: {
+                        titulo: '3. Esperar propagación',
+                        tiempo: '5-10 minutos',
+                        descripcion: 'La activación puede tardar unos minutos en propagarse'
+                    },
+                    paso4: {
+                        titulo: '4. Verificar estado',
+                        endpoint: '/api/notificaciones/verificar-fcm-api',
+                        descripcion: 'Usa este endpoint para verificar que FCM esté funcionando'
+                    }
+                },
+                verificacion: {
+                    endpoint: `${req.protocol}://${req.get('host')}/api/notificaciones/diagnostico-error-404`,
+                    metodo: 'GET',
+                    descripcion: 'Ejecuta este endpoint para diagnosticar el problema específico'
+                },
+                alternativas: {
+                    webpush: 'Si Firebase sigue fallando, considera usar Web Push API',
+                    websocket: 'Para notificaciones en tiempo real cuando la app está abierta'
+                }
+            };
+
+            return res.status(200).json({
+                success: true,
+                message: 'Guía para solucionar Error 404 de FCM',
+                data: guia
+            });
+
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error generando guía',
+                error: error.message
+            });
+        }
+    }
+
+    // ENDPOINT PÚBLICO PARA DIAGNÓSTICO SIN AUTENTICACIÓN
+    async diagnosticoPublicoFCM(req, res) {
+        try {
+            console.log('🔍 === DIAGNÓSTICO PÚBLICO FCM ===');
+            
+            const admin = require('firebase-admin');
+            
+            // 1. Verificar Firebase
+            const firebaseStatus = {
+                initialized: admin.apps.length > 0,
+                projectId: process.env.FIREBASE_PROJECT_ID || 'NO_CONFIGURADO',
+                hasCredentials: !!(process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
+            };
+
+            console.log('📋 Estado de Firebase:');
+            console.log(`   Inicializado: ${firebaseStatus.initialized}`);
+            console.log(`   Project ID: ${firebaseStatus.projectId}`);
+            console.log(`   Credenciales: ${firebaseStatus.hasCredentials}`);
+
+            // 2. Probar FCM con token falso para verificar API
+            let fcmStatus = { working: false, error: null };
+            
+            if (firebaseStatus.initialized) {
+                try {
+                    const messaging = admin.messaging();
+                    const testToken = 'fakeTokenForAPITest123456789012345678901234567890123456789012345678901234567890';
+                    
+                    await messaging.send({
+                        token: testToken,
+                        notification: {
+                            title: '🧪 Diagnóstico público',
+                            body: 'Probando FCM API...'
+                        }
+                    });
+                    
+                    fcmStatus.working = true;
+                    
+                } catch (fcmError) {
+                    fcmStatus.error = {
+                        code: fcmError.code,
+                        message: fcmError.message,
+                        isAPIError: fcmError.message.includes('404') || fcmError.message.includes('/batch')
+                    };
+                    
+                    // Si es error de token inválido, FCM API funciona
+                    if (fcmError.code === 'messaging/invalid-registration-token' ||
+                        fcmError.code === 'messaging/invalid-argument') {
+                        fcmStatus.working = true;
+                        fcmStatus.error.diagnosis = 'FCM_API_WORKING - Error esperado con token falso';
+                    } else if (fcmError.message.includes('404')) {
+                        fcmStatus.error.diagnosis = 'FCM_API_NOT_ENABLED - Error 404';
+                    }
+                }
+            }
+
+            // 3. Verificar tokens registrados
+            const tokensInfo = await DeviceToken.aggregate([
+                {
+                    $group: {
+                        _id: null,
+                        total: { $sum: 1 },
+                        activos: {
+                            $sum: {
+                                $cond: [{ $eq: ['$isActive', true] }, 1, 0]
+                            }
+                        },
+                        plataformas: { $addToSet: '$platform' }
+                    }
+                }
+            ]);
+
+            const tokens = tokensInfo[0] || { total: 0, activos: 0, plataformas: [] };
+
+            console.log(`📱 Tokens: ${tokens.total} total, ${tokens.activos} activos`);
+
+            // 4. Resultado final
+            const diagnosis = {
+                timestamp: new Date().toISOString(),
+                firebase: firebaseStatus,
+                fcm: fcmStatus,
+                tokens,
+                status: firebaseStatus.initialized && fcmStatus.working ? 'OK' : 'ERROR',
+                nextSteps: []
+            };
+
+            if (!firebaseStatus.initialized) {
+                diagnosis.nextSteps.push('Firebase no está inicializado - verificar credenciales');
+            }
+            
+            if (fcmStatus.error && fcmStatus.error.isAPIError) {
+                diagnosis.nextSteps.push('Habilitar Firebase Cloud Messaging API en Google Cloud Console');
+            }
+            
+            if (tokens.activos === 0) {
+                diagnosis.nextSteps.push('Registrar tokens FCM de dispositivos móviles');
+            }
+
+            console.log(`🎯 Estado general: ${diagnosis.status}`);
+            console.log('🔍 === FIN DIAGNÓSTICO PÚBLICO ===');
+
+            return res.status(200).json({
+                success: true,
+                message: 'Diagnóstico público completado',
+                data: diagnosis
+            });
+
+        } catch (error) {
+            console.error('❌ Error en diagnóstico público:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error ejecutando diagnóstico público',
+                error: error.message
+            });
+        }
+    }
+
+    // ENDPOINT PARA PROBAR NOTIFICACIÓN CON TOKEN ESPECÍFICO (PÚBLICO)
+    async probarNotificacionToken(req, res) {
+        try {
+            console.log('🧪 === PRUEBA DE NOTIFICACIÓN CON TOKEN ===');
+            
+            const { 
+                deviceToken,
+                clienteDocumento = 'TEST_USER',
+                titulo = '🧪 Prueba de notificación',
+                mensaje = 'Esta es una notificación de prueba desde el backend'
+            } = req.body;
+
+            if (!deviceToken) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'deviceToken es requerido',
+                    example: {
+                        deviceToken: 'tu_token_fcm_aqui',
+                        clienteDocumento: '1235467890',
+                        titulo: 'Título personalizado',
+                        mensaje: 'Mensaje personalizado'
+                    }
+                });
+            }
+
+            console.log(`🔑 Token: ${deviceToken.substring(0, 20)}...`);
+            console.log(`👤 Cliente: ${clienteDocumento}`);
+            console.log(`📝 Título: ${titulo}`);
+            console.log(`💬 Mensaje: ${mensaje}`);
+
+            // Registrar token temporalmente si no existe
+            let tokenDoc = await DeviceToken.findOne({ deviceToken });
+            if (!tokenDoc) {
+                console.log('📝 Registrando token temporalmente...');
+                tokenDoc = await NotificationService.registrarDeviceToken(
+                    null, // clienteId
+                    clienteDocumento,
+                    deviceToken,
+                    'android',
+                    { test: true, registered: new Date().toISOString() }
+                );
+                console.log('✅ Token registrado');
+            } else {
+                console.log('📋 Token ya existe en BD');
+            }
+
+            // Enviar notificación directa
+            const admin = require('firebase-admin');
+            const messaging = admin.messaging();
+
+            const message = {
+                token: deviceToken,
+                notification: {
+                    title: titulo,
+                    body: mensaje
+                },
+                data: {
+                    type: 'test',
+                    timestamp: new Date().toISOString(),
+                    clienteDocumento: clienteDocumento
+                },
+                android: {
+                    priority: 'high'
+                }
+            };
+
+            console.log('🚀 Enviando notificación...');
+            const result = await messaging.send(message);
+            console.log(`✅ Notificación enviada: ${result}`);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Notificación enviada exitosamente',
+                data: {
+                    messageId: result,
+                    deviceToken: deviceToken.substring(0, 20) + '...',
+                    clienteDocumento,
+                    titulo,
+                    mensaje,
+                    timestamp: new Date().toISOString()
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Error enviando notificación:', error);
+            
+            let diagnosis = 'UNKNOWN_ERROR';
+            let solution = [];
+
+            if (error.message.includes('404') || error.message.includes('/batch')) {
+                diagnosis = 'FCM_API_NOT_ENABLED';
+                solution = [
+                    'Firebase Cloud Messaging API no está habilitada',
+                    'Ve a Google Cloud Console y habilítala'
+                ];
+            } else if (error.code === 'messaging/invalid-registration-token') {
+                diagnosis = 'INVALID_TOKEN';
+                solution = [
+                    'El token FCM es inválido o expiró',
+                    'Genera un nuevo token en tu app Android'
+                ];
+            } else if (error.code === 'messaging/authentication-error') {
+                diagnosis = 'AUTH_ERROR';
+                solution = [
+                    'Error de autenticación de Firebase',
+                    'Verifica las credenciales en variables de entorno'
+                ];
+            }
+
+            return res.status(500).json({
+                success: false,
+                message: 'Error enviando notificación',
+                error: {
+                    code: error.code,
+                    message: error.message,
+                    diagnosis,
+                    solution
+                }
+            });
+        }
+    }
+
+    // DIAGNÓSTICO AVANZADO DE TOKEN Y CONFIGURACIÓN FIREBASE
+    async diagnosticoAvanzadoToken(req, res) {
+        try {
+            console.log('🔍 === DIAGNÓSTICO AVANZADO DE TOKEN Y FIREBASE ===');
+            
+            const { deviceToken } = req.body;
+            
+            if (!deviceToken) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'deviceToken es requerido para el diagnóstico',
+                    example: {
+                        deviceToken: 'tu_token_fcm_completo_aqui'
+                    }
+                });
+            }
+
+            console.log(`🔑 Analizando token: ${deviceToken.substring(0, 30)}...`);
+
+            const admin = require('firebase-admin');
+            const messaging = admin.messaging();
+            
+            let diagnostico = {
+                timestamp: new Date().toISOString(),
+                token: {
+                    format: 'UNKNOWN',
+                    length: deviceToken.length,
+                    preview: deviceToken.substring(0, 30) + '...'
+                },
+                firebase: {
+                    projectId: process.env.FIREBASE_PROJECT_ID,
+                    configured: true
+                },
+                tests: {
+                    tokenValidation: null,
+                    messageSend: null,
+                    specificErrors: []
+                },
+                recommendations: []
+            };
+
+            // 1. Validar formato del token
+            if (deviceToken.includes(':')) {
+                diagnostico.token.format = 'FCM_LEGACY';
+                console.log('📋 Formato: FCM Legacy Token');
+            } else if (deviceToken.length > 100) {
+                diagnostico.token.format = 'FCM_NEW';
+                console.log('📋 Formato: FCM New Token');
+            } else {
+                diagnostico.token.format = 'INVALID_LENGTH';
+                console.log('⚠️ Formato: Token demasiado corto');
+                diagnostico.recommendations.push('El token parece demasiado corto para ser un token FCM válido');
+            }
+
+            // 2. Probar validación del token
+            try {
+                // Intentar validar token enviando mensaje con validateOnly
+                const dryRunMessage = {
+                    token: deviceToken,
+                    notification: {
+                        title: 'Dry Run Test',
+                        body: 'Validando token FCM'
+                    },
+                    validateOnly: true
+                };
+
+                const dryRunResult = await messaging.send(dryRunMessage);
+                diagnostico.tests.tokenValidation = {
+                    success: true,
+                    result: 'Token válido según Firebase',
+                    messageId: dryRunResult
+                };
+                console.log('✅ Token validado correctamente (dry run)');
+                
+            } catch (validationError) {
+                diagnostico.tests.tokenValidation = {
+                    success: false,
+                    error: validationError.code,
+                    message: validationError.message
+                };
+                console.log(`❌ Error validando token: ${validationError.code}`);
+                
+                if (validationError.code === 'messaging/invalid-registration-token') {
+                    diagnostico.recommendations.push('Token FCM inválido o expirado. Regenera el token en la app Android.');
+                } else if (validationError.code === 'messaging/registration-token-not-registered') {
+                    diagnostico.recommendations.push('Token no registrado. Verifica que la app esté conectada al proyecto Firebase correcto.');
+                }
+            }
+
+            // 3. Probar envío real de mensaje
+            try {
+                const realMessage = {
+                    token: deviceToken,
+                    notification: {
+                        title: '🧪 Diagnóstico Avanzado',
+                        body: 'Si recibes esta notificación, el problema está en la configuración de la app Android'
+                    },
+                    data: {
+                        type: 'diagnostic_advanced',
+                        timestamp: new Date().toISOString(),
+                        backend_status: 'working'
+                    },
+                    android: {
+                        priority: 'high',
+                        notification: {
+                            channel_id: 'default',
+                            sound: 'default',
+                            click_action: 'FLUTTER_NOTIFICATION_CLICK'
+                        }
+                    }
+                };
+
+                const realResult = await messaging.send(realMessage);
+                diagnostico.tests.messageSend = {
+                    success: true,
+                    messageId: realResult,
+                    status: 'Mensaje enviado exitosamente'
+                };
+                console.log(`✅ Mensaje real enviado: ${realResult}`);
+                
+            } catch (sendError) {
+                diagnostico.tests.messageSend = {
+                    success: false,
+                    error: sendError.code,
+                    message: sendError.message
+                };
+                console.log(`❌ Error enviando mensaje real: ${sendError.code}`);
+                
+                diagnostico.tests.specificErrors.push({
+                    step: 'message_send',
+                    error: sendError.code,
+                    description: sendError.message
+                });
+            }
+
+            // 4. Verificar token en base de datos
+            const tokenInDB = await DeviceToken.findOne({ deviceToken });
+            diagnostico.database = {
+                found: !!tokenInDB,
+                isActive: tokenInDB?.isActive || false,
+                clienteDocumento: tokenInDB?.clienteDocumento || 'No encontrado',
+                lastUsed: tokenInDB?.lastUsed || 'Nunca',
+                platform: tokenInDB?.platform || 'No especificado'
+            };
+
+            // 5. Generar recomendaciones específicas
+            if (diagnostico.tests.tokenValidation?.success && diagnostico.tests.messageSend?.success) {
+                diagnostico.recommendations.push('✅ Backend funciona correctamente. El problema está en la app Android:');
+                diagnostico.recommendations.push('1. Verifica que la app tenga permisos de notificaciones');
+                diagnostico.recommendations.push('2. Asegúrate que google-services.json corresponda al proyecto correcto');
+                diagnostico.recommendations.push('3. Verifica que FirebaseMessagingService esté implementado');
+                diagnostico.recommendations.push('4. Revisa que no haya filtros de notificaciones en el dispositivo');
+                diagnostico.recommendations.push('5. Prueba en otro dispositivo Android');
+            }
+
+            console.log('🔍 === FIN DE DIAGNÓSTICO AVANZADO ===');
+
+            return res.status(200).json({
+                success: true,
+                message: 'Diagnóstico avanzado completado',
+                data: diagnostico
+            });
+
+        } catch (error) {
+            console.error('❌ Error en diagnóstico avanzado:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error ejecutando diagnóstico avanzado',
+                error: error.message
+            });
+        }
+    }
+
+    // GUÍA PARA VERIFICAR CONFIGURACIÓN ANDROID
+    async guiaConfiguracionAndroid(req, res) {
+        try {
+            const guia = {
+                problema: 'Notificaciones no llegan a la app Android',
+                diagnostico: 'Backend funciona correctamente, revisar configuración Android',
+                verificaciones: {
+                    paso1: {
+                        titulo: '1. Verificar permisos de notificaciones',
+                        descripcion: 'En Android: Configuración > Apps > Tu App > Notificaciones',
+                        accion: 'Asegúrate que las notificaciones estén habilitadas'
+                    },
+                    paso2: {
+                        titulo: '2. Verificar google-services.json',
+                        descripcion: 'El archivo debe estar en app/google-services.json',
+                        verificar: [
+                            'project_id debe ser: aqualab-83795',
+                            'package_name debe coincidir con tu app',
+                            'Archivo debe estar en la carpeta correcta'
+                        ]
+                    },
+                    paso3: {
+                        titulo: '3. Verificar FirebaseMessagingService',
+                        codigo: `
+public class MyFirebaseMessagingService extends FirebaseMessagingService {
+    @Override
+    public void onMessageReceived(RemoteMessage remoteMessage) {
+        Log.d("FCM", "Mensaje recibido: " + remoteMessage.getNotification().getTitle());
+        
+        // Mostrar notificación
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "default")
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(remoteMessage.getNotification().getTitle())
+            .setContentText(remoteMessage.getNotification().getBody())
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true);
+            
+        NotificationManager notificationManager = 
+            (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        notificationManager.notify(0, builder.build());
+    }
+    
+    @Override
+    public void onNewToken(String token) {
+        Log.d("FCM", "Nuevo token: " + token);
+        // Enviar nuevo token al backend
+        sendTokenToServer(token);
+    }
+}`,
+                        manifest: `
+<service
+    android:name=".MyFirebaseMessagingService"
+    android:exported="false">
+    <intent-filter>
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+    </intent-filter>
+</service>`
+                    },
+                    paso4: {
+                        titulo: '4. Verificar canal de notificaciones (Android 8+)',
