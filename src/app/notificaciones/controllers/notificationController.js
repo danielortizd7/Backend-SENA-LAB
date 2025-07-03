@@ -1555,3 +1555,64 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                     },
                     paso4: {
                         titulo: '4. Verificar canal de notificaciones (Android 8+)',
+                        descripcion: 'Para Android 8.0 (API 26) en adelante',
+                        codigo: `
+if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    NotificationChannel channel = new NotificationChannel(
+        "default",
+        "Canal por defecto",
+        NotificationManager.IMPORTANCE_HIGH
+    );
+    NotificationManager notificationManager = getSystemService(NotificationManager.class);
+    notificationManager.createNotificationChannel(channel);
+}`
+                    },
+                    paso5: {
+                        titulo: '5. Verificar logs de Android',
+                        descripcion: 'Revisar LogCat con filtros:',
+                        filtros: [
+                            'TAG: FCM',
+                            'TAG: FirebaseMessaging',
+                            'Package: com.google.firebase'
+                        ]
+                    },
+                    paso6: {
+                        titulo: '6. Probar token manualmente',
+                        url: `${req.protocol}://${req.get('host')}/api/notificaciones/probar-token`,
+                        metodo: 'POST',
+                        body: {
+                            token: 'TU_TOKEN_FCM_AQUI',
+                            titulo: 'Prueba manual',
+                            mensaje: 'Mensaje de prueba'
+                        }
+                    }
+                },
+                comandos_utiles: {
+                    obtener_token: 'FirebaseMessaging.getInstance().getToken()',
+                    logs_firebase: 'adb logcat | grep Firebase',
+                    logs_fcm: 'adb logcat | grep FCM'
+                },
+                contacto: {
+                    backend_status: `${req.protocol}://${req.get('host')}/api/notificaciones/diagnostico`,
+                    documentacion: 'Revisar TESTING-ANDROID-PRODUCCION.md para más detalles'
+                }
+            };
+
+            return res.status(200).json({
+                success: true,
+                message: 'Guía de configuración Android',
+                data: guia
+            });
+
+        } catch (error) {
+            console.error('❌ Error en guía Android:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error obteniendo guía Android',
+                error: error.message
+            });
+        }
+    }
+}
+
+module.exports = new NotificationController();
