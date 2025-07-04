@@ -176,6 +176,14 @@ class NotificationService {
             console.log(`📱 Encontrados ${deviceTokens.length} dispositivos activos para cliente ${clienteId}`);
             deviceTokens.forEach(dt => {
                 console.log(`   - Dispositivo: ${dt.platform} (${dt.deviceToken.substring(0, 20)}...)`);
+                // En producción, mostrar más información del token para debugging
+                if (process.env.NODE_ENV === 'production') {
+                    console.log(`   - Token ID: ${dt._id}`);
+                    console.log(`   - Token length: ${dt.deviceToken.length}`);
+                    console.log(`   - Token valid format: ${dt.deviceToken.includes(':APA91b') ? 'YES' : 'NO'}`);
+                    console.log(`   - Cliente Doc: ${dt.clienteDocumento}`);
+                    console.log(`   - Created: ${dt.createdAt}`);
+                }
             });
 
             const tokens = deviceTokens.map(dt => dt.deviceToken);

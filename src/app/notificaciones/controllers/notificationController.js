@@ -78,6 +78,38 @@ class NotificationController {
                 });
             }
 
+            // ✅ VALIDACIÓN DE LONGITUD DE TOKEN FCM
+            if (deviceToken.length < 140) {
+                console.log(`❌ Token incompleto detectado: ${deviceToken.length} caracteres`);
+                console.log(`🔑 Token recibido: ${deviceToken}`);
+                return res.status(400).json({
+                    success: false,
+                    message: 'Token FCM incompleto. Los tokens válidos deben tener al menos 140 caracteres',
+                    data: {
+                        tokenLength: deviceToken.length,
+                        minimumRequired: 140,
+                        tokenReceived: deviceToken,
+                        error: 'TOKEN_INCOMPLETO',
+                        solution: 'Regenerar token FCM en la app Android'
+                    }
+                });
+            }
+
+            // ✅ VALIDACIÓN DE FORMATO DE TOKEN FCM
+            if (!deviceToken.includes(':APA91b')) {
+                console.log(`❌ Token con formato inválido: ${deviceToken}`);
+                return res.status(400).json({
+                    success: false,
+                    message: 'Token FCM con formato inválido. Debe contener ":APA91b"',
+                    data: {
+                        tokenLength: deviceToken.length,
+                        tokenReceived: deviceToken,
+                        error: 'TOKEN_FORMATO_INVALIDO',
+                        solution: 'Regenerar token FCM en la app Android'
+                    }
+                });
+            }
+
             console.log(`📋 Registrando token para cliente: ${clienteDocumento}`);
             console.log(`📱 Platform: ${platform}`);
             console.log(`🔑 Token: ${deviceToken.substring(0, 20)}...`);
@@ -1322,293 +1354,67 @@ socket.connect();
         }
     }
 
-    // DIAGNÓSTICO AVANZADO DE TOKEN Y CONFIGURACIÓN FIREBASE
-    async diagnosticoAvanzadoToken(req, res) {
+    // OBTENER TOKENS DE CLIENTE ESPECÍFICO (PARA DEBUG)
+    async obtenerTokensCliente(req, res) {
         try {
-            console.log('🔍 === DIAGNÓSTICO AVANZADO DE TOKEN Y FIREBASE ===');
+            const { clienteDocumento } = req.params;
             
-            const { deviceToken } = req.body;
+            console.log(`🔍 === OBTENIENDO TOKENS PARA CLIENTE: ${clienteDocumento} ===`);
             
-            if (!deviceToken) {
-                return res.status(400).json({
+            // Buscar todos los tokens del cliente (activos e inactivos)
+            const tokens = await DeviceToken.find({ 
+                clienteDocumento: clienteDocumento 
+            }).sort({ createdAt: -1 });
+            
+            if (tokens.length === 0) {
+                return res.status(404).json({
                     success: false,
-                    message: 'deviceToken es requerido para el diagnóstico',
-                    example: {
-                        deviceToken: 'tu_token_fcm_completo_aqui'
-                    }
+                    message: `No se encontraron tokens para cliente ${clienteDocumento}`,
+                    data: { clienteDocumento, tokensFound: 0 }
                 });
             }
-
-            console.log(`🔑 Analizando token: ${deviceToken.substring(0, 30)}...`);
-
-            const admin = require('firebase-admin');
-            const messaging = admin.messaging();
             
-            let diagnostico = {
-                timestamp: new Date().toISOString(),
-                token: {
-                    format: 'UNKNOWN',
-                    length: deviceToken.length,
-                    preview: deviceToken.substring(0, 30) + '...'
-                },
-                firebase: {
-                    projectId: process.env.FIREBASE_PROJECT_ID,
-                    configured: true
-                },
-                tests: {
-                    tokenValidation: null,
-                    messageSend: null,
-                    specificErrors: []
-                },
-                recommendations: []
+            // Formatear información de tokens
+            const tokensInfo = tokens.map(token => ({
+                id: token._id,
+                clienteDocumento: token.clienteDocumento,
+                platform: token.platform,
+                isActive: token.isActive,
+                tokenPreview: token.deviceToken.substring(0, 30) + '...',
+                tokenLength: token.deviceToken.length,
+                validFormat: token.deviceToken.includes(':APA91b'),
+                createdAt: token.createdAt,
+                lastUsed: token.lastUsed,
+                deviceInfo: token.deviceInfo
+            }));
+            
+            const summary = {
+                clienteDocumento,
+                totalTokens: tokens.length,
+                activeTokens: tokens.filter(t => t.isActive).length,
+                inactiveTokens: tokens.filter(t => !t.isActive).length,
+                platforms: [...new Set(tokens.map(t => t.platform))],
+                latestToken: tokensInfo[0]
             };
-
-            // 1. Validar formato del token
-            if (deviceToken.includes(':')) {
-                diagnostico.token.format = 'FCM_LEGACY';
-                console.log('📋 Formato: FCM Legacy Token');
-            } else if (deviceToken.length > 100) {
-                diagnostico.token.format = 'FCM_NEW';
-                console.log('📋 Formato: FCM New Token');
-            } else {
-                diagnostico.token.format = 'INVALID_LENGTH';
-                console.log('⚠️ Formato: Token demasiado corto');
-                diagnostico.recommendations.push('El token parece demasiado corto para ser un token FCM válido');
-            }
-
-            // 2. Probar validación del token
-            try {
-                // Intentar validar token enviando mensaje con validateOnly
-                const dryRunMessage = {
-                    token: deviceToken,
-                    notification: {
-                        title: 'Dry Run Test',
-                        body: 'Validando token FCM'
-                    },
-                    validateOnly: true
-                };
-
-                const dryRunResult = await messaging.send(dryRunMessage);
-                diagnostico.tests.tokenValidation = {
-                    success: true,
-                    result: 'Token válido según Firebase',
-                    messageId: dryRunResult
-                };
-                console.log('✅ Token validado correctamente (dry run)');
-                
-            } catch (validationError) {
-                diagnostico.tests.tokenValidation = {
-                    success: false,
-                    error: validationError.code,
-                    message: validationError.message
-                };
-                console.log(`❌ Error validando token: ${validationError.code}`);
-                
-                if (validationError.code === 'messaging/invalid-registration-token') {
-                    diagnostico.recommendations.push('Token FCM inválido o expirado. Regenera el token en la app Android.');
-                } else if (validationError.code === 'messaging/registration-token-not-registered') {
-                    diagnostico.recommendations.push('Token no registrado. Verifica que la app esté conectada al proyecto Firebase correcto.');
-                }
-            }
-
-            // 3. Probar envío real de mensaje
-            try {
-                const realMessage = {
-                    token: deviceToken,
-                    notification: {
-                        title: '🧪 Diagnóstico Avanzado',
-                        body: 'Si recibes esta notificación, el problema está en la configuración de la app Android'
-                    },
-                    data: {
-                        type: 'diagnostic_advanced',
-                        timestamp: new Date().toISOString(),
-                        backend_status: 'working'
-                    },
-                    android: {
-                        priority: 'high',
-                        notification: {
-                            channel_id: 'default',
-                            sound: 'default',
-                            click_action: 'FLUTTER_NOTIFICATION_CLICK'
-                        }
-                    }
-                };
-
-                const realResult = await messaging.send(realMessage);
-                diagnostico.tests.messageSend = {
-                    success: true,
-                    messageId: realResult,
-                    status: 'Mensaje enviado exitosamente'
-                };
-                console.log(`✅ Mensaje real enviado: ${realResult}`);
-                
-            } catch (sendError) {
-                diagnostico.tests.messageSend = {
-                    success: false,
-                    error: sendError.code,
-                    message: sendError.message
-                };
-                console.log(`❌ Error enviando mensaje real: ${sendError.code}`);
-                
-                diagnostico.tests.specificErrors.push({
-                    step: 'message_send',
-                    error: sendError.code,
-                    description: sendError.message
-                });
-            }
-
-            // 4. Verificar token en base de datos
-            const tokenInDB = await DeviceToken.findOne({ deviceToken });
-            diagnostico.database = {
-                found: !!tokenInDB,
-                isActive: tokenInDB?.isActive || false,
-                clienteDocumento: tokenInDB?.clienteDocumento || 'No encontrado',
-                lastUsed: tokenInDB?.lastUsed || 'Nunca',
-                platform: tokenInDB?.platform || 'No especificado'
-            };
-
-            // 5. Generar recomendaciones específicas
-            if (diagnostico.tests.tokenValidation?.success && diagnostico.tests.messageSend?.success) {
-                diagnostico.recommendations.push('✅ Backend funciona correctamente. El problema está en la app Android:');
-                diagnostico.recommendations.push('1. Verifica que la app tenga permisos de notificaciones');
-                diagnostico.recommendations.push('2. Asegúrate que google-services.json corresponda al proyecto correcto');
-                diagnostico.recommendations.push('3. Verifica que FirebaseMessagingService esté implementado');
-                diagnostico.recommendations.push('4. Revisa que no haya filtros de notificaciones en el dispositivo');
-                diagnostico.recommendations.push('5. Prueba en otro dispositivo Android');
-            }
-
-            console.log('🔍 === FIN DE DIAGNÓSTICO AVANZADO ===');
-
+            
+            console.log(`📱 Encontrados ${tokens.length} tokens para ${clienteDocumento}`);
+            console.log(`   - Activos: ${summary.activeTokens}`);
+            console.log(`   - Inactivos: ${summary.inactiveTokens}`);
+            
             return res.status(200).json({
                 success: true,
-                message: 'Diagnóstico avanzado completado',
-                data: diagnostico
-            });
-
-        } catch (error) {
-            console.error('❌ Error en diagnóstico avanzado:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Error ejecutando diagnóstico avanzado',
-                error: error.message
-            });
-        }
-    }
-
-    // GUÍA PARA VERIFICAR CONFIGURACIÓN ANDROID
-    async guiaConfiguracionAndroid(req, res) {
-        try {
-            const guia = {
-                problema: 'Notificaciones no llegan a la app Android',
-                diagnostico: 'Backend funciona correctamente, revisar configuración Android',
-                verificaciones: {
-                    paso1: {
-                        titulo: '1. Verificar permisos de notificaciones',
-                        descripcion: 'En Android: Configuración > Apps > Tu App > Notificaciones',
-                        accion: 'Asegúrate que las notificaciones estén habilitadas'
-                    },
-                    paso2: {
-                        titulo: '2. Verificar google-services.json',
-                        descripcion: 'El archivo debe estar en app/google-services.json',
-                        verificar: [
-                            'project_id debe ser: aqualab-83795',
-                            'package_name debe coincidir con tu app',
-                            'Archivo debe estar en la carpeta correcta'
-                        ]
-                    },
-                    paso3: {
-                        titulo: '3. Verificar FirebaseMessagingService',
-                        codigo: `
-public class MyFirebaseMessagingService extends FirebaseMessagingService {
-    @Override
-    public void onMessageReceived(RemoteMessage remoteMessage) {
-        Log.d("FCM", "Mensaje recibido: " + remoteMessage.getNotification().getTitle());
-        
-        // Mostrar notificación
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "default")
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(remoteMessage.getNotification().getTitle())
-            .setContentText(remoteMessage.getNotification().getBody())
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true);
-            
-        NotificationManager notificationManager = 
-            (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        notificationManager.notify(0, builder.build());
-    }
-    
-    @Override
-    public void onNewToken(String token) {
-        Log.d("FCM", "Nuevo token: " + token);
-        // Enviar nuevo token al backend
-        sendTokenToServer(token);
-    }
-}`,
-                        manifest: `
-<service
-    android:name=".MyFirebaseMessagingService"
-    android:exported="false">
-    <intent-filter>
-        <action android:name="com.google.firebase.MESSAGING_EVENT" />
-    </intent-filter>
-</service>`
-                    },
-                    paso4: {
-                        titulo: '4. Verificar canal de notificaciones (Android 8+)',
-                        descripcion: 'Para Android 8.0 (API 26) en adelante',
-                        codigo: `
-if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-    NotificationChannel channel = new NotificationChannel(
-        "default",
-        "Canal por defecto",
-        NotificationManager.IMPORTANCE_HIGH
-    );
-    NotificationManager notificationManager = getSystemService(NotificationManager.class);
-    notificationManager.createNotificationChannel(channel);
-}`
-                    },
-                    paso5: {
-                        titulo: '5. Verificar logs de Android',
-                        descripcion: 'Revisar LogCat con filtros:',
-                        filtros: [
-                            'TAG: FCM',
-                            'TAG: FirebaseMessaging',
-                            'Package: com.google.firebase'
-                        ]
-                    },
-                    paso6: {
-                        titulo: '6. Probar token manualmente',
-                        url: `${req.protocol}://${req.get('host')}/api/notificaciones/probar-token`,
-                        metodo: 'POST',
-                        body: {
-                            token: 'TU_TOKEN_FCM_AQUI',
-                            titulo: 'Prueba manual',
-                            mensaje: 'Mensaje de prueba'
-                        }
-                    }
-                },
-                comandos_utiles: {
-                    obtener_token: 'FirebaseMessaging.getInstance().getToken()',
-                    logs_firebase: 'adb logcat | grep Firebase',
-                    logs_fcm: 'adb logcat | grep FCM'
-                },
-                contacto: {
-                    backend_status: `${req.protocol}://${req.get('host')}/api/notificaciones/diagnostico`,
-                    documentacion: 'Revisar TESTING-ANDROID-PRODUCCION.md para más detalles'
+                message: `Tokens encontrados para cliente ${clienteDocumento}`,
+                data: {
+                    summary,
+                    tokens: tokensInfo
                 }
-            };
-
-            return res.status(200).json({
-                success: true,
-                message: 'Guía de configuración Android',
-                data: guia
             });
-
+            
         } catch (error) {
-            console.error('❌ Error en guía Android:', error);
+            console.error('❌ Error obteniendo tokens de cliente:', error);
             return res.status(500).json({
                 success: false,
-                message: 'Error obteniendo guía Android',
+                message: 'Error interno del servidor',
                 error: error.message
             });
         }
