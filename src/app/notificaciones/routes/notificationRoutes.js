@@ -300,4 +300,9 @@ router.post('/validar-token-produccion',
     }
 );
 
+// Ruta para diagnóstico específico de Firebase en producción
+router.get('/diagnostico-firebase-produccion',
+    notificationController.diagnosticoFirebaseProduccion
+);
+
 module.exports = router;

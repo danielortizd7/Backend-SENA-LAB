@@ -1,4 +1,4 @@
-// Test de importación del controlador final
+// Test de importación del controlador
 try {
     const notificationController = require('./src/app/notificaciones/controllers/notificationController');
     
