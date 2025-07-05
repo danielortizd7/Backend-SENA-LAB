@@ -5,7 +5,7 @@ console.log('🔍 VERIFICAR CLAVE PRIVADA EN PRODUCCIÓN');
 console.log('=========================================');
 
 // URL de tu backend en Render
-const BACKEND_URL = 'https://backend-sena-lab.onrender.com';
+const BACKEND_URL = 'https://backend-registro-muestras.onrender.com';
 
 // Función para hacer petición HTTP
 function makeRequest(url) {

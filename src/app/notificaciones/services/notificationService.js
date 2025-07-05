@@ -20,19 +20,36 @@ class NotificationService {
             // Solo inicializar si no está ya inicializado
             if (!admin.apps.length) {
                 // Verificar variables de entorno requeridas
-                const requiredVars = ['FIREBASE_PROJECT_ID', 'FIREBASE_PRIVATE_KEY', 'FIREBASE_CLIENT_EMAIL'];
+                const requiredVars = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL'];
                 const missingVars = requiredVars.filter(varName => !process.env[varName]);
+                
+                // Verificar que tengamos al menos una forma de obtener la private key
+                if (!process.env.FIREBASE_PRIVATE_KEY_BASE64 && !process.env.FIREBASE_PRIVATE_KEY) {
+                    missingVars.push('FIREBASE_PRIVATE_KEY_BASE64 o FIREBASE_PRIVATE_KEY');
+                }
                 
                 if (missingVars.length > 0) {
                     throw new Error(`Variables de entorno faltantes: ${missingVars.join(', ')}`);
                 }
 
                 // Configuración desde variables de entorno
+                // Configuración mejorada para Firebase con soporte para Base64
+                let privateKey;
+                if (process.env.FIREBASE_PRIVATE_KEY_BASE64) {
+                    // Usar formato Base64 (más confiable para Render)
+                    privateKey = Buffer.from(process.env.FIREBASE_PRIVATE_KEY_BASE64, 'base64').toString('utf8');
+                    console.log('🔧 Usando FIREBASE_PRIVATE_KEY_BASE64');
+                } else {
+                    // Usar formato tradicional con escape de caracteres
+                    privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+                    console.log('🔧 Usando FIREBASE_PRIVATE_KEY tradicional');
+                }
+
                 const serviceAccount = {
                     type: "service_account",
                     project_id: process.env.FIREBASE_PROJECT_ID,
                     private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-                    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+                    private_key: privateKey,
                     client_email: process.env.FIREBASE_CLIENT_EMAIL,
                     client_id: process.env.FIREBASE_CLIENT_ID,
                     auth_uri: "https://accounts.google.com/o/oauth2/auth",
@@ -42,7 +59,10 @@ class NotificationService {
                 console.log('🔧 Configurando Firebase con project_id:', process.env.FIREBASE_PROJECT_ID);
                 console.log('🔧 Client email:', process.env.FIREBASE_CLIENT_EMAIL);
                 console.log('🔧 Private key ID:', process.env.FIREBASE_PRIVATE_KEY_ID);
-                console.log('🔧 Private key present:', !!process.env.FIREBASE_PRIVATE_KEY);
+                console.log('🔧 Private key present:', !!privateKey);
+                console.log('🔧 Private key length:', privateKey?.length);
+                console.log('🔧 Private key starts with BEGIN:', privateKey?.startsWith('-----BEGIN PRIVATE KEY-----'));
+                console.log('🔧 Private key ends with END:', privateKey?.endsWith('-----END PRIVATE KEY-----'));
                 console.log('🔧 Client ID:', process.env.FIREBASE_CLIENT_ID);
 
                 admin.initializeApp({
