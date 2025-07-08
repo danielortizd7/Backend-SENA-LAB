@@ -14,7 +14,6 @@ const resultadosRoutes = require('./src/app/ingreso-resultados/routes/resultadoR
 const firmaRoutes = require("./src/app/firma-digital/routes/firmaRoutes.js");
 const auditoriaRoutes = require("./src/app/auditoria/routes/auditoriaRoutes.js");
 const notificationRoutes = require("./src/app/notificaciones/routes/notificationRoutes.js");
-const debugRoutes = require("./src/routes/debug.js");
 
 const { verificarToken, login } = require('./src/shared/middleware/authMiddleware');
 
@@ -147,9 +146,6 @@ app.use("/api/notificaciones", verificarToken, notificationRoutes);
 // Endpoints públicos de notificaciones (disponibles en todas las configuraciones)
 app.post("/api/notificaciones-test/register-device", require("./src/app/notificaciones/controllers/notificationController").registrarDeviceTokenPublico);
 app.post("/api/notificaciones-test/local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
-
-// Rutas de debug (disponibles según configuración)
-app.use("/api/debug", debugRoutes);
 
 // Solo en desarrollo: endpoints adicionales de diagnóstico
 if (process.env.NODE_ENV !== 'production') {

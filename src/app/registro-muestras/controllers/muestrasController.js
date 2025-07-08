@@ -824,46 +824,8 @@ const actualizarMuestra = async (req, res, next) => {
             }
         }
 
-        // *** NUEVA LÓGICA: Detectar cambios de estado y enviar notificaciones ***
-        let cambioDeEstado = false;
-        let estadoAnterior = null;
-
-        // Si se está cambiando el estado, obtener el estado anterior
-        if (datosActualizacion.estado) {
-            try {
-                const muestraActual = await muestrasService.obtenerMuestra(id);
-                if (muestraActual && muestraActual.estado !== datosActualizacion.estado) {
-                    cambioDeEstado = true;
-                    estadoAnterior = muestraActual.estado;
-                    console.log(`🔄 [ACTUALIZAR_MUESTRA] Cambio de estado detectado: ${estadoAnterior} → ${datosActualizacion.estado}`);
-                }
-            } catch (error) {
-                console.error('[ACTUALIZAR_MUESTRA] Error al obtener estado anterior:', error.message);
-            }
-        }
-
         // Usar el servicio para actualizar la muestra
         const muestra = await muestrasService.actualizarMuestra(id, datosActualizacion, usuario);
-
-        // *** Si hubo cambio de estado, enviar notificación ***
-        if (cambioDeEstado) {
-            try {
-                console.log(`🔔 [ACTUALIZAR_MUESTRA] Enviando notificación para cambio de estado`);
-                const { enviarNotificacionCambioEstado } = require('../../notificaciones/services/notificationService');
-                
-                await enviarNotificacionCambioEstado(
-                    muestra.cliente.documento,
-                    muestra.id_muestra,
-                    estadoAnterior,
-                    datosActualizacion.estado,
-                    datosActualizacion.observaciones || `Cambio de estado a ${datosActualizacion.estado}`
-                );
-                console.log(`✅ [ACTUALIZAR_MUESTRA] Notificación enviada exitosamente`);
-            } catch (error) {
-                console.error('[ACTUALIZAR_MUESTRA] Error al enviar notificación:', error.message);
-                // No fallar la actualización por error en notificación
-            }
-        }
 
         // Formatear la respuesta
         const respuesta = {
