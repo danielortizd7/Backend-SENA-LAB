@@ -145,6 +145,31 @@ const registrarResultado = async (req, res) => {
 
         try {
             await muestra.save();
+            
+            // Enviar notificación de cambio de estado
+            setImmediate(async () => {
+                try {
+                    const NotificationService = require('../../notificaciones/services/notificationService');
+                    
+                    // Usar el identificador de cliente correcto
+                    const clienteIdentificador = muestra.cliente.documento || muestra.cliente._id;
+                    
+                    console.log(`📨 Enviando notificación de cambio de estado (En análisis):`);
+                    console.log(`   - Cliente: ${muestra.cliente.nombre} (${clienteIdentificador})`);
+                    console.log(`   - Muestra: ${muestra.id_muestra}`);
+                    console.log(`   - Cambio: ${estadoAnterior} → En análisis`);
+
+                    await NotificationService.enviarNotificacionCambioEstado(
+                        clienteIdentificador,
+                        muestra.id_muestra,
+                        estadoAnterior,
+                        "En análisis",
+                        "Su muestra ha comenzado el proceso de análisis en laboratorio"
+                    );
+                } catch (error) {
+                    console.error('Error enviando notificación de cambio de estado:', error.message);
+                }
+            });
         } catch (error) {
             console.error('Error al guardar la muestra:', error);
             return res.status(400).json({
@@ -714,6 +739,31 @@ const verificarResultado = async (req, res) => {
                 resultado.save(),
                 muestra.save()
             ]);
+            
+            // Enviar notificación de cambio de estado
+            setImmediate(async () => {
+                try {
+                    const NotificationService = require('../../notificaciones/services/notificationService');
+                    
+                    // Usar el identificador de cliente correcto
+                    const clienteIdentificador = muestra.cliente.documento || muestra.cliente._id;
+                    
+                    console.log(`📨 Enviando notificación de cambio de estado (Finalizada):`);
+                    console.log(`   - Cliente: ${muestra.cliente.nombre} (${clienteIdentificador})`);
+                    console.log(`   - Muestra: ${muestra.id_muestra}`);
+                    console.log(`   - Cambio: ${estadoAnterior} → Finalizada`);
+
+                    await NotificationService.enviarNotificacionCambioEstado(
+                        clienteIdentificador,
+                        muestra.id_muestra,
+                        estadoAnterior,
+                        "Finalizada",
+                        "¡Los resultados de su muestra están listos! Puede descargar el informe completo."
+                    );
+                } catch (error) {
+                    console.error('Error enviando notificación de cambio de estado:', error.message);
+                }
+            });
         } catch (error) {
             console.error('Error al guardar los cambios:', error);
             return res.status(400).json({
