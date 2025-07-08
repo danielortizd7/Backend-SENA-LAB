@@ -862,8 +862,9 @@ const actualizarMuestra = async (req, res, next) => {
             }
         }
 
-        // Usar el servicio para actualizar la muestra
-        const estadoAnterior = muestra.estado; // Guardar estado anterior antes de actualizar
+        // Obtener la muestra actual para comparar el estado
+        const muestraActual = await muestrasService.obtenerMuestra(id);
+        const estadoAnterior = muestraActual.estado; // Guardar estado anterior antes de actualizar
         const muestraActualizada = await muestrasService.actualizarMuestra(id, datosActualizacion, usuario);
 
         // Enviar notificación si hubo cambio de estado
@@ -924,9 +925,9 @@ const actualizarMuestra = async (req, res, next) => {
                     fechaCambio: formatearFechaHora(h.fechaCambio),
                     observaciones: h.observaciones
                 })) : [],
-            createdAt: formatearFechaHora(muestra.createdAt),
-            updatedAt: formatearFechaHora(muestra.updatedAt),
-            precioTotal: formatearPrecioCOP(muestra.precioTotal)
+            createdAt: formatearFechaHora(muestraActualizada.createdAt),
+            updatedAt: formatearFechaHora(muestraActualizada.updatedAt),
+            precioTotal: formatearPrecioCOP(muestraActualizada.precioTotal)
         };
 
         // Registrar la acción en auditoría
@@ -938,9 +939,9 @@ const actualizarMuestra = async (req, res, next) => {
                         descripcion: 'actualización de muestra'
                     },
                     detalles: {
-                        idMuestra: muestra.id_muestra,
+                        idMuestra: muestraActualizada.id_muestra,
                         cambios: datosActualizacion,
-                        estadoFinal: muestra.estado
+                        estadoFinal: muestraActualizada.estado
                     }
                 });
             } catch (error) {
