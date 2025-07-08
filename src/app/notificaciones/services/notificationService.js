@@ -20,36 +20,19 @@ class NotificationService {
             // Solo inicializar si no está ya inicializado
             if (!admin.apps.length) {
                 // Verificar variables de entorno requeridas
-                const requiredVars = ['FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL'];
+                const requiredVars = ['FIREBASE_PROJECT_ID', 'FIREBASE_PRIVATE_KEY', 'FIREBASE_CLIENT_EMAIL'];
                 const missingVars = requiredVars.filter(varName => !process.env[varName]);
-                
-                // Verificar que tengamos al menos una forma de obtener la private key
-                if (!process.env.FIREBASE_PRIVATE_KEY_BASE64 && !process.env.FIREBASE_PRIVATE_KEY) {
-                    missingVars.push('FIREBASE_PRIVATE_KEY_BASE64 o FIREBASE_PRIVATE_KEY');
-                }
                 
                 if (missingVars.length > 0) {
                     throw new Error(`Variables de entorno faltantes: ${missingVars.join(', ')}`);
                 }
 
                 // Configuración desde variables de entorno
-                // Configuración mejorada para Firebase con soporte para Base64
-                let privateKey;
-                if (process.env.FIREBASE_PRIVATE_KEY_BASE64) {
-                    // Usar formato Base64 (más confiable para Render)
-                    privateKey = Buffer.from(process.env.FIREBASE_PRIVATE_KEY_BASE64, 'base64').toString('utf8');
-                    console.log('🔧 Usando FIREBASE_PRIVATE_KEY_BASE64');
-                } else {
-                    // Usar formato tradicional con escape de caracteres
-                    privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-                    console.log('🔧 Usando FIREBASE_PRIVATE_KEY tradicional');
-                }
-
                 const serviceAccount = {
                     type: "service_account",
                     project_id: process.env.FIREBASE_PROJECT_ID,
                     private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-                    private_key: privateKey,
+                    private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
                     client_email: process.env.FIREBASE_CLIENT_EMAIL,
                     client_id: process.env.FIREBASE_CLIENT_ID,
                     auth_uri: "https://accounts.google.com/o/oauth2/auth",
@@ -59,18 +42,12 @@ class NotificationService {
                 console.log('🔧 Configurando Firebase con project_id:', process.env.FIREBASE_PROJECT_ID);
                 console.log('🔧 Client email:', process.env.FIREBASE_CLIENT_EMAIL);
                 console.log('🔧 Private key ID:', process.env.FIREBASE_PRIVATE_KEY_ID);
-                console.log('🔧 Private key present:', !!privateKey);
-                console.log('🔧 Private key length:', privateKey?.length);
-                console.log('🔧 Private key starts with BEGIN:', privateKey?.startsWith('-----BEGIN PRIVATE KEY-----'));
-                console.log('🔧 Private key ends with END:', privateKey?.endsWith('-----END PRIVATE KEY-----'));
+                console.log('🔧 Private key present:', !!process.env.FIREBASE_PRIVATE_KEY);
                 console.log('🔧 Client ID:', process.env.FIREBASE_CLIENT_ID);
 
-                // Inicializar con configuración específica para API V1
                 admin.initializeApp({
                     credential: admin.credential.cert(serviceAccount),
-                    projectId: process.env.FIREBASE_PROJECT_ID,
-                    // Forzar uso de la API V1
-                    serviceAccountId: process.env.FIREBASE_CLIENT_EMAIL
+                    projectId: process.env.FIREBASE_PROJECT_ID
                 });
 
                 if (process.env.NODE_ENV !== 'production') {
@@ -257,72 +234,49 @@ class NotificationService {
 
             let response;
             try {
-                // SOLUCIÓN: Usar send() individual en lugar de sendMulticast() para evitar error 404 /batch
-                console.log('📧 Enviando notificaciones individuales para evitar error /batch');
-                const responses = [];
-                let successCount = 0;
-                let failureCount = 0;
-                
-                for (let i = 0; i < tokensToSend.length; i++) {
-                    const token = tokensToSend[i];
-                    try {
-                        // Crear mensaje individual
-                        const singleMessage = {
-                            notification: message.notification,
-                            data: message.data,
-                            token: token
-                        };
-                        
-                        console.log(`   📱 Enviando a token ${i + 1}/${tokensToSend.length}: ${token.substring(0, 20)}...`);
-                        const singleResponse = await admin.messaging().send(singleMessage);
-                        
-                        responses.push({ success: true, messageId: singleResponse });
-                        successCount++;
-                        console.log(`   ✅ Enviado exitosamente: ${singleResponse}`);
-                        
-                    } catch (singleError) {
-                        console.log(`   ❌ Error en token ${i + 1}: ${singleError.message}`);
-                        responses.push({ 
-                            success: false, 
-                            error: { 
-                                code: singleError.code || 'unknown-error',
-                                message: singleError.message 
-                            }
-                        });
-                        failureCount++;
-                    }
-                }
-                
-                // Crear respuesta compatible con formato anterior
-                response = {
-                    successCount,
-                    failureCount,
-                    responses
-                };
-                
-                console.log(`✅ Envío completado: ${successCount} exitosos, ${failureCount} fallidos`);
-                
+                response = await admin.messaging().sendMulticast(message);
             } catch (firebaseError) {
                 console.error('❌ Error específico de Firebase:', firebaseError.message);
                 console.error('🔍 Código de error:', firebaseError.code);
                 console.error('🔍 Detalles completos:', JSON.stringify(firebaseError, null, 2));
                 
-                // Diagnóstico específico del error /batch (ya no debería ocurrir)
+                // Diagnóstico específico del error /batch
                 if (firebaseError.message.includes('/batch')) {
                     console.error('🚨 ERROR CRÍTICO: Firebase no puede encontrar el endpoint /batch');
-                    console.error('ℹ️ Nota: Esto no debería ocurrir ya que estamos usando send() individual');
+                    console.error('💡 Posibles causas:');
+                    console.error('   1. Project ID incorrecto en Firebase');
+                    console.error('   2. Token FCM inválido o expirado');
+                    console.error('   3. Cloud Messaging no habilitado en Firebase Console');
+                    console.error('   4. Credenciales de service account incorrectas');
+                    console.error('');
+                    console.error('🔧 Soluciones:');
+                    console.error('   1. Verifica Project ID en Firebase Console');
+                    console.error('   2. Regenera token FCM en la app Android');
+                    console.error('   3. Habilita Cloud Messaging en Firebase Console');
                 }
                 
-                // Si es un error general, crear respuesta de fallback
-                console.log('ℹ️ Simulando respuesta debido a error Firebase (ver logs arriba para detalles)');
-                response = {
-                    successCount: 0,
-                    failureCount: tokensToSend.length,
-                    responses: tokensToSend.map(() => ({ 
-                        success: false, 
-                        error: { code: firebaseError.code || 'unknown-error', message: firebaseError.message }
-                    }))
-                };
+                // Si es un error de conectividad, tokens inválidos, o proyecto incorrecto
+                if (firebaseError.message.includes('404') || 
+                    firebaseError.message.includes('registration-token-not-registered') ||
+                    firebaseError.message.includes('invalid-registration-token') ||
+                    firebaseError.message.includes('project not found') ||
+                    firebaseError.message.includes('/batch') ||
+                    firebaseError.code === 'messaging/invalid-registration-token' ||
+                    firebaseError.code === 'messaging/registration-token-not-registered') {
+                    
+                    console.log('ℹ️ Simulando respuesta debido a error Firebase (ver logs arriba para detalles)');
+                    response = {
+                        successCount: 0,
+                        failureCount: tokensToSend.length,
+                        responses: tokensToSend.map(() => ({ 
+                            success: false, 
+                            error: { code: 'messaging/invalid-registration-token' }
+                        }))
+                    };
+                } else {
+                    // Error más serio, propagarlo
+                    throw firebaseError;
+                }
             }
             
             // Si había tokens de prueba, agregarlos como exitosos

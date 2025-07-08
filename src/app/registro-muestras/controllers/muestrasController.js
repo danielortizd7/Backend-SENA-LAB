@@ -831,7 +831,7 @@ const actualizarMuestra = async (req, res, next) => {
         // Si se está cambiando el estado, obtener el estado anterior
         if (datosActualizacion.estado) {
             try {
-                const muestraActual = await muestrasService.obtenerMuestraPorId(id);
+                const muestraActual = await muestrasService.obtenerMuestra(id);
                 if (muestraActual && muestraActual.estado !== datosActualizacion.estado) {
                     cambioDeEstado = true;
                     estadoAnterior = muestraActual.estado;
@@ -999,7 +999,7 @@ const obtenerMuestrasPorTipoEstado = async (req, res) => {
 const actualizarEstadoMuestra = async (req, res) => {
     try {
         const { id } = req.params;
-        const { estado, observaciones } = req.body;
+        const { estado } = req.body;
 
         // Validar que el estado sea válido
         if (!estadosValidos.includes(estado)) {
@@ -1009,31 +1009,44 @@ const actualizarEstadoMuestra = async (req, res) => {
             });
         }
 
-        // USAR EL SERVICIO CORRECTO QUE ENVÍA NOTIFICACIONES AUTOMÁTICAS
-        const { cambiarEstadoMuestra } = require('../../cambios-estado/services/cambiarEstadoService');
-        
-        console.log(`🔄 Cambiando estado de muestra ${id} a: ${estado}`);
-        console.log(`👤 Usuario: ${req.usuario.nombre} (${req.usuario.documento})`);
-
-        // Preparar datos del usuario con observaciones
-        const usuarioConObservaciones = {
-            ...req.usuario,
-            observaciones: observaciones || `Cambio de estado a ${estado}`
-        };
-
-        // Usar el servicio que envía notificaciones automáticamente
-        const resultado = await cambiarEstadoMuestra(id, estado, usuarioConObservaciones);
-
-        if (!resultado.success) {
-            return res.status(400).json(resultado);
+        // Obtener la muestra
+        const muestra = await Muestra.findById(id);
+        if (!muestra) {
+            return res.status(404).json({
+                success: false,
+                message: 'Muestra no encontrada'
+            });
         }
 
-        console.log(`✅ Estado actualizado exitosamente con notificación automática`);
+        const estadoAnterior = muestra.estado;
+
+        // Actualizar el estado
+        muestra.estado = estado;
+
+        // Registrar el cambio en el historial
+        muestra.historialEstados.push({
+            estado,
+            estadoAnterior,
+            fecha: new Date(),
+            usuario: req.usuario._id,
+            observaciones: req.body.observaciones || `Cambio de estado de ${estadoAnterior} a ${estado}`
+        });
+
+        // Si la muestra es rechazada, actualizar el campo de rechazo
+        if (estado === 'Rechazada') {
+            muestra.rechazoMuestra = {
+                rechazada: true,
+                motivo: req.body.observaciones || 'Muestra rechazada',
+                fechaRechazo: new Date()
+            };
+        }
+
+        await muestra.save();
 
         res.json({
             success: true,
             message: 'Estado de la muestra actualizado correctamente',
-            data: resultado.muestra
+            data: muestra
         });
     } catch (error) {
         console.error('Error al actualizar estado de la muestra:', error);
