@@ -302,7 +302,7 @@ router.post('/validar-token-produccion',
 
 // Ruta para diagnóstico específico de Firebase en producción
 router.get('/diagnostico-firebase-produccion',
-    notificationController.diagnosticoFirebaseProduccion
+    notificationController.diagnosticoPublicoFCM
 );
 
 module.exports = router;
