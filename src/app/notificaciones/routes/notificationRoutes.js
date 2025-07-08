@@ -305,4 +305,72 @@ router.get('/diagnostico-firebase-produccion',
     notificationController.diagnosticoPublicoFCM
 );
 
+// === DIAGNÓSTICO URGENTE DE CLAVE PRIVADA EN PRODUCCIÓN ===
+router.get('/diagnostico-clave-firebase',
+    async (req, res) => {
+        try {
+            const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+            
+            if (!privateKey) {
+                return res.json({
+                    success: false,
+                    error: 'FIREBASE_PRIVATE_KEY no está definida',
+                    environment: process.env.NODE_ENV
+                });
+            }
+            
+            // Análisis detallado de la clave
+            const analysis = {
+                environment: process.env.NODE_ENV,
+                hasPrivateKey: !!privateKey,
+                keyLength: privateKey.length,
+                startsWithBeginPrivate: privateKey.startsWith('-----BEGIN PRIVATE KEY-----'),
+                endsWithEndPrivate: privateKey.endsWith('-----END PRIVATE KEY-----'),
+                hasNewlineEscapes: privateKey.includes('\\n'),
+                hasActualNewlines: privateKey.includes('\n'),
+                firstChars: privateKey.substring(0, 50),
+                lastChars: privateKey.substring(privateKey.length - 50),
+                numberOfLines: privateKey.split('\n').length,
+                hasQuotes: privateKey.startsWith('"') && privateKey.endsWith('"'),
+                // Mostrar problemas comunes
+                commonIssues: {
+                    doubleEscaped: privateKey.includes('\\\\n'),
+                    extraQuotes: (privateKey.match(/"/g) || []).length > 2,
+                    wrongLineEndings: privateKey.includes('\r\n'),
+                    spacesInKey: privateKey.includes(' -----')
+                }
+            };
+            
+            // Intentar parsear como JSON para detectar double-encoding
+            let jsonParseTest = null;
+            try {
+                jsonParseTest = JSON.parse(privateKey);
+                analysis.isJsonString = true;
+            } catch (e) {
+                analysis.isJsonString = false;
+            }
+            
+            res.json({
+                success: true,
+                message: 'Análisis de clave privada de Firebase',
+                analysis: analysis,
+                recommendations: {
+                    shouldRemoveQuotes: analysis.hasQuotes,
+                    shouldReplaceEscapes: analysis.hasNewlineEscapes && !analysis.hasActualNewlines,
+                    shouldFixDoubleEscaping: analysis.commonIssues.doubleEscaped,
+                    correctFormat: '-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\\n-----END PRIVATE KEY-----'
+                }
+            });
+            
+        } catch (error) {
+            res.status(500).json({
+                success: false,
+                error: 'Error analizando clave privada',
+                message: error.message,
+                environment: process.env.NODE_ENV
+            });
+        }
+    }
+);
+
 module.exports = router;

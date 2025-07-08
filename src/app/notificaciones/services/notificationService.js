@@ -50,6 +50,10 @@ class NotificationService {
                     projectId: process.env.FIREBASE_PROJECT_ID
                 });
 
+                // Verificar que Firebase esté configurado para API v1
+                console.log('🔥 Firebase inicializado con API v1');
+                console.log('🔥 Project ID verificado:', admin.app().options.projectId);
+
                 if (process.env.NODE_ENV !== 'production') {
                     console.log('Firebase Admin SDK inicializado exitosamente');
                 }
@@ -234,48 +238,85 @@ class NotificationService {
 
             let response;
             try {
-                response = await admin.messaging().sendMulticast(message);
+                // Usar sendEachForMulticast para mayor compatibilidad con API v1
+                console.log('🔥 Usando Firebase Cloud Messaging API v1');
+                response = await admin.messaging().sendEachForMulticast(message);
+                
+                console.log('✅ Respuesta Firebase recibida:', {
+                    successCount: response.successCount,
+                    failureCount: response.failureCount
+                });
+                
             } catch (firebaseError) {
                 console.error('❌ Error específico de Firebase:', firebaseError.message);
                 console.error('🔍 Código de error:', firebaseError.code);
                 console.error('🔍 Detalles completos:', JSON.stringify(firebaseError, null, 2));
                 
-                // Diagnóstico específico del error /batch
-                if (firebaseError.message.includes('/batch')) {
-                    console.error('🚨 ERROR CRÍTICO: Firebase no puede encontrar el endpoint /batch');
-                    console.error('💡 Posibles causas:');
-                    console.error('   1. Project ID incorrecto en Firebase');
-                    console.error('   2. Token FCM inválido o expirado');
-                    console.error('   3. Cloud Messaging no habilitado en Firebase Console');
-                    console.error('   4. Credenciales de service account incorrectas');
-                    console.error('');
-                    console.error('🔧 Soluciones:');
-                    console.error('   1. Verifica Project ID en Firebase Console');
-                    console.error('   2. Regenera token FCM en la app Android');
-                    console.error('   3. Habilita Cloud Messaging en Firebase Console');
-                }
-                
-                // Si es un error de conectividad, tokens inválidos, o proyecto incorrecto
-                if (firebaseError.message.includes('404') || 
-                    firebaseError.message.includes('registration-token-not-registered') ||
-                    firebaseError.message.includes('invalid-registration-token') ||
-                    firebaseError.message.includes('project not found') ||
-                    firebaseError.message.includes('/batch') ||
-                    firebaseError.code === 'messaging/invalid-registration-token' ||
-                    firebaseError.code === 'messaging/registration-token-not-registered') {
+                // Diagnóstico específico para migración a API v1
+                if (firebaseError.message.includes('/batch') || firebaseError.message.includes('404')) {
+                    console.error('🚨 ERROR DE MIGRACIÓN API: Intentando usar API heredada');
+                    console.error('💡 Causa: API heredada de FCM está inhabilitada');
+                    console.error('🔧 Solución: Forzando uso de API v1...');
                     
-                    console.log('ℹ️ Simulando respuesta debido a error Firebase (ver logs arriba para detalles)');
-                    response = {
-                        successCount: 0,
-                        failureCount: tokensToSend.length,
-                        responses: tokensToSend.map(() => ({ 
-                            success: false, 
-                            error: { code: 'messaging/invalid-registration-token' }
-                        }))
-                    };
+                    // Intentar envío individual como fallback para API v1
+                    try {
+                        console.log('🔄 Intentando envío individual con API v1...');
+                        const individualResults = [];
+                        
+                        for (const token of tokensToSend) {
+                            try {
+                                const singleMessage = {
+                                    notification: message.notification,
+                                    data: message.data,
+                                    token: token
+                                };
+                                
+                                const singleResponse = await admin.messaging().send(singleMessage);
+                                individualResults.push({ success: true, messageId: singleResponse });
+                                console.log('✅ Mensaje enviado individualmente:', singleResponse);
+                                
+                            } catch (singleError) {
+                                console.error('❌ Error en envío individual:', singleError.message);
+                                individualResults.push({ success: false, error: singleError });
+                            }
+                        }
+                        
+                        response = {
+                            successCount: individualResults.filter(r => r.success).length,
+                            failureCount: individualResults.filter(r => !r.success).length,
+                            responses: individualResults
+                        };
+                        
+                        console.log('✅ Envío individual completado:', {
+                            successCount: response.successCount,
+                            failureCount: response.failureCount
+                        });
+                        
+                    } catch (fallbackError) {
+                        console.error('❌ Error en fallback individual:', fallbackError.message);
+                        throw firebaseError; // Lanzar el error original
+                    }
                 } else {
-                    // Error más serio, propagarlo
-                    throw firebaseError;
+                    // Si es un error de conectividad, tokens inválidos, o proyecto incorrecto
+                    if (firebaseError.message.includes('registration-token-not-registered') ||
+                        firebaseError.message.includes('invalid-registration-token') ||
+                        firebaseError.message.includes('project not found') ||
+                        firebaseError.code === 'messaging/invalid-registration-token' ||
+                        firebaseError.code === 'messaging/registration-token-not-registered') {
+                        
+                        console.log('ℹ️ Simulando respuesta debido a error Firebase (ver logs arriba para detalles)');
+                        response = {
+                            successCount: 0,
+                            failureCount: tokensToSend.length,
+                            responses: tokensToSend.map(() => ({ 
+                                success: false, 
+                                error: { code: 'messaging/invalid-registration-token' }
+                            }))
+                        };
+                    } else {
+                        // Error más serio, propagarlo
+                        throw firebaseError;
+                    }
                 }
             }
             
