@@ -373,4 +373,58 @@ router.get('/diagnostico-clave-firebase',
     }
 );
 
+// === ENDPOINT PARA PROBAR NOTIFICACIONES CON APP CERRADA ===
+router.post('/probar-notificacion-app-cerrada',
+    [
+        body('clienteDocumento').notEmpty().withMessage('Documento de cliente requerido'),
+        body('mensaje').optional().isString().withMessage('Mensaje debe ser texto')
+    ],
+    validateRequest,
+    async (req, res) => {
+        try {
+            const { clienteDocumento, mensaje } = req.body;
+            const NotificationService = require('../services/notificationService');
+            
+            console.log(`🧪 Probando notificación optimizada para app cerrada:`);
+            console.log(`   - Cliente: ${clienteDocumento}`);
+            console.log(`   - Mensaje: ${mensaje || 'Mensaje de prueba'}`);
+            
+            // Usar el servicio de notificaciones con configuración optimizada
+            await NotificationService.enviarNotificacionCambioEstado(
+                clienteDocumento,
+                'TEST001', // ID de muestra de prueba
+                'Recibida',
+                'En análisis',
+                mensaje || 'Esta es una notificación de prueba optimizada para aparecer incluso con la app cerrada'
+            );
+            
+            res.json({
+                success: true,
+                message: 'Notificación de prueba enviada con configuración optimizada para app cerrada',
+                data: {
+                    clienteDocumento,
+                    configuracion: 'Optimizada para Android con prioridad alta y canal dedicado',
+                    caracteristicas: [
+                        'Prioridad alta (high priority)',
+                        'Canal de notificación específico',
+                        'Sonido y vibración por defecto',
+                        'Visible en pantalla de bloqueo',
+                        'No se agrupa con otras notificaciones',
+                        'Icono personalizado',
+                        'Datos para abrir pantalla específica'
+                    ]
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error enviando notificación de prueba:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error enviando notificación de prueba',
+                error: error.message
+            });
+        }
+    }
+);
+
 module.exports = router;

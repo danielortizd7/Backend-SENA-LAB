@@ -116,6 +116,7 @@ class NotificationService {
                     estadoNuevo,
                     fechaCambio: new Date(),
                     observaciones,
+                    id_muestra: muestraId, // Agregar id_muestra aquí
                     metadata: {
                         accion: 'cambio_estado',
                         requiereAccion: this.requiereAccionCliente(estadoNuevo)
@@ -135,7 +136,10 @@ class NotificationService {
 
             // Enviar por múltiples canales
             await Promise.all([
-                this.enviarPushNotification(clienteIdentificador, titulo, mensaje, notificacion.data),
+                this.enviarPushNotification(clienteIdentificador, titulo, mensaje, {
+                    ...notificacion.data,
+                    id_muestra: muestraId // Asegurar que id_muestra esté en el nivel correcto
+                }),
                 this.enviarWebSocketNotification(clienteIdentificador, notificacion),
             ]);
 
@@ -213,6 +217,8 @@ class NotificationService {
 
             const tokensToSend = validTokens.length > 0 ? validTokens : tokens;
 
+            // Configuración exacta según especificación del desarrollador móvil
+            // Para asegurar que las notificaciones aparezcan con app cerrada
             const message = {
                 notification: {
                     title: titulo,
@@ -225,8 +231,12 @@ class NotificationService {
                     observaciones: data.observaciones || '',
                     tipo: 'cambio_estado',
                     clickAction: 'OPEN_MUESTRA_DETAIL',
-                    // Solo campos string, no objetos
-                    requiereAccion: data.metadata?.requiereAccion?.toString() || 'false'
+                    requiereAccion: data.metadata?.requiereAccion?.toString() || 'false',
+                    id_muestra: data.id_muestra || ''
+                },
+                // Configuración mínima para Android (opcional - mejora la experiencia)
+                android: {
+                    priority: 'high'
                 },
                 tokens: tokensToSend
             };
@@ -246,6 +256,66 @@ class NotificationService {
                     successCount: response.successCount,
                     failureCount: response.failureCount
                 });
+
+                // Mostrar detalles específicos de cada token para diagnosticar fallos
+                if (response.failureCount > 0) {
+                    console.log('🔍 ANÁLISIS DETALLADO DE FALLOS:');
+                    response.responses.forEach((resp, index) => {
+                        const token = tokensToSend[index];
+                        if (!resp.success) {
+                            console.log(`❌ Token ${index + 1}/${tokensToSend.length} FALLÓ:`);
+                            console.log(`   - Token: ${token.substring(0, 30)}...`);
+                            console.log(`   - Error code: ${resp.error?.code || 'No code'}`);
+                            console.log(`   - Error message: ${resp.error?.message || 'No message'}`);
+                            console.log(`   - Error details:`, JSON.stringify(resp.error, null, 2));
+                        } else {
+                            console.log(`✅ Token ${index + 1}/${tokensToSend.length} EXITOSO: ${resp.messageId}`);
+                        }
+                    });
+                }
+
+                // Diagnóstico detallado de errores
+                if (response.failureCount > 0) {
+                    console.log('🔍 DIAGNÓSTICO DE ERRORES FCM:');
+                    response.responses.forEach((resp, index) => {
+                        if (!resp.success) {
+                            const token = tokensToSend[index];
+                            const error = resp.error;
+                            console.log(`❌ Token ${index + 1} (${token.substring(0, 20)}...):`);
+                            console.log(`   - Código: ${error.code}`);
+                            console.log(`   - Mensaje: ${error.message}`);
+                            
+                            // Diagnóstico específico por tipo de error
+                            switch (error.code) {
+                                case 'messaging/invalid-registration-token':
+                                    console.log('   📋 CAUSA: Token FCM malformateado o corrupto');
+                                    console.log('   💡 SOLUCIÓN: Regenerar token FCM en la app móvil');
+                                    break;
+                                case 'messaging/registration-token-not-registered':
+                                    console.log('   📋 CAUSA: App desinstalada, token expirado o inválido');
+                                    console.log('   💡 SOLUCIÓN: App debe regenerar y registrar nuevo token');
+                                    break;
+                                case 'messaging/invalid-argument':
+                                    console.log('   📋 CAUSA: Formato de mensaje incorrecto');
+                                    console.log('   💡 SOLUCIÓN: Revisar estructura del payload FCM');
+                                    break;
+                                case 'messaging/sender-id-mismatch':
+                                    console.log('   📋 CAUSA: Token FCM de proyecto Firebase diferente');
+                                    console.log('   💡 SOLUCIÓN: Verificar que app use el mismo proyecto Firebase');
+                                    break;
+                                case 'messaging/message-rate-exceeded':
+                                    console.log('   📋 CAUSA: Límite de mensajes excedido');
+                                    console.log('   💡 SOLUCIÓN: Esperar y reintentar más tarde');
+                                    break;
+                                default:
+                                    console.log('   📋 CAUSA: Error desconocido de Firebase');
+                                    console.log('   💡 SOLUCIÓN: Revisar documentación Firebase FCM');
+                            }
+                        } else {
+                            console.log(`✅ Token ${index + 1}: Mensaje enviado exitosamente`);
+                        }
+                    });
+                }
                 
             } catch (firebaseError) {
                 console.error('❌ Error específico de Firebase:', firebaseError.message);
@@ -268,6 +338,7 @@ class NotificationService {
                                 const singleMessage = {
                                     notification: message.notification,
                                     data: message.data,
+                                    android: message.android, // Incluir configuración de Android
                                     token: token
                                 };
                                 
