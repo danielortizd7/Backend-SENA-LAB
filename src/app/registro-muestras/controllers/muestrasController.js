@@ -650,6 +650,44 @@ const registrarMuestra = async (req, res, next) => {
 
         // Guardar la muestra
         const muestraGuardada = await muestra.save();
+
+        // Enviar notificación de cambio de estado para todos los estados
+        setImmediate(async () => {
+            try {
+                const NotificationService = require('../../notificaciones/services/notificationService');
+                
+                // Determinar el estado anterior basado en el estado actual
+                let estadoAnterior = 'Pendiente';
+                if (muestraGuardada.estado === 'Aceptada') {
+                    estadoAnterior = 'En Cotizacion';
+                } else if (muestraGuardada.estado === 'Recibida') {
+                    estadoAnterior = 'Aceptada';
+                } else if (muestraGuardada.estado === 'En Cotizacion') {
+                    estadoAnterior = 'Pendiente';
+                } else if (muestraGuardada.estado === 'Rechazada') {
+                    estadoAnterior = 'Pendiente';
+                }
+
+                // Usar el identificador de cliente correcto
+                const clienteIdentificador = muestraGuardada.cliente.documento || muestraGuardada.cliente._id;
+                
+                console.log(`📨 Enviando notificación de registro de muestra:`);
+                console.log(`   - Cliente: ${muestraGuardada.cliente.nombre} (${clienteIdentificador})`);
+                console.log(`   - Muestra: ${muestraGuardada.id_muestra}`);
+                console.log(`   - Estado: ${estadoAnterior} → ${muestraGuardada.estado}`);
+
+                await NotificationService.enviarNotificacionCambioEstado(
+                    clienteIdentificador,
+                    muestraGuardada.id_muestra,
+                    estadoAnterior,
+                    muestraGuardada.estado,
+                    muestraGuardada.observaciones || `Muestra ${muestraGuardada.estado.toLowerCase()} correctamente`
+                );
+            } catch (error) {
+                console.error('Error enviando notificación de cambio de estado:', error.message);
+            }
+        });
+
          //AUDITORIAS
          setImmediate(async () => {
             try {
@@ -825,34 +863,62 @@ const actualizarMuestra = async (req, res, next) => {
         }
 
         // Usar el servicio para actualizar la muestra
-        const muestra = await muestrasService.actualizarMuestra(id, datosActualizacion, usuario);
+        const estadoAnterior = muestra.estado; // Guardar estado anterior antes de actualizar
+        const muestraActualizada = await muestrasService.actualizarMuestra(id, datosActualizacion, usuario);
+
+        // Enviar notificación si hubo cambio de estado
+        if (datosActualizacion.estado && datosActualizacion.estado !== estadoAnterior) {
+            setImmediate(async () => {
+                try {
+                    const NotificationService = require('../../notificaciones/services/notificationService');
+                    
+                    // Usar el identificador de cliente correcto
+                    const clienteIdentificador = muestraActualizada.cliente.documento || muestraActualizada.cliente._id;
+                    
+                    console.log(`📨 Enviando notificación de actualización de muestra:`);
+                    console.log(`   - Cliente: ${muestraActualizada.cliente.nombre} (${clienteIdentificador})`);
+                    console.log(`   - Muestra: ${muestraActualizada.id_muestra}`);
+                    console.log(`   - Cambio: ${estadoAnterior} → ${muestraActualizada.estado}`);
+
+                    await NotificationService.enviarNotificacionCambioEstado(
+                        clienteIdentificador,
+                        muestraActualizada.id_muestra,
+                        estadoAnterior,
+                        muestraActualizada.estado,
+                        muestraActualizada.observaciones || `Estado actualizado a ${muestraActualizada.estado}`
+                    );
+                } catch (error) {
+                    console.error('Error enviando notificación de cambio de estado:', error.message);
+                }
+            });
+        }
 
         // Formatear la respuesta
         const respuesta = {
-            id_muestra: muestra.id_muestra,
-            cliente: muestra.cliente,
-            tipoDeAgua: muestra.tipoDeAgua,
-            tipoMuestreo: muestra.tipoMuestreo,
-            lugarMuestreo: muestra.lugarMuestreo,
-            fechaHoraMuestreo: formatearFechaHora(muestra.fechaHoraMuestreo),
-            tipoAnalisis: muestra.tipoAnalisis,
-            identificacionMuestra: muestra.identificacionMuestra,
-            planMuestreo: muestra.planMuestreo,
-            condicionesAmbientales: muestra.condicionesAmbientales,
-            preservacionMuestra: muestra.preservacionMuestra,
-            analisisSeleccionados: Array.isArray(muestra.analisisSeleccionados) ? 
-                muestra.analisisSeleccionados.map(analisis => ({
+            id_muestra: muestraActualizada.id_muestra,
+            cliente: muestraActualizada.cliente,
+            tipoDeAgua: muestraActualizada.tipoDeAgua,
+            tipoMuestreo: muestraActualizada.tipoMuestreo,
+            lugarMuestreo: muestraActualizada.lugarMuestreo,
+            fechaHoraMuestreo: formatearFechaHora(muestraActualizada.fechaHoraMuestreo),
+            tipoAnalisis: muestraActualizada.tipoAnalisis,
+            identificacionMuestra: muestraActualizada.identificacionMuestra,
+            planMuestreo: muestraActualizada.planMuestreo,
+            condicionesAmbientales: muestraActualizada.condicionesAmbientales,
+            preservacionMuestra: muestraActualizada.preservacionMuestra,
+            analisisSeleccionados: Array.isArray(muestraActualizada.analisisSeleccionados) ? 
+                muestraActualizada.analisisSeleccionados.map(analisis => ({
                     nombre: analisis.nombre,
                     precio: formatearPrecioCOP(analisis.precio),
                     unidad: analisis.unidad,
                     metodo: analisis.metodo,
                     rango: analisis.rango
                 })) : [],
-            estado: muestra.estado,
-            rechazoMuestra: muestra.rechazoMuestra,
-            observaciones: muestra.observaciones,
-            historial: Array.isArray(muestra.historial) ? 
-                muestra.historial.map(h => ({
+            estado: muestraActualizada.estado,
+            rechazoMuestra: muestraActualizada.rechazoMuestra,
+            observaciones: muestraActualizada.observaciones,
+            historial: Array.isArray(muestraActualizada.historial) ? 
+                muestraActualizada.historial.map(h => ({
                     estado: h.estado,
                     usuario: h.usuario,
                     fechaCambio: formatearFechaHora(h.fechaCambio),
