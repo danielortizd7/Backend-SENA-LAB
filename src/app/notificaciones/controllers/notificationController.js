@@ -1420,7 +1420,7 @@ socket.connect();
         }
     }
 
-    // DIAGNÓSTICO ESPECÍFICO DE FIREBASE EN PRODUCCIÓN
+    // DIAGNÓSTICO ESPECÍFICO DE FIREBASE EN PRODUCCIÓN hh
     async diagnosticoFirebaseProduccion(req, res) {
         try {
             console.log('🔍 === DIAGNÓSTICO FIREBASE PRODUCCIÓN ===');
