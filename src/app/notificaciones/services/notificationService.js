@@ -219,6 +219,7 @@ class NotificationService {
 
             // Configuración según especificación del desarrollador móvil
             // Para que la app maneje las notificaciones manualmente y las guarde internamente
+            // SOLO usar 'data' - SIN campo 'notification' ni 'android.notification'
             const message = {
                 data: {
                     title: titulo,  // Title y body van en data para manejo manual
@@ -232,12 +233,6 @@ class NotificationService {
                     requiereAccion: data.metadata?.requiereAccion?.toString() || 'false',
                     id_muestra: data.id_muestra || '',
                     priority: 'high'
-                },
-                android: {
-                    priority: 'high',
-                    notification: {
-                        channel_id: 'aqualab_updates'
-                    }
                 },
                 tokens: tokensToSend
             };
@@ -337,8 +332,7 @@ class NotificationService {
                         for (const token of tokensToSend) {
                             try {
                                 const singleMessage = {
-                                    data: message.data,  // Solo data, sin notification
-                                    android: message.android,
+                                    data: message.data,  // Solo data, sin notification ni android.notification
                                     token: token
                                 };
                                 

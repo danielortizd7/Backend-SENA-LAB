@@ -16,12 +16,6 @@
     "clickAction": "OPEN_MUESTRA_DETAIL",
     "id_muestra": "PF250708007",
     "priority": "high"
-  },
-  "android": {
-    "priority": "high",
-    "notification": {
-      "channel_id": "aqualab_updates"
-    }
   }
 }
 ```
