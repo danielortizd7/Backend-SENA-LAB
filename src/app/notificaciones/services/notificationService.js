@@ -217,14 +217,12 @@ class NotificationService {
 
             const tokensToSend = validTokens.length > 0 ? validTokens : tokens;
 
-            // Configuración exacta según especificación del desarrollador móvil
-            // Para asegurar que las notificaciones aparezcan con app cerrada
+            // Configuración según especificación del desarrollador móvil
+            // Para que la app maneje las notificaciones manualmente y las guarde internamente
             const message = {
-                notification: {
-                    title: titulo,
-                    body: mensaje
-                },
                 data: {
+                    title: titulo,  // Title y body van en data para manejo manual
+                    body: mensaje,
                     estadoAnterior: data.estadoAnterior || '',
                     estadoNuevo: data.estadoNuevo || '',
                     fechaCambio: data.fechaCambio?.toISOString() || new Date().toISOString(),
@@ -232,11 +230,14 @@ class NotificationService {
                     tipo: 'cambio_estado',
                     clickAction: 'OPEN_MUESTRA_DETAIL',
                     requiereAccion: data.metadata?.requiereAccion?.toString() || 'false',
-                    id_muestra: data.id_muestra || ''
-                },
-                // Configuración mínima para Android (opcional - mejora la experiencia)
-                android: {
+                    id_muestra: data.id_muestra || '',
                     priority: 'high'
+                },
+                android: {
+                    priority: 'high',
+                    notification: {
+                        channel_id: 'aqualab_updates'
+                    }
                 },
                 tokens: tokensToSend
             };
@@ -336,9 +337,8 @@ class NotificationService {
                         for (const token of tokensToSend) {
                             try {
                                 const singleMessage = {
-                                    notification: message.notification,
-                                    data: message.data,
-                                    android: message.android, // Incluir configuración de Android
+                                    data: message.data,  // Solo data, sin notification
+                                    android: message.android,
                                     token: token
                                 };
                                 
@@ -478,15 +478,15 @@ class NotificationService {
     // Generar título según el estado
     generarTitulo(estado) {
         const titulos = {
-            'En Cotización': '💼 Cotización en Proceso',
-            'Aceptada': '✅ Cotización Aceptada',
-            'Recibida': '📦 Muestra Recibida',
-            'En análisis': '🔬 Análisis en Proceso',
-            'Finalizada': '✅ Resultados Disponibles',
-            'Rechazada': '❌ Muestra Rechazada'
+            'En Cotización': 'Cotización en Proceso',
+            'Aceptada': 'Cotización Aceptada',
+            'Recibida': 'Muestra Recibida',
+            'En análisis': 'Análisis en Proceso',
+            'Finalizada': 'Resultados Disponibles',
+            'Rechazada': 'Muestra Rechazada'
         };
         
-        return titulos[estado] || `📋 Estado Actualizado: ${estado}`;
+        return titulos[estado] || `Estado Actualizado: ${estado}`;
     }
 
     // Generar mensaje personalizado

@@ -1,0 +1,161 @@
+{
+  "documentacion_notificaciones_fcm": {
+    "descripcion": "Configuración de notificaciones push para la app móvil AquaLab SENA",
+    "backend_url": "https://backend-registro-muestras.onrender.com",
+    
+    "estructura_mensaje_fcm": {
+      "descripcion": "Estructura del mensaje FCM que envía el backend",
+      "ejemplo": {
+        "notification": {
+          "title": "Cotización Aceptada",
+          "body": "La cotización de su muestra PF250708007 ha sido aceptada.",
+          "sound": "default",
+          "badge": "1"
+        },
+        "data": {
+          "estadoAnterior": "En Cotizacion",
+          "estadoNuevo": "Aceptada",
+          "fechaCambio": "2025-07-08T03:21:20.273Z",
+          "observaciones": "Cotización aceptada por el administrador",
+          "tipo": "cambio_estado",
+          "clickAction": "OPEN_MUESTRA_DETAIL",
+          "requiereAccion": "false",
+          "id_muestra": "PF250708007",
+          "priority": "high"
+        },
+        "android": {
+          "priority": "high",
+          "notification": {
+            "channel_id": "aqualab_updates",
+            "priority": "high",
+            "default_sound": true,
+            "default_vibrate_pattern": true,
+            "default_light_settings": true
+          }
+        }
+      }
+    },
+
+    "tipos_notificacion": {
+      "descripcion": "Diferentes tipos de notificaciones que puede recibir",
+      "estados": {
+        "En Cotización": {
+          "titulo": "Cotización en Proceso",
+          "mensaje": "Su muestra {ID_MUESTRA} está siendo cotizada. Pronto recibirá más información.",
+          "accion": "Ver detalles de cotización"
+        },
+        "Aceptada": {
+          "titulo": "Cotización Aceptada",
+          "mensaje": "La cotización de su muestra {ID_MUESTRA} ha sido aceptada.",
+          "accion": "Ver muestra aceptada"
+        },
+        "Recibida": {
+          "titulo": "Muestra Recibida",
+          "mensaje": "Su muestra {ID_MUESTRA} ha sido recibida en nuestro laboratorio y está lista para análisis.",
+          "accion": "Ver estado de muestra"
+        },
+        "En análisis": {
+          "titulo": "Análisis en Proceso",
+          "mensaje": "Su muestra {ID_MUESTRA} está siendo analizada por nuestros expertos.",
+          "accion": "Ver progreso del análisis"
+        },
+        "Finalizada": {
+          "titulo": "Resultados Disponibles",
+          "mensaje": "¡Sus resultados están listos! Los análisis de la muestra {ID_MUESTRA} han sido completados.",
+          "accion": "Ver resultados"
+        },
+        "Rechazada": {
+          "titulo": "❌ Muestra Rechazada",
+          "mensaje": "Su muestra {ID_MUESTRA} ha sido rechazada. Contacte al laboratorio para más información.",
+          "accion": "Ver motivo de rechazo"
+        }
+      }
+    },
+
+    "configuracion_android": {
+      "descripcion": "Configuraciones necesarias en la app Android",
+      "manifest_permissions": [
+        "android.permission.INTERNET",
+        "android.permission.WAKE_LOCK",
+        "com.google.android.c2dm.permission.RECEIVE"
+      ],
+      
+      "firebase_messaging_service": {
+        "descripcion": "Configurar FirebaseMessagingService para manejar notificaciones",
+        "onMessageReceived": {
+          "app_abierta": "Mostrar notificación in-app",
+          "app_cerrada": "El sistema Android maneja automáticamente usando el campo 'notification'"
+        },
+        "onNewToken": {
+          "accion": "Enviar nuevo token al backend",
+          "endpoint": "POST /api/notificaciones/registrar-token"
+        }
+      },
+
+      "notification_channel": {
+        "descripcion": "Configurar canal de notificaciones para Android 8+",
+        "channel_id": "aqualab_updates",
+        "channel_name": "AquaLab Actualizaciones",
+        "importance": "HIGH",
+        "sound": true,
+        "vibration": true,
+        "lights": true
+      }
+    },
+
+    "endpoints_backend": {
+      "descripcion": "Endpoints disponibles en el backend para notificaciones",
+      "registrar_token": {
+        "url": "POST /api/notificaciones/registrar-token",
+        "body": {
+          "token": "TOKEN_FCM_DEL_DISPOSITIVO",
+          "clienteDocumento": "DOCUMENTO_DEL_CLIENTE",
+          "platform": "android"
+        }
+      },
+      "test_notificacion": {
+        "url": "POST /api/notificaciones-test/local",
+        "body": {
+          "clienteDocumento": "DOCUMENTO_DEL_CLIENTE",
+          "mensaje": "Mensaje de prueba"
+        }
+      }
+    },
+
+    "flujo_notificaciones": {
+      "descripcion": "Flujo completo de notificaciones en la app",
+      "pasos": [
+        "1. App obtiene token FCM en inicio",
+        "2. App envía token al backend con documento del cliente",
+        "3. Backend almacena token asociado al cliente",
+        "4. Cuando cambia estado de muestra, backend envía notificación",
+        "5. Firebase entrega notificación al dispositivo",
+        "6. Si app está cerrada: aparece en barra de notificaciones",
+        "7. Si app está abierta: se puede mostrar in-app",
+        "8. Al tocar notificación: abrir pantalla específica"
+      ]
+    },
+
+    "testing": {
+      "descripcion": "Cómo probar las notificaciones",
+      "pasos_prueba": [
+        "1. Registrar token en el backend",
+        "2. Cerrar completamente la app móvil",
+        "3. Usar endpoint de prueba para enviar notificación",
+        "4. Verificar que aparece en barra de notificaciones",
+        "5. Tocar notificación y verificar que abre la app"
+      ],
+      "token_ejemplo": "c3lMci17RlWk2zuXAMHx8I:APA91bH5dKZgJVWJKA5uO9gQRgJ4Y6X1c9_wYUoGbQX1yNxKKRrqUPe5Kd_1sOjNGWZx2L3M7nH8F",
+      "cliente_ejemplo": "1235467890"
+    },
+
+    "consideraciones_importantes": [
+      "El campo 'notification' es obligatorio para notificaciones con app cerrada",
+      "El campo 'data' contiene información adicional para la app",
+      "Android prioridad 'high' asegura entrega inmediata",
+      "Channel ID debe estar configurado en la app Android",
+      "Token FCM debe renovarse periódicamente",
+      "Manejar casos cuando el token expire o sea inválido"
+    ]
+  }
+}
