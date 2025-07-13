@@ -55,8 +55,6 @@ class NotificationController {
     // Registrar token de dispositivo móvil (versión pública para testing)
     async registrarDeviceTokenPublico(req, res) {
         try {
-            console.log('📱 === REGISTRO PÚBLICO DE TOKEN FCM ===');
-            
             const { deviceToken, platform, deviceInfo, clienteDocumento } = req.body;
 
             if (!deviceToken || !platform || !clienteDocumento) {
@@ -78,41 +76,34 @@ class NotificationController {
                 });
             }
 
-            // ✅ VALIDACIÓN DE LONGITUD DE TOKEN FCM
+            // Validación de longitud de token FCM
             if (deviceToken.length < 140) {
-                console.log(`❌ Token incompleto detectado: ${deviceToken.length} caracteres`);
-                console.log(`🔑 Token recibido: ${deviceToken}`);
                 return res.status(400).json({
                     success: false,
                     message: 'Token FCM incompleto. Los tokens válidos deben tener al menos 140 caracteres',
                     data: {
                         tokenLength: deviceToken.length,
                         minimumRequired: 140,
-                        tokenReceived: deviceToken,
-                        error: 'TOKEN_INCOMPLETO',
-                        solution: 'Regenerar token FCM en la app Android'
+                        error: 'TOKEN_INCOMPLETO'
                     }
                 });
             }
 
-            // ✅ VALIDACIÓN DE FORMATO DE TOKEN FCM
+            // Validación de formato de token FCM
             if (!deviceToken.includes(':APA91b')) {
-                console.log(`❌ Token con formato inválido: ${deviceToken}`);
                 return res.status(400).json({
                     success: false,
                     message: 'Token FCM con formato inválido. Debe contener ":APA91b"',
                     data: {
                         tokenLength: deviceToken.length,
-                        tokenReceived: deviceToken,
-                        error: 'TOKEN_FORMATO_INVALIDO',
-                        solution: 'Regenerar token FCM en la app Android'
+                        error: 'TOKEN_FORMATO_INVALIDO'
                     }
                 });
             }
 
-            console.log(`📋 Registrando token para cliente: ${clienteDocumento}`);
-            console.log(`📱 Platform: ${platform}`);
-            console.log(`🔑 Token: ${deviceToken.substring(0, 20)}...`);
+            if (process.env.NODE_ENV !== 'production') {
+                console.log(`📋 Registrando token para cliente: ${clienteDocumento}`);
+            }
 
             const token = await NotificationService.registrarDeviceToken(
                 null, // clienteId (no requerido para registro público)
@@ -121,8 +112,6 @@ class NotificationController {
                 platform,
                 deviceInfo || { public: true, registered: new Date().toISOString() }
             );
-
-            console.log('✅ Token registrado exitosamente');
 
             return res.status(200).json({
                 success: true,
@@ -137,7 +126,7 @@ class NotificationController {
             });
 
         } catch (error) {
-            console.error('❌ Error registrando device token público:', error);
+            console.error('Error registrando device token público:', error);
             return res.status(500).json({
                 success: false,
                 message: 'Error al registrar token de dispositivo',

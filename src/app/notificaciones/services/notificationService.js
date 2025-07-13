@@ -39,23 +39,15 @@ class NotificationService {
                     token_uri: "https://oauth2.googleapis.com/token"
                 };
 
-                console.log('🔧 Configurando Firebase con project_id:', process.env.FIREBASE_PROJECT_ID);
-                console.log('🔧 Client email:', process.env.FIREBASE_CLIENT_EMAIL);
-                console.log('🔧 Private key ID:', process.env.FIREBASE_PRIVATE_KEY_ID);
-                console.log('🔧 Private key present:', !!process.env.FIREBASE_PRIVATE_KEY);
-                console.log('🔧 Client ID:', process.env.FIREBASE_CLIENT_ID);
+                console.log('� Firebase inicializado con project_id:', process.env.FIREBASE_PROJECT_ID);
 
                 admin.initializeApp({
                     credential: admin.credential.cert(serviceAccount),
                     projectId: process.env.FIREBASE_PROJECT_ID
                 });
 
-                // Verificar que Firebase esté configurado para API v1
-                console.log('🔥 Firebase inicializado con API v1');
-                console.log('🔥 Project ID verificado:', admin.app().options.projectId);
-
                 if (process.env.NODE_ENV !== 'production') {
-                    console.log('Firebase Admin SDK inicializado exitosamente');
+                    console.log('🔥 Firebase Admin SDK inicializado exitosamente');
                 }
             }
         } catch (error) {
@@ -177,22 +169,18 @@ class NotificationService {
             }
 
             if (deviceTokens.length === 0) {
-                console.log(`⚠️ No hay tokens FCM activos para cliente ${clienteId}`);
+                if (process.env.NODE_ENV !== 'production') {
+                    console.log(`⚠️ No hay tokens FCM activos para cliente ${clienteId}`);
+                }
                 return;
             }
 
-            console.log(`📱 Encontrados ${deviceTokens.length} dispositivos activos para cliente ${clienteId}`);
-            deviceTokens.forEach(dt => {
-                console.log(`   - Dispositivo: ${dt.platform} (${dt.deviceToken.substring(0, 20)}...)`);
-                // En producción, mostrar más información del token para debugging
-                if (process.env.NODE_ENV === 'production') {
-                    console.log(`   - Token ID: ${dt._id}`);
-                    console.log(`   - Token length: ${dt.deviceToken.length}`);
-                    console.log(`   - Token valid format: ${dt.deviceToken.includes(':APA91b') ? 'YES' : 'NO'}`);
-                    console.log(`   - Cliente Doc: ${dt.clienteDocumento}`);
-                    console.log(`   - Created: ${dt.createdAt}`);
-                }
-            });
+            if (process.env.NODE_ENV !== 'production') {
+                console.log(`📱 Encontrados ${deviceTokens.length} dispositivos para cliente ${clienteId}`);
+                deviceTokens.forEach(dt => {
+                    console.log(`   - ${dt.platform} (${dt.deviceToken.substring(0, 20)}...)`);
+                });
+            }
 
             const tokens = deviceTokens.map(dt => dt.deviceToken);
 
@@ -201,13 +189,14 @@ class NotificationService {
             const validTokens = tokens.filter(token => !testTokenPattern.test(token));
             const testTokens = tokens.filter(token => testTokenPattern.test(token));
 
-            if (testTokens.length > 0) {
-                console.log(`⚠️ Detectados ${testTokens.length} tokens de prueba - no se enviarán via Firebase`);
-                console.log('ℹ️ Para probar notificaciones reales, usa un token FCM válido de un dispositivo Android');
+            if (testTokens.length > 0 && process.env.NODE_ENV !== 'production') {
+                console.log(`⚠️ Detectados ${testTokens.length} tokens de prueba`);
             }
 
             if (validTokens.length === 0 && testTokens.length > 0) {
-                console.log('ℹ️ Solo hay tokens de prueba - simulando envío exitoso');
+                if (process.env.NODE_ENV !== 'production') {
+                    console.log('ℹ️ Solo hay tokens de prueba - simulando envío exitoso');
+                }
                 return {
                     successCount: testTokens.length,
                     failureCount: 0,
@@ -219,7 +208,6 @@ class NotificationService {
 
             // Configuración según especificación del desarrollador móvil
             // Para que la app maneje las notificaciones manualmente y las guarde internamente
-            // SOLO usar 'data' - SIN campo 'notification' ni 'android.notification'
             const message = {
                 data: {
                     title: titulo,  // Title y body van en data para manejo manual
@@ -233,6 +221,12 @@ class NotificationService {
                     requiereAccion: data.metadata?.requiereAccion?.toString() || 'false',
                     id_muestra: data.id_muestra || '',
                     priority: 'high'
+                },
+                android: {
+                    priority: 'high',
+                    notification: {
+                        channel_id: 'aqualab_updates'
+                    }
                 },
                 tokens: tokensToSend
             };
@@ -332,7 +326,8 @@ class NotificationService {
                         for (const token of tokensToSend) {
                             try {
                                 const singleMessage = {
-                                    data: message.data,  // Solo data, sin notification ni android.notification
+                                    data: message.data,  // Solo data, sin notification
+                                    android: message.android,
                                     token: token
                                 };
                                 

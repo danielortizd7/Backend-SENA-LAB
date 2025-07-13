@@ -2,7 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const http = require("http");
-const path = require("path");
 const connectDB = require("./src/config/database.js");
 const { ResponseHandler } = require('./src/shared/utils/responseHandler');
 
@@ -11,9 +10,9 @@ const muestrasRoutes = require("./src/app/registro-muestras/routes/muestrasRoute
 const analisisRoutes = require("./src/app/registro-muestras/routes/analisisRoutes");
 const cambiosEstadoRoutes = require("./src/app/cambios-estado/routes/cambioEstadoRoutes");
 const resultadosRoutes = require('./src/app/ingreso-resultados/routes/resultadoRoutes');
-const firmaRoutes = require("./src/app/firma-digital/routes/firmaRoutes.js");
-const auditoriaRoutes = require("./src/app/auditoria/routes/auditoriaRoutes.js");
-const notificationRoutes = require("./src/app/notificaciones/routes/notificationRoutes.js");
+const firmaRoutes = require("./src/app/firma-digital/routes/firmaRoutes");
+const auditoriaRoutes = require("./src/app/auditoria/routes/auditoriaRoutes");
+const notificationRoutes = require("./src/app/notificaciones/routes/notificationRoutes");
 
 const { verificarToken, login } = require('./src/shared/middleware/authMiddleware');
 
@@ -21,54 +20,38 @@ const { verificarToken, login } = require('./src/shared/middleware/authMiddlewar
 const app = express();
 const server = http.createServer(app);
 
-// Conectar a la base de datos correctamente
+// Conectar a la base de datos
 connectDB();
 
 // Configuración de CORS
 const corsOrigins = process.env.NODE_ENV === 'production' 
     ? (process.env.ALLOWED_ORIGINS || 'https://aqualab-sena.vercel.app,https://laboratorio-sena.vercel.app,https://web-sena-lab.vercel.app').split(',').filter(Boolean)
     : [
-        'http://localhost:5173',  // Frontend en desarrollo local
-        'http://localhost:5174',  // Frontend en desarrollo local (puerto alternativo)
-        'https://laboratorio-sena.vercel.app', // Frontend en producción
-        'https://web-sena-lab.vercel.app', // Frontend en Vercel
-        'https://aqualab-sena.vercel.app' // Frontend en producción (Aqualab)
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'https://laboratorio-sena.vercel.app',
+        'https://web-sena-lab.vercel.app',
+        'https://aqualab-sena.vercel.app'
     ];
 
-console.log(`🌐 CORS configurado para ${process.env.NODE_ENV || 'development'}:`, corsOrigins);
+console.log(`🌐 CORS configurado para ${process.env.NODE_ENV || 'development'}`);
 
 app.use(cors({
     origin: function (origin, callback) {
-        console.log(`🔍 CORS - Origin recibido: "${origin}"`);
-        console.log(`🔍 CORS - NODE_ENV: "${process.env.NODE_ENV}"`);
-        console.log(`🔍 CORS - Orígenes permitidos:`, corsOrigins);
-        
         // En producción, ser más estricto con los orígenes
         if (process.env.NODE_ENV === 'production') {
             // Permitir requests sin origin (como Postman, apps móviles, etc.)
-            if (!origin) {
-                console.log('✅ CORS - Permitiendo request sin origin (app móvil/Postman)');
-                return callback(null, true);
-            }
-            
-            if (corsOrigins.includes(origin)) {
-                console.log(`✅ CORS - Origin permitido: ${origin}`);
-                callback(null, true);
-            } else {
-                console.log('🚫 Origen bloqueado por CORS en producción:', origin);
-                console.log('🔧 Orígenes permitidos:', corsOrigins);
-                callback(new Error('Origen no permitido por CORS'));
-            }
-        } else {
-            // En desarrollo, permitir solicitudes sin origin (como aplicaciones móviles o postman)
             if (!origin) return callback(null, true);
             
             if (corsOrigins.includes(origin)) {
                 callback(null, true);
             } else {
-                console.log('⚠️ Origen no configurado en desarrollo:', origin);
-                callback(null, true); // Permitir en desarrollo
+                callback(new Error('Origen no permitido por CORS'));
             }
+        } else {
+            // En desarrollo, permitir solicitudes sin origin o todas las configuradas
+            if (!origin) return callback(null, true);
+            callback(null, corsOrigins.includes(origin) || true);
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -91,24 +74,17 @@ app.use(express.json());
 
 // Middleware para procesar headers de usuario
 app.use((req, res, next) => {
-    const documento = req.headers['x-usuario-documento'];
-    const rol = req.headers['x-user-role'];
-    
-    if (documento) {
-        req.usuarioDocumento = documento;
-    }
-    if (rol) {
-        req.usuarioRol = rol;
-    }
+    req.usuarioDocumento = req.headers['x-usuario-documento'];
+    req.usuarioRol = req.headers['x-user-role'];
     next();
 });
 
 // Middleware para manejar preflight requests
 app.options('*', cors());
 
-// Agregar middleware para manejar errores CORS
+// Middleware para manejar errores CORS
 app.use((err, req, res, next) => {
-    if (err.message === 'No permitido por CORS') {
+    if (err.message === 'Origen no permitido por CORS') {
         return res.status(403).json({
             error: 'CORS no permitido para este origen',
             origin: req.headers.origin
@@ -121,7 +97,7 @@ app.use((err, req, res, next) => {
 app.post("/api/auth/login", login);
 
 // Middleware para verificar token en rutas protegidas
-app.use([
+const protectedRoutes = [
     "/api/muestras",
     "/api/registro-muestras",
     "/api/cambios-estado",
@@ -129,7 +105,8 @@ app.use([
     "/api/firma-digital",
     "/api/auditoria",
     "/api/analisis"
-], verificarToken);
+];
+app.use(protectedRoutes, verificarToken);
 
 // Rutas protegidas
 app.use("/api/muestras", muestrasRoutes);
@@ -140,37 +117,41 @@ app.use("/api/ingreso-resultados", resultadosRoutes);
 app.use("/api/firma-digital", firmaRoutes);
 app.use("/api/auditoria", auditoriaRoutes);
 
-// Rutas protegidas de notificaciones
+// Rutas de notificaciones
 app.use("/api/notificaciones", verificarToken, notificationRoutes);
 
-// Endpoints públicos de notificaciones (disponibles en todas las configuraciones)
-app.post("/api/notificaciones-test/register-device", require("./src/app/notificaciones/controllers/notificationController").registrarDeviceTokenPublico);
-app.post("/api/notificaciones-test/local", require("./src/app/notificaciones/controllers/notificationController").pruebaLocalNotificacion);
+// Endpoints públicos esenciales de notificaciones
+const notificationController = require("./src/app/notificaciones/controllers/notificationController");
+app.post("/api/notificaciones-test/register-device", notificationController.registrarDeviceTokenPublico);
+app.post("/api/notificaciones-test/local", notificationController.pruebaLocalNotificacion);
 
-// Solo en desarrollo: endpoints adicionales de diagnóstico
+// Endpoints de diagnóstico (solo en desarrollo)
 if (process.env.NODE_ENV !== 'production') {
     console.log('🔧 Endpoints de diagnóstico habilitados para desarrollo');
-    app.get("/api/notificaciones-test/firebase-config", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
-    app.post("/api/notificaciones-test/limpiar-tokens", require("./src/app/notificaciones/controllers/notificationController").limpiarTokensInvalidos);
-    app.get("/api/notificaciones-test/fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
-    app.get("/api/notificaciones-test/diagnostico", require("./src/app/notificaciones/controllers/notificationController").diagnosticoPublicoFCM);
-    app.post("/api/notificaciones-test/probar-token", require("./src/app/notificaciones/controllers/notificationController").probarNotificacionToken);
-    app.get("/api/notificaciones-test/diagnostico-404", require("./src/app/notificaciones/controllers/notificationController").diagnosticoError404FCM);
-    app.get("/api/notificaciones-test/guia-token-fcm", require("./src/app/notificaciones/controllers/notificationController").guiaTokenFCM);
+    
+    app.get("/api/notificaciones-test/firebase-config", notificationController.verificarConfigFirebase);
+    app.post("/api/notificaciones-test/limpiar-tokens", notificationController.limpiarTokensInvalidos);
+    app.get("/api/notificaciones-test/fcm-api", notificationController.verificarEstadoFCMAPI);
+    app.get("/api/notificaciones-test/diagnostico", notificationController.diagnosticoPublicoFCM);
+    app.post("/api/notificaciones-test/probar-token", notificationController.probarNotificacionToken);
     
     // Rutas de backup para desarrollo
-    app.get("/test-firebase", require("./src/app/notificaciones/controllers/notificationController").verificarConfigFirebase);
-    app.get("/test-fcm-api", require("./src/app/notificaciones/controllers/notificationController").verificarEstadoFCMAPI);
+    app.get("/test-firebase", notificationController.verificarConfigFirebase);
+    app.get("/test-fcm-api", notificationController.verificarEstadoFCMAPI);
 } else {
     console.log('🚀 Modo producción: endpoints de diagnóstico deshabilitados');
 }
 
-// Ruta de prueba
+// Ruta de estado de la API
 app.get("/", (req, res) => {
-    res.json({ message: "API funcionando correctamente" });
+    res.json({ 
+        message: "API funcionando correctamente",
+        environment: process.env.NODE_ENV || 'development',
+        version: "1.0.0"
+    });
 });
 
-// Middleware unificado para manejo de errores
+// Middleware para manejo de errores
 app.use((err, req, res, next) => {
     if (err.name === 'UnauthorizedError') {
         return ResponseHandler.error(res, {
@@ -179,7 +160,6 @@ app.use((err, req, res, next) => {
             requiresAuth: true
         });
     }
-
     ResponseHandler.error(res, err);
 });
 
@@ -190,6 +170,7 @@ socketManager.initialize(server);
 // Iniciar servidor
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-    console.log(`Servidor corriendo en puerto ${PORT}`);
-    console.log(`WebSocket disponible en ws://localhost:${PORT}`);
+    console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+    console.log(`📡 WebSocket disponible en ws://localhost:${PORT}`);
+    console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
 });
