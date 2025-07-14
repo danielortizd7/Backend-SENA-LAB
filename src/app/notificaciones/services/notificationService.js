@@ -206,12 +206,17 @@ class NotificationService {
 
             const tokensToSend = validTokens.length > 0 ? validTokens : tokens;
 
-            // Configuración según especificación del desarrollador móvil
-            // Para que la app maneje las notificaciones manualmente y las guarde internamente
+            // Configuración optimizada para app cerrada y abierta
+            // notification: Para mostrar cuando app está cerrada
+            // data: Para manejo manual cuando app está abierta
             const message = {
+                notification: {
+                    title: titulo,
+                    body: mensaje
+                },
                 data: {
-                    title: titulo,  // Title y body van en data para manejo manual
-                    body: mensaje,
+                    title: titulo,  // Duplicado en data para manejo manual
+                    body: mensaje,  // Duplicado en data para manejo manual
                     estadoAnterior: data.estadoAnterior || '',
                     estadoNuevo: data.estadoNuevo || '',
                     fechaCambio: data.fechaCambio?.toISOString() || new Date().toISOString(),
@@ -225,7 +230,9 @@ class NotificationService {
                 android: {
                     priority: 'high',
                     notification: {
-                        channel_id: 'aqualab_updates'
+                        channel_id: 'aqualab_updates',
+                        sound: 'default',
+                        click_action: 'OPEN_MUESTRA_DETAIL'
                     }
                 },
                 tokens: tokensToSend
