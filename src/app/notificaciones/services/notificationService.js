@@ -206,17 +206,12 @@ class NotificationService {
 
             const tokensToSend = validTokens.length > 0 ? validTokens : tokens;
 
-            // Configuración optimizada para app cerrada y abierta
-            // notification: Para mostrar cuando app está cerrada
-            // data: Para manejo manual cuando app está abierta
+            // Configuración para manejo manual por la app móvil
+            // Solo data (sin notification) para que onMessageReceived siempre se ejecute
             const message = {
-                notification: {
-                    title: titulo,
-                    body: mensaje
-                },
                 data: {
-                    title: titulo,  // Duplicado en data para manejo manual
-                    body: mensaje,  // Duplicado en data para manejo manual
+                    title: titulo,
+                    body: mensaje,
                     estadoAnterior: data.estadoAnterior || '',
                     estadoNuevo: data.estadoNuevo || '',
                     fechaCambio: data.fechaCambio?.toISOString() || new Date().toISOString(),
@@ -228,12 +223,7 @@ class NotificationService {
                     priority: 'high'
                 },
                 android: {
-                    priority: 'high',
-                    notification: {
-                        channel_id: 'aqualab_updates',
-                        sound: 'default',
-                        click_action: 'OPEN_MUESTRA_DETAIL'
-                    }
+                    priority: 'high'
                 },
                 tokens: tokensToSend
             };
@@ -333,7 +323,7 @@ class NotificationService {
                         for (const token of tokensToSend) {
                             try {
                                 const singleMessage = {
-                                    data: message.data,  // Solo data, sin notification
+                                    data: message.data,
                                     android: message.android,
                                     token: token
                                 };
