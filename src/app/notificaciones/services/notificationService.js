@@ -475,18 +475,18 @@ class NotificationService {
             'Rechazada': 'Muestra Rechazada'
         };
         
-        return titulos[estado] || `Estado Actualizado: ${estado}`;
+        return titulos[estado] || `Muestra: ${estado}`;
     }
 
     // Generar mensaje personalizado
     generarMensaje(muestraId, estadoAnterior, estadoNuevo, observaciones) {
         const mensajes = {
-            'En Cotización': `Su muestra ${muestraId} está siendo cotizada. Pronto recibirá más información.`,
-            'Aceptada': `¡Excelente! La cotización de su muestra ${muestraId} ha sido aceptada. Procederemos con el análisis.`,
-            'Recibida': `Su muestra ${muestraId} ha sido recibida en nuestro laboratorio y está lista para análisis.`,
-            'En análisis': `Su muestra ${muestraId} está siendo analizada por nuestros expertos.`,
-            'Finalizada': `¡Sus resultados están listos! Los análisis de la muestra ${muestraId} han sido completados.`,
-            'Rechazada': `Su muestra ${muestraId} ha sido rechazada. ${observaciones || 'Contacte al laboratorio para más información.'}`
+            'En Cotización': `${muestraId} Su muestra está siendo cotizada.`,
+            'Aceptada': `${muestraId} La cotización de su muestra ha sido aceptada.`,
+            'Recibida': `${muestraId} Su muestraha sido recibida en nuestro laboratorio y está lista para análisis.`,
+            'En análisis': `${muestraId} Su muestra está siendo analizada por nuestros expertos.`,
+            'Finalizada': `${muestraId} Sus resultados están listos`,
+            'Rechazada': `${muestraId} Su muestra ha sido rechazada. ${observaciones || 'Contacte al laboratorio para más información.'}`
         };
 
         return mensajes[estadoNuevo] || `Su muestra ${muestraId} cambió de ${estadoAnterior} a ${estadoNuevo}.`;
