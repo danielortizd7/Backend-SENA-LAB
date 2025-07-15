@@ -11,7 +11,6 @@ const crearPerfil = async (req, res) => {
 
     const perfil = await perfilService.crearPerfil(req.body);
 
-    // Solo devolvemos lo necesario
     res.status(201).json({
       mensaje: 'Perfil creado exitosamente',
       perfil: {
@@ -48,7 +47,7 @@ const obtenerPerfil = async (req, res) => {
   }
 };
 
-// Actualizar perfil de usuario
+// Actualizar perfil 
 const actualizarPerfil = async (req, res) => {
   try {
     const usuarioId = req.params.idUsuario;
@@ -57,9 +56,8 @@ const actualizarPerfil = async (req, res) => {
     if (req.file) {
       const perfilActual = await perfilService.obtenerPerfilPorUsuario(usuarioId);
 
-      // Si existe una foto anterior, la eliminamos
       if (perfilActual && perfilActual.fotoPerfil) {
-        const rutaAnterior = path.join(__dirname, '..', 'public', perfilActual.fotoPerfil); // asegúrate de que la ruta esté bien
+        const rutaAnterior = path.join(__dirname, '..', 'public', perfilActual.fotoPerfil); 
         if (fs.existsSync(rutaAnterior)) {
           fs.unlinkSync(rutaAnterior);
         }
@@ -68,7 +66,20 @@ const actualizarPerfil = async (req, res) => {
       actualizacionDatos.fotoPerfil = `/uploads/${req.file.filename}`;
     }
 
+    // Actualizar perfil
     const perfilActualizado = await perfilService.actualizarPerfil(usuarioId, actualizacionDatos);
+
+    // Sincronizar datos en Usuario
+    const Usuario = require('../models/Usuario');
+    const camposUsuario = {};
+    if (actualizacionDatos.nombre) camposUsuario.nombre = actualizacionDatos.nombre;
+    if (actualizacionDatos.email) camposUsuario.email = actualizacionDatos.email;
+    if (actualizacionDatos.telefono) camposUsuario.telefono = actualizacionDatos.telefono;
+    if (actualizacionDatos.direccion) camposUsuario.direccion = actualizacionDatos.direccion;
+    // Solo actualiza si hay algún campo
+    if (Object.keys(camposUsuario).length > 0) {
+      await Usuario.findByIdAndUpdate(usuarioId, { $set: camposUsuario });
+    }
 
     if (!perfilActualizado) {
       return res.status(404).json({ mensaje: 'Perfil no encontrado' });

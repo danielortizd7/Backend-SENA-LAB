@@ -659,7 +659,6 @@ async registrarCliente(req, res) {
                 detalles: 'Email, nombre y documento son obligatorios'
             });
         }
-        // Validar aceptación de términos y condiciones
         if (aceptaTerminos !== true) {
             return res.status(400).json({
                 error: 'Términos y condiciones no aceptados',
