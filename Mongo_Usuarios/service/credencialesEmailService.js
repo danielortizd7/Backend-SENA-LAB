@@ -38,7 +38,7 @@ class CredencialesEmailService {
   async enviarCredenciales(destinatario, nombre, password, tipoUsuario) {
     try {
       let qrHtml = '';
-      const enlaceDescarga = "https://drive.google.com/uc?export=download&id=1p831NhFwx-zyOq5VPWt3rGTqj75RpA9E";
+      const enlaceDescarga = "https://drive.google.com/file/d/1p831NhFwx-zyOq5VPWt3rGTqj75RpA9E/view?usp=drive_link";
 
       if (tipoUsuario.toLowerCase() === 'cliente') {
         const qrDataUrl = await QRCode.toDataURL(enlaceDescarga);
