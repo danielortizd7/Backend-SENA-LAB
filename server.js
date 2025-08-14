@@ -29,29 +29,33 @@ const corsOrigins = process.env.NODE_ENV === 'production'
     : [
         'http://localhost:5173',
         'http://localhost:5174',
+        'http://localhost:3000',
         'https://laboratorio-sena.vercel.app',
         'https://web-sena-lab.vercel.app',
         'https://aqualab-sena.vercel.app'
     ];
 
-console.log(`🌐 CORS configurado para ${process.env.NODE_ENV || 'development'}`);
+console.log(`CORS configurado para ${process.env.NODE_ENV || 'development'}`);
+console.log('Orígenes permitidos:', corsOrigins);
 
 app.use(cors({
     origin: function (origin, callback) {
         // En producción, ser más estricto con los orígenes
         if (process.env.NODE_ENV === 'production') {
-            // Permitir requests sin origin (como Postman, apps móviles, etc.)
-            if (!origin) return callback(null, true);
+            // Permitir requests sin origin (como Postman, apps móviles, etc.) solo en desarrollo
+            if (!origin) return callback(null, false);
             
             if (corsOrigins.includes(origin)) {
                 callback(null, true);
             } else {
+                console.log(`Origen rechazado en producción: ${origin}`);
                 callback(new Error('Origen no permitido por CORS'));
             }
         } else {
-            // En desarrollo, permitir solicitudes sin origin o todas las configuradas
+            // En desarrollo, ser más permisivo pero registrar los orígenes
+            console.log(`Solicitud desde origen: ${origin || 'sin origen'}`);
             if (!origin) return callback(null, true);
-            callback(null, corsOrigins.includes(origin) || true);
+            callback(null, corsOrigins.includes(origin) || origin.startsWith('http://localhost'));
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -127,7 +131,7 @@ app.post("/api/notificaciones-test/local", notificationController.pruebaLocalNot
 
 // Endpoints de diagnóstico (solo en desarrollo)
 if (process.env.NODE_ENV !== 'production') {
-    console.log('🔧 Endpoints de diagnóstico habilitados para desarrollo');
+    console.log('Endpoints de diagnóstico habilitados para desarrollo');
     
     app.get("/api/notificaciones-test/firebase-config", notificationController.verificarConfigFirebase);
     app.post("/api/notificaciones-test/limpiar-tokens", notificationController.limpiarTokensInvalidos);
@@ -139,7 +143,7 @@ if (process.env.NODE_ENV !== 'production') {
     app.get("/test-firebase", notificationController.verificarConfigFirebase);
     app.get("/test-fcm-api", notificationController.verificarEstadoFCMAPI);
 } else {
-    console.log('🚀 Modo producción: endpoints de diagnóstico deshabilitados');
+    console.log('Modo producción: endpoints de diagnóstico deshabilitados');
 }
 
 // Ruta de estado de la API
@@ -170,7 +174,7 @@ socketManager.initialize(server);
 // Iniciar servidor
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-    console.log(`📡 WebSocket disponible en ws://localhost:${PORT}`);
-    console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Servidor corriendo en puerto ${PORT}`);
+    console.log(`WebSocket disponible en ws://localhost:${PORT}`);
+    console.log(`Entorno: ${process.env.NODE_ENV || 'development'}`);
 });
